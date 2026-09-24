@@ -36,6 +36,8 @@ class PartRow:
     out_of_range: int
     range: str
     separation_db: float | None  # stem level while playing minus while silent
+    latency_ms: float | None = None  # vs the common warp
+    snapped_pct: float | None = None  # notes that found an audio onset
 
 
 @dataclass
@@ -113,16 +115,22 @@ def build_report(bundle: Path) -> Report:
             )
         )
 
-    # 2. time origin / renderer latency
+    # 2. time origin / renderer lead-in, judged by how many notes found a real onset
+    #    (soft attacks legitimately do not snap; 40 % is well below the first real Dorico
+    #    session's 52 %, whose alignment was verified visually)
     resid = a.offset_sec - a.preroll_sec
-    status = "PASS" if a.method != "preroll_only" and a.confidence >= 0.3 else "WARN"
+    if a.method == "warp":
+        status = "PASS" if (a.snapped or 0) >= 0.4 else "WARN"
+        how = f"{(a.snapped or 0):.0%} of notes snapped to audio onsets"
+    else:
+        status = "PASS" if a.method == "manual" else "WARN"
+        how = f"{a.method}, confidence {a.confidence:.2f}"
     rep.checks.append(
         Check(
             "time_origin",
             status,
-            f"offset {a.offset_sec * 1000:.1f} ms = preroll {a.preroll_sec * 1000:.1f} ms + "
-            f"residual {resid * 1000:+.1f} ms ({a.method}, confidence {a.confidence:.2f}); "
-            "a residual of a few tens of ms is expected from the renderer",
+            f"audio time of score 0 = {a.offset_sec * 1000:.1f} ms (preroll "
+            f"{a.preroll_sec * 1000:.1f} ms + measured lead-in {resid * 1000:+.1f} ms); {how}",
         )
     )
 
@@ -167,6 +175,8 @@ def build_report(bundle: Path) -> Report:
                 out_of_range=oor,
                 range=f"{p.range_low}-{p.range_high}" if p.range_low is not None else "?",
                 separation_db=sep,
+                latency_ms=None if p.latency_sec is None else 1000 * p.latency_sec,
+                snapped_pct=None if p.snapped is None else 100 * p.snapped,
             )
         )
 
@@ -222,16 +232,18 @@ def to_markdown(rep: Report) -> str:
             "## Parts",
             "",
             "| # | part | stem (match) | notes | weak f0 | median f0 dB | range | "
-            "out of range | stem separation |",
-            "| --- | --- | --- | --- | --- | --- | --- | --- | --- |",
+            "out of range | stem separation | latency | snapped |",
+            "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |",
         ]
         for r in rep.parts:
             sep = f"{r.separation_db:.1f} dB" if r.separation_db is not None else "—"
             f0 = f"{r.median_f0_db:.1f}" if r.median_f0_db is not None else "—"
+            lat = "—" if r.latency_ms is None else f"{r.latency_ms:+.0f} ms"
+            snp = "—" if r.snapped_pct is None else f"{r.snapped_pct:.0f}%"
             lines.append(
                 f"| {r.index} | {r.name} | {r.stem or '—'} ({r.stem_match}) | "
                 f"{r.notes} | {r.weak_f0_pct:.0f}% | {f0} | {r.range} | "
-                f"{r.out_of_range} | {sep} |"
+                f"{r.out_of_range} | {sep} | {lat} | {snp} |"
             )
     return "\n".join(lines) + "\n"
 

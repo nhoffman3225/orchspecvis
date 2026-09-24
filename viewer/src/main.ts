@@ -114,6 +114,11 @@ async function main(): Promise<void> {
   winSel.value = [...winSel.options].some((o) => o.value === String(ui.winSeconds))
     ? String(ui.winSeconds) : String(m.duration_seconds);
   ui.winSeconds = Number(winSel.value);
+  const wParam = params.get("window");
+  if (wParam && [...winSel.options].some((o) => o.value === wParam)) {
+    winSel.value = wParam;
+    ui.winSeconds = Number(wParam);
+  }
 
   const cmapSel = $<HTMLSelectElement>("cmap");
   for (const c of COLORMAPS) cmapSel.add(new Option(c, c));

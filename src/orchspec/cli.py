@@ -112,6 +112,35 @@ def bundle(
     )
 
 
+@app.command("import-dorico")
+def import_dorico(
+    src: Annotated[Path, typer.Argument(help="folder with Dorico's audio/MIDI/MusicXML export")],
+    out: Annotated[
+        Path | None, typer.Option("-o", "--out", help="session folder (default: in place)")
+    ] = None,
+    dry_run: Annotated[bool, typer.Option(help="show the plan only")] = False,
+) -> None:
+    """Lay out a Dorico export as an orchspec session (hard links; originals untouched)."""
+    from orchspec.io.dorico import apply_import, plan_import
+
+    try:
+        plan = plan_import(src)
+    except SessionError as e:
+        typer.echo(f"error: {e}", err=True)
+        raise typer.Exit(2) from e
+    typer.echo(f"mix: {plan.mix.name}")
+    for i, (player, _) in enumerate(plan.stems, start=1):
+        typer.echo(f"  stem {i:02d}: {player}")
+    typer.echo(f"midi: {plan.midi.name if plan.midi else '-'}")
+    typer.echo(f"score: {plan.score.name if plan.score else '-'}")
+    for w in plan.warnings:
+        typer.echo(f"warning: {w}")
+    if dry_run:
+        return
+    for line in apply_import(plan, out or src):
+        typer.echo(line)
+
+
 @app.command()
 def report(
     bundle_dir: Annotated[Path, typer.Argument(help="a .bundle directory")],

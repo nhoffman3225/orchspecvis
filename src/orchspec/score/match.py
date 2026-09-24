@@ -7,7 +7,9 @@ import unicodedata
 from dataclasses import dataclass
 
 ROMAN = {"i": "1", "ii": "2", "iii": "3", "iv": "4", "v": "5", "vi": "6"}
-TRANSP = re.compile(r"\bin\s+[a-g](?:b|#|flat|sharp)?\b")
+TRANSP = re.compile(r"\bin\s+[a-g](?:\s*(?:b|#|flat|sharp))?\b")
+# key designations in parentheses: "(B Flat)", "(Bb)", "(E♭)" (after ♭ -> b), "(C)"
+KEY_PAREN = re.compile(r"\(\s*[a-g](?:\s*(?:flat|sharp|b|#))?\s*\)")
 
 
 def normalize(name: str) -> str:
@@ -15,6 +17,7 @@ def normalize(name: str) -> str:
     s = s.casefold()
     s = re.sub(r"^\d{1,3}[_\s.-]+", "", s)  # stem number prefix "01_"
     s = TRANSP.sub(" ", s)  # "in bb", "in f"
+    s = KEY_PAREN.sub(" ", s)  # "(b flat)", "(eb)", "(c)"
     s = re.sub(r"[^a-z0-9#]+", " ", s)
     words = [ROMAN.get(w, w) for w in s.split()]
     words = [w[:-1] if len(w) > 3 and w.endswith("s") else w for w in words]  # violins
