@@ -13,7 +13,56 @@
   </head>
   <body>
     <div id="app">
-      <canvas id="gl"></canvas>
+      <header id="bar">
+        <button id="play" type="button" title="Play/pause (Space)">▶</button>
+        <span id="time">0:00.00 / 0:00.00</span>
+        <label>window <select id="window"></select></label>
+        <label>view
+          <select id="mode">
+            <option value="mix">mix</option>
+            <option value="ensemble">full ensemble (all stems)</option>
+            <option value="stems">selected stems</option>
+            <option value="dominant">color by dominant stem</option>
+          </select>
+        </label>
+        <label>colors <select id="cmap"></select></label>
+        <label>style
+          <select id="style" title="surface: colormapped relief · terrain: hillshade + contours (3 dB, index every 15 dB) · fabric: glowing mesh">
+            <option value="surface">surface</option>
+            <option value="terrain">terrain (contours)</option>
+            <option value="fabric">fabric (mesh)</option>
+          </select>
+        </label>
+        <label title="Gaussian smoothing width in semitones (0 = raw). Merges partials into the ensemble's spectral envelope so register gaps stand out.">smooth <input id="smooth" type="range" min="0" max="12" step="0.5" value="0" /> <span id="smoothval">off</span></label>
+        <label title="Spectral gaps: quiet pitch regions inside the ensemble's sounding span">
+          <input id="gaps" type="checkbox" /> gaps ≤
+          <input id="gapdb" type="range" min="-90" max="-15" step="1" value="-50" />
+          <span id="gapval">-50 dB</span>
+        </label>
+        <label>floor <input id="floor" type="range" min="0" max="0.9" step="0.01" value="0.3" /></label>
+        <label>height <input id="height" type="range" min="0.05" max="1.2" step="0.01" value="0.45" /></label>
+        <label><input id="follow" type="checkbox" checked /> follow</label>
+        <label><input id="grid" type="checkbox" checked /> C lines</label>
+        <label>vol <input id="vol" type="range" min="0" max="1" step="0.01" value="0.8" /></label>
+        <span id="gapinfo"></span>
+        <span id="title"></span>
+      </header>
+      <main id="main">
+        <div id="view3d"><canvas id="gl"></canvas></div>
+        <aside id="stems" hidden>
+          <div class="stems-head">
+            <strong>Stems</strong>
+            <button id="stems-all" type="button">all</button>
+            <button id="stems-none" type="button">none</button>
+          </div>
+          <ul id="stem-list"></ul>
+        </aside>
+      </main>
+      <section id="pane">
+        <canvas id="cqt2d"></canvas>
+        <div id="tip" hidden></div>
+      </section>
+      <canvas id="lufs"></canvas>
       <div id="status">loading…</div>
     </div>
     <script type="module" src="/src/main.ts"></script>

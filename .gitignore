@@ -35,3 +35,5 @@ Thumbs.db
 tests/fixtures/synthetic/
 .claude/launch.json
 viewer/.claude/
+viewer/test-data/
+.venv-cpu/

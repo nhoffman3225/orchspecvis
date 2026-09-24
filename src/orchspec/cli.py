@@ -48,6 +48,80 @@ def validate(path: Path) -> None:
         typer.echo(f"  [{st.number:02d}] {st.player} ({st.info.channels} ch)")
 
 
+@app.command()
+def bundle(
+    input_path: Annotated[Path, typer.Argument(help="session folder or audio file")],
+    out: Annotated[Path, typer.Option("-o", "--out", help="output dir or x.bundle path")],
+    k: Annotated[int, typer.Option(help="bins per semitone (1 or 3)")] = 3,
+    hop: Annotated[int, typer.Option(help="CQT hop in samples")] = 512,
+    backend: Annotated[str, typer.Option(help="librosa | torch")] = "librosa",
+    device: Annotated[str | None, typer.Option(help="torch device (cuda, mps, cpu)")] = None,
+    db_min: float = -96.0,
+    db_max: float = 6.0,
+    tile_frames: int = 1024,
+    overwrite: Annotated[bool, typer.Option(help="replace an existing bundle")] = False,
+) -> None:
+    """Analyse a session (mix + stems) or a single WAV into a session bundle."""
+    from orchspec.bundle.writer import (
+        BundleOptions,
+        build_bundle,
+        inputs_from_session,
+        resolve_output,
+    )
+
+    try:
+        s = load_input(input_path)
+    except SessionError as e:
+        typer.echo(f"error: {e}", err=True)
+        raise typer.Exit(2) from e
+    target = resolve_output(out, s.name)
+    opts = BundleOptions(
+        k=k,
+        hop=hop,
+        backend=backend,
+        device=device,
+        db_min=db_min,
+        db_max=db_max,
+        tile_frames=tile_frames,
+    )
+    try:
+        rep = build_bundle(
+            inputs_from_session(s), target, opts, overwrite=overwrite, log=typer.echo
+        )
+    except (FileExistsError, ValueError, RuntimeError) as e:
+        typer.echo(f"error: {e}", err=True)
+        raise typer.Exit(2) from e
+    times = ", ".join(f"{key} {v:.1f}s" for key, v in rep.seconds.items())
+    typer.echo(
+        f"wrote {rep.path} ({rep.manifest.n_frames} frames x {rep.manifest.n_bins} "
+        f"bins, {len(rep.manifest.stems)} stems; {times})"
+    )
+
+
+@app.command()
+def serve(
+    bundle_dir: Annotated[Path, typer.Argument(help="a .bundle directory")],
+    viewer_dist: Annotated[Path | None, typer.Option(help="built viewer (viewer/dist)")] = None,
+) -> None:
+    """Serve a bundle + the built viewer on 127.0.0.1 (random port, tokenized URL)."""
+    from orchspec.server import REPO_VIEWER_DIST
+    from orchspec.server import serve as run
+
+    target = bundle_dir.expanduser().resolve()
+    if not (target / "manifest.json").is_file():
+        hint = ""
+        if not target.exists():
+            hint = f"\n  (resolved relative to the current directory: {Path.cwd()})"
+        typer.echo(f"error: {target} is not a bundle directory (no manifest.json){hint}", err=True)
+        raise typer.Exit(2)
+    dist = viewer_dist or REPO_VIEWER_DIST
+    if not (dist / "index.html").is_file():
+        typer.echo(
+            f"warning: no built viewer at {dist}; run `npm --prefix viewer run build`", err=True
+        )
+    run(target, viewer_dist)
+
+
 def main() -> None:
     app()
 
