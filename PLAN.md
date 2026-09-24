@@ -127,22 +127,25 @@ Real sessions stay LOCAL (git-ignored session/, tests/fixtures/real/); tests tha
 carry the `real` marker and never run in CI.
 0. Real-session validation (gate; needs a Dorico + NP5 session in session/, see
    docs/dorico-session.md):
-- [ ] `orchspec report <bundle>`: alignment, pitch agreement/shift, part<->stem matches,
+- [x] `orchspec report <bundle>`: alignment, pitch agreement/shift, part<->stem matches,
       notes and weak-fundamental rate per part, warnings (Markdown + JSON)
-- [ ] `real`-marked local tests that bundle + report every folder in session/
-- [ ] Bundle the Dorico session; resolve or re-scope each Phase 2 "Unverified assumption"
-- [ ] Dorico export importer (rename exported files into the session layout) once the real
-      file names are known
+- [x] `real`-marked local tests that bundle + report every folder in session/
+- [x] Bundle the Dorico session (Beethoven 5 i, 2026-09-25); assumptions resolved below
+- [x] `orchspec import-dorico`: Dorico 5 export ("<Project> - <Flow>.wav" +
+      "<Project> - <Flow> <Player>.wav") -> session layout via hard links, stems in
+      MusicXML part order
 1. Drift-aware alignment
-- [ ] Synthetic drift fixtures first: gradual tempo drift, rubato, per-part latency
-      (e.g. +60 ms legato brass), pickup bar, missing/extra notes
-- [ ] Score-informed DTW: synthesize a chroma/CQT template from the notes, DTW against the
-      audio's CQT (GPU-friendly), onset-refined; piecewise-linear warp map
-- [ ] Per-part (per-stem) latency estimate against its own stem (NotePerformer
-      articulation lag; later BBCSO)
-- [ ] Schema v3: `score.alignment.warp` [(score_s, audio_s)] + per-part offsets; notes
-      stay in audio seconds; viewer shows alignment confidence over time
-  Acceptance: synthetic drift fixtures align every note within +-1 frame (hop 512 @ 48k)
+- [x] Synthetic drift fixture: 3 % gradual slow-down, +-40 ms rubato (4 s period),
+      per-part latency (+50 ms clarinet, -20 ms piano) — tests/fixtures/make_score_session.py
+- [x] Pitch-aware coarse warp (onset-weighted pitch flux vs note template; sequential
+      anchor tracking) instead of full DTW; per-note onset snapping against each part's
+      OWN stem, 3 passes, adaptive windows; self-calibrated detector lag
+- [x] Per-part latency (reported relative to the typical part) and per-part snap rate
+- [x] Schema v3: `score.alignment.warp`, `.snapped`, `parts[].latency_sec/.snapped`
+- [ ] Missing/extra notes and pickup-bar fixtures; viewer display of alignment quality
+  Acceptance (met 2026-09-25): every note within 10.7 ms (1 frame @ 48 kHz) on the drift
+  fixture with stems (max 5.7 ms, median < 1 ms); mix-only sessions: constant-latency
+  material within ~22 ms, strong per-part drift NOT resolvable from a mix alone
 ### Phase 3 (cont.) — score view, registers, scale
 2. Engraved score view
 - [ ] Verovio (bundled wasm via Vite; LGPL-3.0, approved 2026-09-24) renders the MusicXML;
@@ -185,6 +188,22 @@ Acceptance: synthetic "overbalanced brass" fixture is flagged.
       the 2D pane) or on the GPU (texture array), AudioWorklet streaming playback
 
 ## Unverified assumptions
+
+Checked on the first real session (Dorico 5 + NotePerformer 5, Beethoven 5 i, 6:13,
+18 parts / 23 player stems, 2026-09-25; `orchspec report`):
+- CONFIRMED: Dorico MIDI export is at sounding pitch (99.9 % of MusicXML notes match).
+- CONFIRMED: MusicXML transposition handling (Bb clarinets, Eb/C horns, C trumpets): every
+  note inside its instrument's sounding range.
+- CONFIRMED: MIDI export unrolls repeats like the MusicXML (626 played bars = 502 +
+  124-bar exposition repeat; pitch agreement would collapse otherwise).
+- CONFIRMED: per-player NotePerformer stems are dry/separated (>= 40 dB, strings 40-46 dB).
+- REVISED: time origin — the audio export starts ~0.51 s before score beat 1 (not ~25 ms);
+  measured automatically, preroll_sec can stay 0. Part latencies vs the common warp
+  -29..+18 ms (flutes/strings early, horns/trumpets late).
+- NEW: weak fundamentals are common in NotePerformer's bassoons (30-51 % of notes),
+  2nd trumpet (43 %), viola (35 %), 2nd horn (26 %).
+- Players absent from a flow (piccolo, trombones, contrabassoon in mvt i) export silent
+  stems with no score part; they are kept but unmatched.
 
 - (Phase 2) MusicXML `<pitch>` is written pitch and `<octave-shift>` is display-only;
   sounding = written + chromatic + 12*octave-change; `<double>` sounds an extra octave.

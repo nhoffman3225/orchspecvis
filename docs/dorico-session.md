@@ -25,8 +25,10 @@ between. Menu names differ slightly between Dorico versions; these are the Doric
    separate file (the option that writes one file per instrument/player). All files must
    start and end at the same point as the mix; orchspec checks that and reports any
    mismatch. Put them in `stems/` and name them `NN_<Player>.wav` in score order
-   (`01_Flute 1.wav`, `02_Oboe.wav`, ...). If renaming is tedious, send me the list of
-   exported file names and I will write an importer that does it.
+   (`01_Flute 1.wav`, `02_Oboe.wav`, ...) — or skip the renaming entirely: put Dorico's
+   export folder under `session/<name>/` and run
+   `uv run orchspec import-dorico "session/<name>"`, which hard-links everything into
+   place in score order (no extra disk space; your files are untouched).
    - Leave reverb/room in the mix only if you can; if the per-player files include
      reverb, set `reverb_in_stems: true` in render.yaml.
 3. **MIDI** — File ▸ Export ▸ MIDI → `render.mid`. Default options are fine; it must
@@ -37,7 +39,7 @@ between. Menu names differ slightly between Dorico versions; these are the Doric
 5. **render.yaml** (optional):
    ```yaml
    renderer: dorico_noteperformer5
-   preroll_sec: 0.0   # seconds of audio before bar 1, if the export has any
+   preroll_sec: 0.0   # leave 0: the ~0.5 s NotePerformer lead-in is measured automatically
    mix_edited: false
    notes: "Dorico 5.x, NotePerformer 5.x, default playback template"
    ```
