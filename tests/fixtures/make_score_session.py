@@ -287,27 +287,62 @@ def _tone(midi: float, dur: float, harmonics: list[int], amp: float) -> np.ndarr
     return (amp * atk * rel * y).astype(np.float32)
 
 
-def render_audio() -> tuple[np.ndarray, dict[str, np.ndarray]]:
-    truth = truth_notes()
-    n = round((OFFSET + q_to_seconds(24.0) + 1.0) * SR)
+@dataclass(frozen=True)
+class Drift:
+    """Timing distortions between render.mid time and the audio, like a renderer that
+    humanizes: gradual slow-down, rubato, and per-part latency (articulation lag)."""
+
+    slow: float = 0.03  # audio runs this fraction slower by the end
+    rubato_amp: float = 0.04  # seconds
+    rubato_period: float = 4.0  # seconds
+    part_latency: tuple[float, ...] = (0.0, 0.05, 0.0, -0.02)  # per part, seconds
+
+
+DRIFT = Drift()
+
+
+def audio_time(t: float, part: int, drift: Drift | None = None) -> float:
+    """Audio seconds of MIDI time t for a part (the ground truth the aligner must find)."""
+    if drift is None:
+        return OFFSET + t
+    total = q_to_seconds(24.0)
+    warped = t * (1 + drift.slow * t / total)
+    warped += drift.rubato_amp * np.sin(2 * np.pi * t / drift.rubato_period)
+    return OFFSET + warped + drift.part_latency[part]
+
+
+def audio_notes(drift: Drift | None = None) -> list[dict[str, float]]:
+    """truth_notes() with audio-time onsets/offsets (keys audio_on / audio_off)."""
+    out = []
+    for t in truth_notes():
+        d = dict(t)
+        d["audio_on"] = audio_time(t["onset_s"], int(t["part"]), drift)
+        d["audio_off"] = audio_time(t["offset_s"], int(t["part"]), drift)
+        out.append(d)
+    return out
+
+
+def render_audio(drift: Drift | None = None) -> tuple[np.ndarray, dict[str, np.ndarray]]:
+    notes = audio_notes(drift)
+    n = round((max(t["audio_off"] for t in notes) + 1.0) * SR)
     stems: dict[str, np.ndarray] = {}
     for pi, (_pid, name, _i, _t, _s, missing_f0) in enumerate(PARTS):
         y = np.zeros(n, np.float32)
         harm = [2, 3, 4, 5] if missing_f0 else [1, 2, 3, 4]
-        for t in (t for t in truth if t["part"] == pi):
-            seg = _tone(t["midi"], t["offset_s"] - t["onset_s"], harm, 0.08)
-            i = round((t["onset_s"] + OFFSET) * SR)
+        for t in (t for t in notes if t["part"] == pi):
+            seg = _tone(t["midi"], t["audio_off"] - t["audio_on"], harm, 0.08)
+            i = round(t["audio_on"] * SR)
             y[i : i + len(seg)] += seg[: n - i]
         stems[f"{pi + 1:02d}_{name.replace(chr(0x266D), 'b')}"] = y
     mix = np.sum(list(stems.values()), axis=0).astype(np.float32)
     return mix, stems
 
 
-def make(dest: Path) -> Path:
+def make(dest: Path, drift: Drift | None = None) -> Path:
     (dest / "stems").mkdir(parents=True, exist_ok=True)
     (dest / "score.musicxml").write_text(musicxml(), encoding="utf-8")
     (dest / "render.mid").write_bytes(render_mid())
-    mix, stems = render_audio()
+    mix, stems = render_audio(drift)
     sf.write(dest / "mix.wav", mix, SR, subtype="FLOAT")
     for name, y in stems.items():
         sf.write(dest / "stems" / f"{name}.wav", y, SR, subtype="FLOAT")
@@ -319,5 +354,8 @@ def make(dest: Path) -> Path:
 
 if __name__ == "__main__":
     here = Path(__file__).resolve().parents[2]
-    target = Path(sys.argv[1]) if len(sys.argv) > 1 else here / "session" / "score-demo"
-    print(f"wrote {make(target)}")
+    args = [a for a in sys.argv[1:] if not a.startswith("--")]
+    drift = DRIFT if "--drift" in sys.argv else None
+    default = "score-drift-demo" if drift else "score-demo"
+    target = Path(args[0]) if args else here / "session" / default
+    print(f"wrote {make(target, drift)}")
