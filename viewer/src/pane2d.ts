@@ -34,6 +34,9 @@ export class Pane2D {
   private pageData: Uint8Array | null = null;
   private playSec = 0;
   score: ScoreOverlay | null = null;
+  /** visible pitch range in bins [binLo, binHi): Y-axis stretch (wheel), pan (shift+wheel) */
+  binLo = 0;
+  binHi = 0;
   /** per-key heat 0..1 (88 keys, A0 first), or null */
   heat: Float32Array | null = null;
   private heatLut = colormapLut("inferno");
@@ -52,6 +55,24 @@ export class Pane2D {
       this.hover = { x: e.offsetX, y: e.offsetY };
       this.updateTooltip();
     });
+    this.binHi = m.n_bins;
+    canvas.addEventListener("wheel", (e) => {
+      e.preventDefault();
+      const h = canvas.clientHeight;
+      const span = this.binHi - this.binLo;
+      if (e.shiftKey) {
+        const d = Math.sign(e.deltaY || e.deltaX) * span * 0.1;
+        this.setPitchRange(this.binLo - d, this.binHi - d);
+        return;
+      }
+      // zoom around the bin under the cursor
+      const anchor = this.binLo + (1 - e.offsetY / h) * span;
+      const f = e.deltaY > 0 ? 1.15 : 1 / 1.15;
+      const next = span * f;
+      const r = (anchor - this.binLo) / span;
+      this.setPitchRange(anchor - r * next, anchor - r * next + next);
+    }, { passive: false });
+    canvas.addEventListener("dblclick", () => this.setPitchRange(0, this.m.n_bins));
     canvas.addEventListener("mouseleave", () => {
       this.hover = null;
       this.tooltip.hidden = true;
@@ -69,7 +90,7 @@ export class Pane2D {
   }
 
   private yToBin(y: number): number {
-    return (1 - y / this.canvas.clientHeight) * this.m.n_bins - 0.5;
+    return this.binLo + (1 - y / this.canvas.clientHeight) * (this.binHi - this.binLo) - 0.5;
   }
 
   /** Colors a page once (frame-major u8 -> image with time on x, high pitch on top). */
@@ -115,6 +136,18 @@ export class Pane2D {
     this.draw();
   }
 
+  /** Clamp to [0, n_bins] with a minimum span of one octave. */
+  setPitchRange(lo: number, hi: number): void {
+    const nb = this.m.n_bins;
+    const minSpan = this.m.bins_per_octave;
+    let span = Math.min(nb, Math.max(minSpan, hi - lo));
+    lo = Math.max(0, Math.min(nb - span, lo));
+    span = Math.min(span, nb - lo);
+    this.binLo = lo;
+    this.binHi = lo + span;
+    this.draw();
+  }
+
   setWindow(start: number, frames: number, level: number): void {
     this.winStart = start;
     this.winFrames = frames;
@@ -132,7 +165,7 @@ export class Pane2D {
 
   private midiToY(midi: number, h: number): number {
     const b = (midi - this.m.fmin_midi) * (this.m.bins_per_octave / 12);
-    return h * (1 - (b + 0.5) / this.m.n_bins);
+    return h * (1 - (b + 0.5 - this.binLo) / (this.binHi - this.binLo));
   }
 
   private drawNotes(ctx: CanvasRenderingContext2D, h: number): void {
@@ -141,7 +174,7 @@ export class Pane2D {
     const t0 = this.winStart * this.frameSec;
     const t1 = (this.winStart + this.winFrames) * this.frameSec;
     const xOf = (t: number): number => PANE_AXIS_W + ((t - t0) / (t1 - t0)) * this.plotW;
-    const rowH = (h / this.m.n_bins) * (this.m.bins_per_octave / 12);
+    const rowH = (h / (this.binHi - this.binLo)) * (this.m.bins_per_octave / 12);
     ctx.save();
     ctx.beginPath();
     ctx.rect(PANE_AXIS_W, 0, this.plotW, h);
@@ -161,7 +194,7 @@ export class Pane2D {
 
   private drawKeyboard(ctx: CanvasRenderingContext2D, h: number): void {
     const x0 = KEY_X, w = PANE_AXIS_W - KEY_X - 2;
-    const rowH = (h / this.m.n_bins) * (this.m.bins_per_octave / 12);
+    const rowH = (h / (this.binHi - this.binLo)) * (this.m.bins_per_octave / 12);
     for (let midi = 21; midi <= 108; midi++) {
       const y = this.midiToY(midi, h) - rowH / 2;
       const black = BLACK.has(midi % 12);
@@ -226,7 +259,9 @@ export class Pane2D {
     ctx.imageSmoothingEnabled = this.winFrames < this.plotW;
     const sx = this.winStart - this.pageStart;
     if (this.page.width > 0) {
-      ctx.drawImage(this.page, sx, 0, this.winFrames, this.m.n_bins, PANE_AXIS_W, 0, this.plotW, h);
+      // image rows: 0 = highest bin; show bins [binLo, binHi)
+      const sy = this.m.n_bins - this.binHi;
+      ctx.drawImage(this.page, sx, sy, this.winFrames, this.binHi - this.binLo, PANE_AXIS_W, 0, this.plotW, h);
     }
     this.drawNotes(ctx, h);
     ctx.fillStyle = "#0e0f13";
@@ -238,7 +273,8 @@ export class Pane2D {
     const k = this.m.bins_per_octave / 12;
     for (let midi = 24; midi <= 108; midi += 12) {
       const b = (midi - this.m.fmin_midi) * k;
-      const y = h * (1 - (b + 0.5) / this.m.n_bins);
+      const y = h * (1 - (b + 0.5 - this.binLo) / (this.binHi - this.binLo));
+      if (y < 0 || y > h) continue;
       ctx.fillStyle = "rgba(255,255,255,0.18)";
       ctx.fillRect(PANE_AXIS_W, Math.round(y), this.plotW, 1);
       ctx.fillStyle = "#aab";

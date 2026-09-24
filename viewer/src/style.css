@@ -53,5 +53,20 @@ html, body { margin: 0; height: 100%; background: var(--bg); color: var(--fg); }
 #part-list li.focus .pname { font-weight: 600; color: #fff; }
 #part-list .rng { color: var(--muted); margin-left: auto; font-size: 11px; }
 .hint { color: var(--muted); font-size: 11px; margin: 6px 0 0; }
+#pianoview {
+  position: fixed; inset: 0; z-index: 10; background: #0b0c10;
+  display: grid; grid-template-rows: auto 1fr;
+}
+#pianoview[hidden] { display: none; }
+#piano-bar {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 6px 16px; padding: 6px 12px;
+  background: var(--panel); border-bottom: 1px solid var(--line); font-size: 12px;
+}
+#piano-bar label { display: inline-flex; align-items: center; gap: 4px; color: var(--muted); }
+#piano-bar .hint { margin: 0 0 0 auto; }
+#piano-bar button { background: #1d2028; color: var(--fg); border: 1px solid var(--line);
+  border-radius: 4px; font: inherit; padding: 2px 8px; }
+#piano-time { color: #e6c07b; font-variant-numeric: tabular-nums; min-width: 220px; }
+#piano { width: 100%; height: 100%; display: block; }
 #gapinfo { color: #7fb6ff; font-variant-numeric: tabular-nums; }
 #gapval { min-width: 44px; font-variant-numeric: tabular-nums; }
