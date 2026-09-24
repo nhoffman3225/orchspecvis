@@ -4,10 +4,11 @@
 import { midiName, u8ToDb, type Manifest, type NotesTable, type ScorePart } from "./bundle";
 import { frameSpans } from "./gaps";
 import { NoteIndex, measureAt } from "./notes";
+import { colormapLut } from "./colormap";
 
 export const AXIS_W = 44;
 /** 2D pane gutter: pitch labels | range bar | 88-key keyboard. */
-export const PANE_AXIS_W = 84;
+export const PANE_AXIS_W = 116;
 const KEY_X = 42;
 const BLACK = new Set([1, 3, 6, 8, 10]);
 
@@ -33,6 +34,9 @@ export class Pane2D {
   private pageData: Uint8Array | null = null;
   private playSec = 0;
   score: ScoreOverlay | null = null;
+  /** per-key heat 0..1 (88 keys, A0 first), or null */
+  heat: Float32Array | null = null;
+  private heatLut = colormapLut("inferno");
   onSeek: (seconds: number) => void = () => {};
 
   constructor(
@@ -161,22 +165,36 @@ export class Pane2D {
     for (let midi = 21; midi <= 108; midi++) {
       const y = this.midiToY(midi, h) - rowH / 2;
       const black = BLACK.has(midi % 12);
-      ctx.fillStyle = black ? "#1b1d22" : "#c9ccd3";
+      // dim the keys under a heat map so its colors read clearly
+      ctx.fillStyle = black ? "#16181c" : this.heat ? "#50545c" : "#c9ccd3";
       ctx.fillRect(x0, y, black ? w * 0.62 : w, rowH);
       if (!black && (midi % 12 === 0 || midi % 12 === 5)) {
         ctx.fillStyle = "#6b6f78"; // B|C and E|F boundaries
         ctx.fillRect(x0, y + rowH - 0.5, w, 0.5);
       }
     }
+    if (this.heat) {
+      for (let key = 0; key < 88; key++) {
+        const hv = this.heat[key]!;
+        if (hv <= 0.01) continue;
+        const y = this.midiToY(21 + key, h) - rowH / 2;
+        const li = Math.min(255, Math.round(80 + hv * 175)) * 4;
+        const lut = this.heatLut;
+        ctx.globalAlpha = Math.min(1, 0.4 + hv * 0.6);
+        ctx.fillStyle = `rgb(${lut[li]},${lut[li + 1]},${lut[li + 2]})`;
+        ctx.fillRect(x0, y, w, rowH);
+      }
+      ctx.globalAlpha = 1;
+    }
     const sc = this.score;
     if (!sc) return;
-    // sounding notes at the playhead
+    // sounding notes at the playhead: a strip at the key tips (the heat stays visible)
     for (const i of sc.index.activeAt(this.playSec)) {
       const part = sc.notes.part[i]!;
       if (!sc.visible(part)) continue;
       const y = this.midiToY(Math.round(sc.notes.midi[i]!), h) - rowH / 2;
       ctx.fillStyle = sc.partColor(part);
-      ctx.fillRect(x0, y, w, rowH);
+      ctx.fillRect(x0 + w * 0.7, y, w * 0.3, rowH);
     }
     // range bar of the focused part (full range dim, practical range bright)
     const fp = sc.focus !== null ? sc.parts[sc.focus] : undefined;

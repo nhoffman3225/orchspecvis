@@ -2,7 +2,8 @@
 import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { loadManifest, loadNotes, loadSeries, midiName } from "./bundle";
-import { NoteIndex, applyMask, frameSeconds, measureAt, rasterizeF0, rasterizeNotes } from "./notes";
+import { NoteIndex, applyMask, frameSeconds, measureAt, overtones, rasterizeF0, rasterizeNotes } from "./notes";
+import { heatFromNotes, heatFromPage, normalizeHeat } from "./heat";
 import { frameGaps, frameSpans, smoothPage } from "./gaps";
 import { COLORMAPS, colormapLut, cssColor, stemPalette } from "./colormap";
 import { initToken } from "./net";
@@ -224,6 +225,34 @@ async function main(): Promise<void> {
   });
   fundBox.addEventListener("change", () => rebuildDisplay());
   fundW.addEventListener("change", () => rebuildDisplay());
+  // overtones back in when loud enough (only meaningful with fundamentals on)
+  const HARM_OFF = -97;
+  const MAX_HARMONIC = 16;
+  const harm = $<HTMLInputElement>("harm");
+  if (params.get("harm")) harm.value = params.get("harm")!;
+  const harmDb = (): number | null => (Number(harm.value) <= HARM_OFF ? null : Number(harm.value));
+  const syncHarm = (): void => {
+    harm.disabled = !fundBox.checked || fundBox.disabled;
+    $("harmval").textContent = harmDb() === null ? "off" : `${harm.value} dB`;
+  };
+  harm.addEventListener("input", () => {
+    syncHarm();
+    rebuildDisplay();
+  });
+  fundBox.addEventListener("change", syncHarm);
+  syncHarm();
+  // keyboard heat map
+  const heatSel = $<HTMLSelectElement>("heat");
+  const tau = $<HTMLInputElement>("tau");
+  if (params.get("heat")) heatSel.value = params.get("heat")!;
+  if (params.get("tau")) tau.value = params.get("tau")!;
+  if (!nix) (heatSel.querySelector('option[value="notes"]') as HTMLOptionElement).disabled = true;
+  if (heatSel.value === "notes" && !nix) heatSel.value = "sound";
+  const syncTau = (): void => {
+    $("tauval").textContent = `${Number(tau.value).toFixed(1)} s`;
+  };
+  tau.addEventListener("input", syncTau);
+  syncTau();
 
   // ---- paging: assemble a page of `pageFrames` frames at the chosen level
   let page = { level: -1, start: 0, key: "", ready: false };
@@ -289,8 +318,24 @@ async function main(): Promise<void> {
         const visibleStem = (r: number): boolean => ui.selected.has(m.stems[r]?.id ?? "");
         mask = rasterizeF0(f0Data, rows, frames0, m, raw.level, raw.start, pageFrames, wBins, visibleStem);
       }
-      if (mask) src = applyMask(src, mask);
+      if (mask) {
+        const hdb = harmDb();
+        let hmask: Uint8Array | null = null;
+        if (hdb !== null) {
+          const hs = overtones(MAX_HARMONIC);
+          if (notes && nix) {
+            hmask = rasterizeNotes(notes, inPage, m, raw.level, raw.start, pageFrames, wBins, visiblePart, hs);
+          } else if (f0Data && f0Series) {
+            const [rows, frames0] = f0Series.shape as [number, number];
+            const visibleStem = (r: number): boolean => ui.selected.has(m.stems[r]?.id ?? "");
+            hmask = rasterizeF0(f0Data, rows, frames0, m, raw.level, raw.start, pageFrames, wBins, visibleStem, hs);
+          }
+        }
+        const thr = hdb === null ? 256 : Math.max(0, Math.round(((hdb - m.db_min) * 255) / (m.db_max - m.db_min)));
+        src = applyMask(src, mask, hmask, thr);
+      }
     }
+    heatSrc = { data: src, level: raw.level, start: raw.start };
     const height = smoothPage(src, m.n_bins, pageFrames, sigmaB, sigmaF, m.db_min, m.db_max);
     surface.setPage(height, raw.dom, raw.start);
     surface.setNotes(notes && nix && notesBox.checked
@@ -298,6 +343,21 @@ async function main(): Promise<void> {
       : null);
     last = { height, dom: raw.dom, start: raw.start, level: raw.level };
     applyGaps();
+  }
+  // the filtered (fundamentals/harmonics) but unsmoothed page drives the "sound" heat map
+  let heatSrc: { data: Uint8Array; level: number; start: number } | null = null;
+  function keyHeat(t: number): Float32Array | null {
+    const mode = heatSel.value;
+    const tv = Number(tau.value);
+    if (mode === "notes" && notes && nix) {
+      return normalizeHeat(heatFromNotes(notes, nix, t, tv, (p) => partsVisible.has(p)), "notes", tv);
+    }
+    if (mode === "sound" && heatSrc) {
+      const page = { data: heatSrc.data, nBins: m.n_bins, start: heatSrc.start, frames: pageFrames,
+        frameSec: frameSeconds(m, heatSrc.level) };
+      return normalizeHeat(heatFromPage(page, m.bins_per_octave / 12, m.fmin_midi, t, tv, m.db_min, m.db_max), "sound", tv);
+    }
+    return null;
   }
   let smoothPending = false;
   smooth.addEventListener("input", () => {
@@ -391,6 +451,8 @@ async function main(): Promise<void> {
     if (f0 < ui.winStart0 || f0 > ui.winStart0 + winFrames0) ui.winStart0 = f0 - 0.25 * winFrames0;
   };
   pane.onSeek = seek;
+  const startAt = Number(params.get("t"));
+  if (Number.isFinite(startAt) && startAt > 0) seek(startAt);
   strip.onSeek = (t) => {
     seek(t);
     ui.winStart0 = secToF0(t) - 0.5 * secToF0(ui.winSeconds);
@@ -469,6 +531,7 @@ async function main(): Promise<void> {
     const t = player.tick();
     updateView(t);
     gapReadout(t);
+    pane.heat = keyHeat(t);
     playBtn.textContent = player.transport.isPlaying ? "❚❚" : "▶";
     $("time").textContent = `${fmt(t)} / ${fmt(m.duration_seconds)}`;
     if (m.score) {

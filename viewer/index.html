@@ -45,6 +45,19 @@
             <option value="100">100¢</option>
           </select>
         </label>
+        <label title="With fundamentals on: also let overtones (2nd..16th harmonic of each note) through wherever they are at least this loud. Leftmost = off.">
+          + harmonics ≥ <input id="harm" type="range" min="-97" max="0" step="1" value="-97" />
+          <span id="harmval">off</span>
+        </label>
+        <label title="Heat map on the keyboard: recent activity per key, fading with time constant τ. sound = measured energy at the key (follows the audio's decay); notes = how much the score plays there.">
+          key heat <select id="heat">
+            <option value="off">off</option>
+            <option value="sound" selected>sound</option>
+            <option value="notes">notes</option>
+          </select>
+          τ <input id="tau" type="range" min="0.2" max="6" step="0.1" value="1.5" />
+          <span id="tauval">1.5 s</span>
+        </label>
         <label title="Spectral gaps: quiet pitch regions inside the ensemble's sounding span">
           <input id="gaps" type="checkbox" /> gaps ≤
           <input id="gapdb" type="range" min="-90" max="-15" step="1" value="-50" />
