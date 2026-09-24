@@ -63,7 +63,7 @@ npm test && npm run build` green; CI green on both OSes.
       with MIDI/pitch-name axis, play/pause/seek, LUFS strip, stem toggles,
       color-by-dominant-stem
 - [x] Required tests (see "Exit gate") + perf smoke numbers recorded below
-- [ ] PR for Phase 1
+- [x] PR for Phase 1 (#2, stacked on #1; CI green on windows + macos)
 
 Exit gate tests: test_cqt_axes, test_click_alignment, test_tiles_roundtrip,
 test_torch_vs_librosa (gpu/torch), test_bundle_schema (py writer -> vitest parse),
