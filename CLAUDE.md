@@ -39,7 +39,8 @@ npm test           # vitest (includes schema cross-check + no-network check)
 
 `npm run dev` shows viewer/public/tiny-bundle; add `?bundle=/path/` for another bundle
 served by Vite, or use `orchspec serve` for a real one. `?mode=mix|stems|dominant` sets the
-initial view. The cross-language test reads viewer/test-data/py-bundle, written by
+initial view; also `style=surface|terrain|fabric`, `smooth=<semitones>`, `gaps=<dB>`
+(e.g. `&mode=ensemble&style=terrain&smooth=4&gaps=-45`). The cross-language test reads viewer/test-data/py-bundle, written by
 `uv run pytest tests/test_bundle_writer.py` (git-ignored) — run pytest before vitest.
 
 On this Windows box Node comes from Scoop `nodejs-lts`, which is added to PATH by the
@@ -62,6 +63,7 @@ viewer/             Vite + TS + three.js (WebGL2 only)
   src/net.ts        the only network I/O (same-origin guard)
   src/tiles.ts      tile LRU cache, page assembly, stem power-sum
   src/surface.ts    heightmap shader surface; src/pane2d.ts 2D pane + LUFS strip
+  src/gaps.ts       energy-domain smoothing, sounding spans, spectral-gap detection
   src/clock.ts      Transport (AudioContext master clock); src/player.ts Web Audio
 data/instruments/   ranges.yaml (schema documented in-file)
 tests/              pytest; fixtures/make_synthetic.py; fixtures/real/ is git-ignored

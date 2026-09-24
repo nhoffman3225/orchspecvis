@@ -47,3 +47,5 @@ html, body { margin: 0; height: 100%; background: var(--bg); color: var(--fg); }
 #lufs { border-top: 1px solid var(--line); cursor: pointer; }
 #cqt2d { cursor: crosshair; }
 #status { font-size: 11px; color: var(--muted); padding: 3px 10px; border-top: 1px solid var(--line); }
+#gapinfo { color: #7fb6ff; font-variant-numeric: tabular-nums; }
+#gapval { min-width: 44px; font-variant-numeric: tabular-nums; }

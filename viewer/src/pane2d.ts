@@ -2,6 +2,7 @@
 // and the LUFS overview strip. Both are click-to-seek.
 
 import { midiName, u8ToDb, type Manifest } from "./bundle";
+import { frameSpans } from "./gaps";
 
 export const AXIS_W = 44;
 
@@ -51,8 +52,9 @@ export class Pane2D {
 
   /** Colors a page once (frame-major u8 -> image with time on x, high pitch on top). */
   setPage(data: Uint8Array, frames: number, pageStart: number, level: number, lut: Uint8Array,
-          dominant: Uint8Array | null, palette: Uint8Array | null): void {
+          dominant: Uint8Array | null, palette: Uint8Array | null, gapThr = -1): void {
     const nb = this.m.n_bins;
+    const spans = gapThr >= 0 ? frameSpans(data, nb, frames, gapThr) : null;
     this.page.width = frames;
     this.page.height = nb;
     const ctx = this.page.getContext("2d")!;
@@ -72,6 +74,14 @@ export class Pane2D {
           px[o] = lut[v * 4]!;
           px[o + 1] = lut[v * 4 + 1]!;
           px[o + 2] = lut[v * 4 + 2]!;
+        }
+        if (spans) {
+          const lo = spans[f * 2]!, hi = spans[f * 2 + 1]!;
+          if (lo >= 0 && b > lo && b < hi && v <= gapThr) {
+            px[o] = px[o]! * 0.35 + 40;
+            px[o + 1] = px[o + 1]! * 0.35 + 110;
+            px[o + 2] = px[o + 2]! * 0.35 + 230;
+          }
         }
         px[o + 3] = 255;
       }

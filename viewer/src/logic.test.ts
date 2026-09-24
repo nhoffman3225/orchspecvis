@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { Lod, Tile } from "./bundle";
 import { Transport, type TimeSource } from "./clock";
 import { colormapLut, stemPalette } from "./colormap";
+import { frameGaps, frameSpans, smoothPage } from "./gaps";
 import { TileCache, assemblePage, chooseLevel, powerTables, sumPages } from "./tiles";
 
 function fakeLod(nFrames: number, tileFrames: number, nBins: number): { lod: Lod; data: Map<string, Uint8Array> } {
@@ -91,5 +92,55 @@ describe("colormaps", () => {
     expect(lut[255 * 4]! + lut[255 * 4 + 1]!).toBeGreaterThan(400); // bright at the top
     const pal = stemPalette(3, (i) => i !== 1);
     expect(pal[1 * 4]).toBe(90);
+  });
+});
+
+
+describe("spectral gaps", () => {
+  // k = 1, fmin = 21 (A0); a row of 24 bins = A0..G#2
+  const row = new Uint8Array(24);
+  row[2] = 200; // B0
+  row[3] = 200;
+  row[10] = 150; // G1
+  row[20] = 90; // F2
+  it("finds quiet runs inside the sounding span only", () => {
+    const g = frameGaps(row, 100, 1, 21, 1);
+    // 90 <= thr, so the span is bins 2..10 and the only gap is 4..9
+    expect(g).toHaveLength(1);
+    expect(g[0]).toMatchObject({ loBin: 4, hiBin: 9, semitones: 6, label: "C#1–F#1" });
+    const g2 = frameGaps(row, 80, 1, 21, 1);
+    expect(g2.map((x) => [x.loBin, x.hiBin])).toEqual([[11, 19], [4, 9]]); // widest first
+    expect(frameGaps(row, 80, 1, 21, 8).map((x) => x.loBin)).toEqual([11]);
+    expect(frameGaps(new Uint8Array(24), 10, 1, 21)).toEqual([]);
+  });
+  it("computes per-frame spans", () => {
+    const page = new Uint8Array(48);
+    page.set(row, 0);
+    const s = frameSpans(page, 24, 2, 100);
+    expect(Array.from(s)).toEqual([2, 10, -1, -1]);
+  });
+});
+
+describe("smoothing", () => {
+  it("is identity at radius 0 and preserves a constant page", () => {
+    const p = Uint8Array.from({ length: 40 }, (_, i) => i);
+    expect(smoothPage(p, 8, 5, 0, 0, -96, 6)).toBe(p);
+    const c = new Uint8Array(64).fill(123);
+    expect(Array.from(smoothPage(c, 8, 8, 2, 3, -96, 6))).toEqual(Array.from(c));
+  });
+  it("fills the space between partials so it no longer reads as a gap", () => {
+    const nBins = 36, frames = 3;
+    const page = new Uint8Array(nBins * frames);
+    for (let f = 0; f < frames; f++) for (const b of [4, 8, 12, 30]) page[f * nBins + b] = 220;
+    const thr = 150; // ~ -36 dB
+    const raw = frameGaps(page.subarray(nBins, 2 * nBins), thr, 1, 21, 2);
+    expect(raw.length).toBe(3); // between every partial
+    const sm = smoothPage(page, nBins, frames, 2, 0, -96, 6);
+    // energy smoothing keeps a lone partial within a few dB of its level (0.4 dB/LSB)
+    expect(sm[nBins + 30]!).toBeGreaterThan(220 - 25);
+    const g = frameGaps(sm.subarray(nBins, 2 * nBins), thr, 1, 21, 2);
+    expect(g.length).toBe(1); // only the real register hole remains
+    expect(g[0]!.loBin).toBeGreaterThan(13);
+    expect(g[0]!.hiBin).toBeLessThan(29);
   });
 });

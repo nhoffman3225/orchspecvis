@@ -62,6 +62,11 @@ npm test && npm run build` green; CI green on both OSes.
 - [x] Viewer: heightmap shader, colormap, orbit camera, playhead plane, linked 2D CQT pane
       with MIDI/pitch-name axis, play/pause/seek, LUFS strip, stem toggles,
       color-by-dominant-stem
+- [x] Viewer extras (2026-09-24, user request): smoothing (energy-domain Gaussian, 0-12
+      semitones), styles surface / terrain (hillshade + 3 dB contours, 15 dB index) /
+      fabric (glowing mesh), "full ensemble (all stems)" view, spectral-gap detection
+      (quiet regions inside the frame's sounding span) with lakes in terrain, tint in 2D,
+      and a readout of the widest gaps at the playhead
 - [x] Required tests (see "Exit gate") + perf smoke numbers recorded below
 - [x] PR for Phase 1 (#2, stacked on #1; CI green on windows + macos)
 
@@ -103,6 +108,11 @@ Acceptance: synthetic "overbalanced brass" fixture is flagged.
 
 ### Phase 5 — polish
 - [ ] Performance for 100 staves / 20 min; accessibility; docs; packaging
+- [ ] Perf candidates (see perf discussion 2026-09-24): batch stems through the torch CQT
+      (B x n), overlap decode/CQT/tile-writing with a thread pool, compressed tiles
+      (gzip + DecompressionStream, or zstd in the Rust core), stems stored from LOD 1,
+      viewer page assembly + smoothing + stem sums in a Web Worker (OffscreenCanvas for
+      the 2D pane) or on the GPU (texture array), AudioWorklet streaming playback
 
 ## Unverified assumptions
 
@@ -165,6 +175,17 @@ Acceptance: synthetic "overbalanced brass" fixture is flagged.
 - 2026-09-24: Transport: sources start at ctx.currentTime (anchor); playhead =
   offset + max(0, getOutputTimestamp().contextTime - anchor), falling back to
   currentTime - outputLatency.
+
+- 2026-09-24: Smoothing runs on the CPU per page in the POWER domain (u8 -> power -> blur
+  -> u8), not in dB and not in the vertex shader. dB-domain blur dragged sparse partials
+  below the floor (surface went flat, no gaps); a 7x7 GPU blur cost 49 texture reads per
+  vertex. The surface, 2D pane and gap analysis all use the same smoothed page.
+- 2026-09-24: Spectral gap = run of bins <= threshold strictly between the frame's lowest
+  and highest bin above threshold (empty register above the top voice / below the bass is
+  not a gap). Computed on whatever is displayed (mix, full ensemble, selected stems).
+- 2026-09-24: Fixed Phase 1 bug: surface triangles were wound clockwise seen from above,
+  so top faces were back-face culled; only ridge flanks were visible. Unnoticed because the
+  flat floor is near-black in magma.
 
 ## API drift
 

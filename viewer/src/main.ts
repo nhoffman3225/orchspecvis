@@ -2,14 +2,15 @@
 import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { loadManifest, loadSeries } from "./bundle";
+import { frameGaps, frameSpans, smoothPage } from "./gaps";
 import { COLORMAPS, colormapLut, cssColor, stemPalette } from "./colormap";
 import { initToken } from "./net";
 import { LufsStrip, Pane2D } from "./pane2d";
 import { Player } from "./player";
-import { GRID_COLS, Surface } from "./surface";
+import { GRID_COLS, SURFACE_STYLES, Surface, colsPerBin, type SurfaceStyle } from "./surface";
 import { TileCache, assemblePage, bundleTileLoader, chooseLevel, lodsFor, sumPages, type TrackId } from "./tiles";
 
-type Mode = "mix" | "stems" | "dominant";
+type Mode = "mix" | "ensemble" | "stems" | "dominant";
 
 const $ = <T extends HTMLElement>(id: string): T => document.getElementById(id) as T;
 const status = $("status");
@@ -59,7 +60,7 @@ async function main(): Promise<void> {
 
   // ---- UI state
   const ui = {
-    mode: (["mix", "stems", "dominant"].includes(params.get("mode") ?? "") && m.stems.length
+    mode: (["mix", "ensemble", "stems", "dominant"].includes(params.get("mode") ?? "") && m.stems.length
       ? params.get("mode") : "mix") as Mode,
     cmap: "magma",
     selected: new Set(m.stems.map((s) => s.id)),
@@ -140,6 +141,7 @@ async function main(): Promise<void> {
   }
 
   function heightTracks(): TrackId[] {
+    if (ui.mode === "ensemble") return m.stems.map((s) => `stem:${s.id}` as TrackId);
     if (ui.mode === "stems") return m.stems.filter((s) => ui.selected.has(s.id)).map((s) => `stem:${s.id}` as TrackId);
     return ["mix"];
   }
@@ -155,12 +157,81 @@ async function main(): Promise<void> {
       ? await assemblePage(cache, m.dominant.lods[level]!, m.n_bins, start, pageFrames, m.dominant.none_value)
       : null;
     if (gen !== pageGen) return; // superseded
-    surface.setPage(height, dom, start);
+    raw = { height, dom, start, level, winFrames: secToF0(ui.winSeconds) / 2 ** level };
+    rebuildDisplay();
     surface.setMode(ui.mode === "dominant" ? "dominant" : "db");
     const pal = palette();
     surface.setPalette(pal);
-    pane.setPage(height, pageFrames, start, level, lut, dom, dom ? pal : null);
     page = { level, start, key: pageKey(), ready: true };
+  }
+
+  // ---- spectral gaps of whatever is displayed (mix, full ensemble, or selected stems)
+  type ShownPage = { height: Uint8Array; dom: Uint8Array | null; start: number; level: number };
+  let last: ShownPage | null = null;
+  // the unsmoothed page as loaded; `last` is what is displayed (optionally smoothed)
+  let raw: (ShownPage & { winFrames: number }) | null = null;
+  const smooth = $<HTMLInputElement>("smooth");
+  const pSmooth = params.get("smooth");
+  if (pSmooth !== null && Number.isFinite(Number(pSmooth))) smooth.value = pSmooth;
+  function rebuildDisplay(): void {
+    if (!raw) return;
+    const semis = Number(smooth.value);
+    $("smoothval").textContent = semis > 0 ? `${semis} st` : "off";
+    // sigma = half the chosen width; time sigma covers the same world distance as pitch
+    const sigmaB = (semis * (m.bins_per_octave / 12)) / 2;
+    const sigmaF = sigmaB * colsPerBin(m.n_bins) * (raw.winFrames / GRID_COLS);
+    const height = smoothPage(raw.height, m.n_bins, pageFrames, sigmaB, sigmaF, m.db_min, m.db_max);
+    surface.setPage(height, raw.dom, raw.start);
+    last = { height, dom: raw.dom, start: raw.start, level: raw.level };
+    applyGaps();
+  }
+  let smoothPending = false;
+  smooth.addEventListener("input", () => {
+    if (smoothPending) return;
+    smoothPending = true;
+    requestAnimationFrame(() => {
+      smoothPending = false;
+      rebuildDisplay();
+    });
+  });
+  const gapsBox = $<HTMLInputElement>("gaps");
+  const gapDb = $<HTMLInputElement>("gapdb");
+  if (params.get("gaps") !== null) {
+    gapsBox.checked = true;
+    const g = Number(params.get("gaps"));
+    if (params.get("gaps") !== "" && Number.isFinite(g)) gapDb.value = String(g);
+  }
+  const gapThrU8 = (): number => {
+    if (!gapsBox.checked) return -1;
+    const db = Number(gapDb.value);
+    return Math.max(0, Math.min(255, Math.round(((db - m.db_min) * 255) / (m.db_max - m.db_min))));
+  };
+  function applyGaps(): void {
+    $("gapval").textContent = `${gapDb.value} dB`;
+    const thr = gapThrU8();
+    surface.setGap(thr < 0 ? -1 : thr / 255);
+    if (!last) return;
+    if (thr >= 0) surface.setSpans(frameSpans(last.height, m.n_bins, pageFrames, thr));
+    pane.setPage(last.height, pageFrames, last.start, last.level, lut, last.dom,
+      last.dom ? palette() : null, thr);
+  }
+  gapsBox.addEventListener("change", applyGaps);
+  gapDb.addEventListener("input", applyGaps);
+  let lastGapText = "";
+  function gapReadout(playSec: number): void {
+    const thr = gapThrU8();
+    let text = "";
+    if (thr >= 0 && last) {
+      const f = Math.floor(secToF0(playSec) / 2 ** last.level) - last.start;
+      if (f >= 0 && f < pageFrames) {
+        const row = last.height.subarray(f * m.n_bins, (f + 1) * m.n_bins);
+        const g = frameGaps(row, thr, m.bins_per_octave / 12, m.fmin_midi, 2);
+        text = g.length
+          ? "gaps: " + g.slice(0, 3).map((x) => `${x.label} (${x.semitones.toFixed(0)} st)`).join(", ")
+          : "no gaps ≥ 2 st";
+      }
+    }
+    if (text !== lastGapText) $("gapinfo").textContent = lastGapText = text;
   }
 
   const pageKey = (): string => `${ui.mode}|${[...ui.selected].sort().join(",")}|${ui.cmap}`;
@@ -227,10 +298,32 @@ async function main(): Promise<void> {
   });
   const floor = $<HTMLInputElement>("floor");
   const height = $<HTMLInputElement>("height");
-  floor.addEventListener("input", () => surface.setFloor(Number(floor.value)));
+  // contours every CONTOUR_DB across the displayed range (floor .. db_max)
+  const CONTOUR_DB = 3;
+  const applyFloor = (): void => {
+    const f = Number(floor.value);
+    surface.setFloor(f);
+    surface.setContours(((1 - f) * (m.db_max - m.db_min)) / CONTOUR_DB);
+  };
+  floor.addEventListener("input", applyFloor);
   height.addEventListener("input", () => surface.setHeightScale(Number(height.value)));
-  surface.setFloor(Number(floor.value));
+  applyFloor();
   surface.setHeightScale(Number(height.value));
+  const styleSel = $<HTMLSelectElement>("style");
+  const pStyle = params.get("style");
+  if (pStyle && (SURFACE_STYLES as readonly string[]).includes(pStyle)) styleSel.value = pStyle;
+  const applyStyle = (): void => {
+    surface.setStyle(styleSel.value as SurfaceStyle);
+  };
+  styleSel.addEventListener("change", () => {
+    // terrain/fabric read best smoothed; nudge the slider up if it is still at 0
+    if (styleSel.value !== "surface" && Number(smooth.value) === 0) {
+      smooth.value = "3";
+      rebuildDisplay();
+    }
+    applyStyle();
+  });
+  applyStyle();
   $<HTMLInputElement>("follow").addEventListener("change", (e) => (ui.follow = (e.target as HTMLInputElement).checked));
   $<HTMLInputElement>("grid").addEventListener("change", (e) => surface.setGrid((e.target as HTMLInputElement).checked));
   const vol = $<HTMLInputElement>("vol");
@@ -261,6 +354,7 @@ async function main(): Promise<void> {
   renderer.setAnimationLoop(() => {
     const t = player.tick();
     updateView(t);
+    gapReadout(t);
     playBtn.textContent = player.transport.isPlaying ? "❚❚" : "▶";
     $("time").textContent = `${fmt(t)} / ${fmt(m.duration_seconds)}`;
     controls.update();
