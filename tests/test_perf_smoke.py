@@ -73,7 +73,7 @@ def _run(tmp: Path, backend: str) -> None:
     inputs = _inputs(tmp)
     peak = ""
     if backend == "torch":
-        import torch
+        import torch  # pyright: ignore[reportMissingImports]  (optional gpu extra)
 
         torch.cuda.reset_peak_memory_stats()
     t0 = time.perf_counter()
@@ -85,7 +85,7 @@ def _run(tmp: Path, backend: str) -> None:
     )
     wall = time.perf_counter() - t0
     if backend == "torch":
-        import torch
+        import torch  # pyright: ignore[reportMissingImports]  (optional gpu extra)
 
         peak = f", peak VRAM {torch.cuda.max_memory_allocated() / 2**30:.2f} GiB"
     size = sum(p.stat().st_size for p in rep.path.rglob("*") if p.is_file()) / 2**30

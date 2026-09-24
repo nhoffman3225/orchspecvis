@@ -151,7 +151,7 @@ class TorchBackend:
     name = "torch"
 
     def __init__(self, device: str | None = None, batch: int = 1) -> None:
-        import torch
+        import torch  # pyright: ignore[reportMissingImports]  (optional gpu extra)
 
         self.torch = torch
         if device is None:

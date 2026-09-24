@@ -7,7 +7,7 @@ from orchspec.dsp.cqt import get_backend
 
 def _torch_device() -> str | None:
     try:
-        import torch
+        import torch  # pyright: ignore[reportMissingImports]  (optional gpu extra)
     except ImportError:
         return None
     return "cuda" if torch.cuda.is_available() else None
