@@ -13,7 +13,7 @@ a three.js viewer shows a 3D CQT surface (time × pitch × dB) with synced playb
 uv sync --locked --extra dev            # add --extra gpu on Windows/Linux for CUDA torch
 uv run orchspec validate path/to/session
 uv run orchspec bundle path/to/session -o out/
-cd viewer && npm ci && npm run build && cd ..
+npm --prefix viewer ci && npm --prefix viewer run build
 uv run orchspec serve out/<name>.bundle   # prints a tokenized http://127.0.0.1:<port>/ URL
 ```
 

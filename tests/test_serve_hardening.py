@@ -105,3 +105,14 @@ def test_bound_to_localhost() -> None:
         assert host == "127.0.0.1" and port > 0
     finally:
         s.close()
+
+
+def test_cli_serve_missing_bundle_is_a_clear_error(tmp_path: Path) -> None:
+    from typer.testing import CliRunner
+
+    from orchspec.cli import app
+
+    r = CliRunner().invoke(app, ["serve", str(tmp_path / "nope.bundle")])
+    assert r.exit_code == 2
+    assert "not a bundle directory" in r.output and "current directory" in r.output
+    assert "Traceback" not in r.output

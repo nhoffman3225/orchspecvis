@@ -104,9 +104,22 @@ def serve(
     viewer_dist: Annotated[Path | None, typer.Option(help="built viewer (viewer/dist)")] = None,
 ) -> None:
     """Serve a bundle + the built viewer on 127.0.0.1 (random port, tokenized URL)."""
+    from orchspec.server import REPO_VIEWER_DIST
     from orchspec.server import serve as run
 
-    run(bundle_dir, viewer_dist)
+    target = bundle_dir.expanduser().resolve()
+    if not (target / "manifest.json").is_file():
+        hint = ""
+        if not target.exists():
+            hint = f"\n  (resolved relative to the current directory: {Path.cwd()})"
+        typer.echo(f"error: {target} is not a bundle directory (no manifest.json){hint}", err=True)
+        raise typer.Exit(2)
+    dist = viewer_dist or REPO_VIEWER_DIST
+    if not (dist / "index.html").is_file():
+        typer.echo(
+            f"warning: no built viewer at {dist}; run `npm --prefix viewer run build`", err=True
+        )
+    run(target, viewer_dist)
 
 
 def main() -> None:
