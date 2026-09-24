@@ -20,7 +20,10 @@ uv run pyright
 uv run python tests/fixtures/make_synthetic.py   # regenerate synthetic WAV fixtures
 uv run orchspec bundle <input.wav | session_dir> -o out/<name>.bundle [--k 3] [--backend librosa|torch]
 uv run orchspec serve out/<name>.bundle          # 127.0.0.1, random port, prints tokenized URL
-uv run orchspec session-template <session_dir>   # print a render.yaml template
+uv run orchspec session-template [session_dir]   # print (or write) a render.yaml template
+uv run orchspec validate <session_dir | file.wav>
+uv run python tests/fixtures/make_demo_session.py  # 30 s, 4-stem demo in session/demo
+ORCHSPEC_PERF_MINUTES=2 ORCHSPEC_PERF_STEMS=4 uv run pytest -m slow -s   # quick perf smoke
 uv run python -c "import torch; print(torch.cuda.get_device_name(0), torch.version.cuda)"
 ```
 
@@ -28,11 +31,16 @@ Viewer (`viewer/`, npm with committed package-lock.json):
 
 ```
 npm ci
-npm run dev        # Vite dev server; loads viewer/public/sample.bundle by default
+npm run dev        # Vite dev server on 127.0.0.1 (tiny-bundle by default)
 npm run build      # -> viewer/dist (served by `orchspec serve`)
 npm run lint       # eslint + tsc --noEmit
 npm test           # vitest (includes schema cross-check + no-network check)
 ```
+
+`npm run dev` shows viewer/public/tiny-bundle; add `?bundle=/path/` for another bundle
+served by Vite, or use `orchspec serve` for a real one. `?mode=mix|stems|dominant` sets the
+initial view. The cross-language test reads viewer/test-data/py-bundle, written by
+`uv run pytest tests/test_bundle_writer.py` (git-ignored) — run pytest before vitest.
 
 On this Windows box Node comes from Scoop `nodejs-lts`, which is added to PATH by the
 installer rather than shimmed; new shells pick it up.
@@ -41,14 +49,20 @@ installer rather than shimmed; new shells pick it up.
 
 ```
 src/orchspec/
-  cli.py            typer app: bundle, serve, session-template
+  cli.py            typer app: bundle, serve, validate, session-template
   io/               audio + session folder loading (session.py, audio.py)
   dsp/              cqt.py (CQTSpec + backends), tiles.py, features.py
-  bundle/           schema.py (pydantic manifest v1), writer.py, reader.py
+  bundle/           schema.py (pydantic manifest v1)
   score/            (Phase 2) MusicXML parsing
   timeline/         (Phase 2) tempo map, alignment
   server.py         read-only FastAPI for `orchspec serve`
+  bundle/writer.py  session -> bundle (atomic temp-dir + rename)
 viewer/             Vite + TS + three.js (WebGL2 only)
+  src/bundle.ts     strict manifest parser (mirror of schema.py)
+  src/net.ts        the only network I/O (same-origin guard)
+  src/tiles.ts      tile LRU cache, page assembly, stem power-sum
+  src/surface.ts    heightmap shader surface; src/pane2d.ts 2D pane + LUFS strip
+  src/clock.ts      Transport (AudioContext master clock); src/player.ts Web Audio
 data/instruments/   ranges.yaml (schema documented in-file)
 tests/              pytest; fixtures/make_synthetic.py; fixtures/real/ is git-ignored
 docs/               bundle-format.md (language-neutral spec, Rust must match)
@@ -101,8 +115,8 @@ session/            git-ignored real session folders
    (centered frames; frame t is centered on sample t*hop).
 2. Register it in `BACKENDS` / `get_backend()`; import heavy deps lazily inside the backend
    so the core imports without them.
-3. Add it to the parametrization of `tests/test_cqt_axes.py` and
-   `tests/test_click_alignment.py`, and add a comparison against librosa like
+3. Add it to `BACKEND_PARAMS` in `tests/conftest.py` (drives `tests/test_cqt_axes.py` and
+   `tests/test_click_alignment.py`), and add a comparison against librosa like
    `tests/test_torch_vs_librosa.py` (median |dB diff| < 0.5 on the fixtures).
    Skip cleanly when the backend's dependency or device is absent.
 4. Document it in PLAN.md (decision log) and here.
