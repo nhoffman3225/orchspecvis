@@ -1,58 +1,277 @@
-// Phase 0 skeleton: load a bundle manifest + level-0 tiles and show them as a flat,
-// colored surface. Phase 1 replaces this with the heightmap viewer.
+// orchspec viewer: 3D CQT surface + linked 2D pane + LUFS strip, synced to Web Audio.
 import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
-import { loadManifest, loadTile } from "./bundle";
+import { loadManifest, loadSeries } from "./bundle";
+import { COLORMAPS, colormapLut, cssColor, stemPalette } from "./colormap";
 import { initToken } from "./net";
+import { LufsStrip, Pane2D } from "./pane2d";
+import { Player } from "./player";
+import { GRID_COLS, Surface } from "./surface";
+import { TileCache, assemblePage, bundleTileLoader, chooseLevel, lodsFor, sumPages, type TrackId } from "./tiles";
 
-const status = document.getElementById("status")!;
-const canvas = document.getElementById("gl") as HTMLCanvasElement;
+type Mode = "mix" | "stems" | "dominant";
+
+const $ = <T extends HTMLElement>(id: string): T => document.getElementById(id) as T;
+const status = $("status");
+
+function fmt(t: number): string {
+  const m = Math.floor(t / 60);
+  return `${m}:${(t - m * 60).toFixed(2).padStart(5, "0")}`;
+}
 
 async function main(): Promise<void> {
   initToken(location.search);
-  const base = new URLSearchParams(location.search).get("bundle") ?? "./tiny-bundle/";
-  const m = await loadManifest(base.endsWith("/") ? base : base + "/");
-  const l0 = m.lods[0]!;
-  const data = new Uint8Array(l0.n_frames * m.n_bins);
-  for (const t of l0.tiles) data.set(await loadTile(base, m, t), t.start_frame * m.n_bins);
+  const params = new URLSearchParams(location.search);
+  let base = params.get("bundle") ?? (import.meta.env.DEV ? "./tiny-bundle/" : "./bundle/");
+  if (!base.endsWith("/")) base += "/";
+  const m = await loadManifest(base);
+  const cache = new TileCache(bundleTileLoader(base, m));
+  $("title").textContent = `${m.source.name} · ${m.stems.length} stems · k=${m.cqt.k} · ${m.cqt.backend}`;
 
-  // frame-major bytes -> texture with width = n_bins, height = n_frames
-  const tex = new THREE.DataTexture(data, m.n_bins, l0.n_frames, THREE.RedFormat, THREE.UnsignedByteType);
-  tex.needsUpdate = true;
-
-  if (!canvas.getContext("webgl2")) throw new Error("WebGL2 is not available in this browser/GPU");
-  const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
-  renderer.setPixelRatio(devicePixelRatio);
+  // ---- renderer (the one and only WebGL context)
+  const canvas = $<HTMLCanvasElement>("gl");
+  const gl = canvas.getContext("webgl2", { antialias: true });
+  if (!gl) throw new Error("WebGL2 is not available in this browser/GPU");
+  const renderer = new THREE.WebGLRenderer({ canvas, context: gl, antialias: true });
+  renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+  renderer.setClearColor(0x0e0f13);
+  const maxTex = renderer.capabilities.maxTextureSize;
+  const pageFrames = Math.min(4096, maxTex);
   const scene = new THREE.Scene();
-  const camera = new THREE.PerspectiveCamera(45, 1, 0.01, 100);
-  camera.position.set(0, 1.4, 1.6);
+  const camera = new THREE.PerspectiveCamera(40, 1, 0.01, 50);
+  camera.position.set(-0.3, 1.25, 1.9);
   const controls = new OrbitControls(camera, canvas);
+  controls.target.set(0, 0.1, 0);
+  controls.enableDamping = true;
 
-  const mat = new THREE.ShaderMaterial({
-    uniforms: { uTex: { value: tex } },
-    vertexShader: `varying vec2 vUv; void main(){ vUv = uv;
-      gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
-    // uv.x = time -> texture row (t), uv.y = pitch -> texture column (s)
-    fragmentShader: `uniform sampler2D uTex; varying vec2 vUv; void main(){
-      float v = texture2D(uTex, vec2(vUv.y, vUv.x)).r;
-      gl_FragColor = vec4(v, v*v, 0.35 + 0.5*v, 1.0); }`,
+  const surface = new Surface(m.n_bins, pageFrames, m.cqt.k);
+  scene.add(surface.group);
+
+  const pane = new Pane2D($<HTMLCanvasElement>("cqt2d"), m, $("tip"));
+  const strip = new LufsStrip($<HTMLCanvasElement>("lufs"), m.duration_seconds);
+  const lufs = m.features.find((f) => f.name === "lufs_short_term");
+  if (lufs) strip.setData(await loadSeries(base, lufs), lufs.hop_seconds);
+
+  const player = new Player(m.duration_seconds);
+  void player.load(base, m.audio_path).then(() => {
+    if (player.audioError) status.textContent = `audio unavailable (${player.audioError}); playhead runs silently`;
   });
-  const plane = new THREE.Mesh(new THREE.PlaneGeometry(2, 1, 1, 1), mat);
-  plane.rotation.x = -Math.PI / 2;
-  scene.add(plane);
 
+  // ---- UI state
+  const ui = {
+    mode: (["mix", "stems", "dominant"].includes(params.get("mode") ?? "") && m.stems.length
+      ? params.get("mode") : "mix") as Mode,
+    cmap: "magma",
+    selected: new Set(m.stems.map((s) => s.id)),
+    winSeconds: Math.min(20, m.duration_seconds),
+    winStart0: 0, // level-0 frames
+    follow: true,
+  };
+  let lut = colormapLut(ui.cmap);
+  const palette = (): Uint8Array =>
+    stemPalette(m.stems.length, (i) => ui.selected.has(m.stems[i]!.id));
+  surface.setColormap(lut);
+  surface.setPalette(palette());
+
+  const secToF0 = (t: number): number => (t * m.sr) / m.hop;
+  const nLevels = m.lods.length;
+
+  // window choices
+  const winSel = $<HTMLSelectElement>("window");
+  for (const s of [2, 5, 10, 20, 45, 90, 180, 600]) {
+    if (s < m.duration_seconds) winSel.add(new Option(`${s} s`, String(s)));
+  }
+  winSel.add(new Option("all", String(m.duration_seconds)));
+  winSel.value = [...winSel.options].some((o) => o.value === String(ui.winSeconds))
+    ? String(ui.winSeconds) : String(m.duration_seconds);
+  ui.winSeconds = Number(winSel.value);
+
+  const cmapSel = $<HTMLSelectElement>("cmap");
+  for (const c of COLORMAPS) cmapSel.add(new Option(c, c));
+  cmapSel.value = ui.cmap;
+
+  const modeSel = $<HTMLSelectElement>("mode");
+  modeSel.value = ui.mode;
+  if (!m.stems.length) {
+    for (const o of [...modeSel.options]) if (o.value !== "mix") o.disabled = true;
+  } else {
+    $("stems").hidden = false;
+  }
+
+  // ---- stems list
+  const list = $("stem-list");
+  const pal0 = stemPalette(m.stems.length);
+  m.stems.forEach((s, i) => {
+    const li = document.createElement("li");
+    const cb = document.createElement("input");
+    cb.type = "checkbox";
+    cb.checked = true;
+    cb.dataset.id = s.id;
+    cb.addEventListener("change", () => {
+      if (cb.checked) ui.selected.add(s.id);
+      else ui.selected.delete(s.id);
+      if (ui.mode === "mix") modeSel.value = ui.mode = "stems";
+      invalidate();
+    });
+    const sw = document.createElement("span");
+    sw.className = "sw";
+    sw.style.background = cssColor(pal0, i);
+    const name = document.createElement("span");
+    name.textContent = s.name;
+    name.title = s.source_file;
+    li.append(cb, sw, name);
+    list.append(li);
+  });
+  const setAll = (on: boolean): void => {
+    for (const cb of list.querySelectorAll<HTMLInputElement>("input")) cb.checked = on;
+    ui.selected = new Set(on ? m.stems.map((s) => s.id) : []);
+    if (ui.mode === "mix") modeSel.value = ui.mode = "stems";
+    invalidate();
+  };
+  $("stems-all").addEventListener("click", () => setAll(true));
+  $("stems-none").addEventListener("click", () => setAll(false));
+
+  // ---- paging: assemble a page of `pageFrames` frames at the chosen level
+  let page = { level: -1, start: 0, key: "", ready: false };
+  let pageGen = 0;
+  let dirty = true;
+  function invalidate(): void {
+    dirty = true;
+  }
+
+  function heightTracks(): TrackId[] {
+    if (ui.mode === "stems") return m.stems.filter((s) => ui.selected.has(s.id)).map((s) => `stem:${s.id}` as TrackId);
+    return ["mix"];
+  }
+
+  async function loadPage(level: number, start: number): Promise<void> {
+    const gen = ++pageGen;
+    const tracks = heightTracks();
+    const pages = await Promise.all(
+      tracks.map((t) => assemblePage(cache, lodsFor(m, t)[level]!, m.n_bins, start, pageFrames)),
+    );
+    const height = pages.length ? sumPages(pages, m.db_min, m.db_max) : new Uint8Array(pageFrames * m.n_bins);
+    const dom = ui.mode === "dominant" && m.dominant
+      ? await assemblePage(cache, m.dominant.lods[level]!, m.n_bins, start, pageFrames, m.dominant.none_value)
+      : null;
+    if (gen !== pageGen) return; // superseded
+    surface.setPage(height, dom, start);
+    surface.setMode(ui.mode === "dominant" ? "dominant" : "db");
+    const pal = palette();
+    surface.setPalette(pal);
+    pane.setPage(height, pageFrames, start, level, lut, dom, dom ? pal : null);
+    page = { level, start, key: pageKey(), ready: true };
+  }
+
+  const pageKey = (): string => `${ui.mode}|${[...ui.selected].sort().join(",")}|${ui.cmap}`;
+
+  function updateView(playSec: number): void {
+    const winFrames0 = Math.max(8, secToF0(ui.winSeconds));
+    const total0 = m.n_frames;
+    if (ui.follow && player.transport.isPlaying) {
+      ui.winStart0 = secToF0(playSec) - 0.25 * winFrames0;
+    }
+    ui.winStart0 = Math.min(Math.max(0, ui.winStart0), Math.max(0, total0 - winFrames0));
+    const level = chooseLevel(winFrames0, GRID_COLS, nLevels);
+    const f = 2 ** level;
+    const winStart = ui.winStart0 / f, winFrames = winFrames0 / f;
+    const inside = winStart >= page.start && winStart + winFrames <= page.start + pageFrames;
+    if (dirty || level !== page.level || !inside || page.key !== pageKey()) {
+      if (dirty || level !== page.level || page.key !== pageKey() || page.ready) {
+        const margin = Math.max(0, (pageFrames - winFrames) * 0.2);
+        const start = Math.max(0, Math.floor(winStart - margin));
+        page = { ...page, level, start, ready: false, key: pageKey() };
+        dirty = false;
+        void loadPage(level, start).catch((e: unknown) => (status.textContent = `tile error: ${String(e)}`));
+      }
+    }
+    surface.setWindow(winStart, winFrames);
+    surface.setPlayhead(secToF0(playSec) / f);
+    pane.setWindow(winStart, winFrames, level);
+    pane.setPlayhead(secToF0(playSec) / f);
+    const t0 = (ui.winStart0 * m.hop) / m.sr;
+    strip.setView(t0, t0 + ui.winSeconds, playSec);
+  }
+
+  // ---- controls
+  const playBtn = $<HTMLButtonElement>("play");
+  const togglePlay = async (): Promise<void> => {
+    await player.toggle();
+  };
+  playBtn.addEventListener("click", () => void togglePlay());
+  const seek = (t: number): void => {
+    player.seek(t);
+    const winFrames0 = secToF0(ui.winSeconds);
+    const f0 = secToF0(t);
+    if (f0 < ui.winStart0 || f0 > ui.winStart0 + winFrames0) ui.winStart0 = f0 - 0.25 * winFrames0;
+  };
+  pane.onSeek = seek;
+  strip.onSeek = (t) => {
+    seek(t);
+    ui.winStart0 = secToF0(t) - 0.5 * secToF0(ui.winSeconds);
+  };
+  winSel.addEventListener("change", () => {
+    const center = ui.winStart0 + secToF0(ui.winSeconds) / 2;
+    ui.winSeconds = Number(winSel.value);
+    ui.winStart0 = center - secToF0(ui.winSeconds) / 2;
+  });
+  modeSel.addEventListener("change", () => {
+    ui.mode = modeSel.value as Mode;
+    invalidate();
+  });
+  cmapSel.addEventListener("change", () => {
+    ui.cmap = cmapSel.value;
+    lut = colormapLut(ui.cmap);
+    surface.setColormap(lut);
+    invalidate();
+  });
+  const floor = $<HTMLInputElement>("floor");
+  const height = $<HTMLInputElement>("height");
+  floor.addEventListener("input", () => surface.setFloor(Number(floor.value)));
+  height.addEventListener("input", () => surface.setHeightScale(Number(height.value)));
+  surface.setFloor(Number(floor.value));
+  surface.setHeightScale(Number(height.value));
+  $<HTMLInputElement>("follow").addEventListener("change", (e) => (ui.follow = (e.target as HTMLInputElement).checked));
+  $<HTMLInputElement>("grid").addEventListener("change", (e) => surface.setGrid((e.target as HTMLInputElement).checked));
+  const vol = $<HTMLInputElement>("vol");
+  vol.addEventListener("input", () => player.setVolume(Number(vol.value)));
+  player.setVolume(Number(vol.value));
+  addEventListener("keydown", (e) => {
+    if (e.target instanceof HTMLInputElement || e.target instanceof HTMLSelectElement) return;
+    if (e.code === "Space") {
+      e.preventDefault();
+      void togglePlay();
+    } else if (e.code === "ArrowLeft") seek(player.transport.position() - (e.shiftKey ? 1 : 5));
+    else if (e.code === "ArrowRight") seek(player.transport.position() + (e.shiftKey ? 1 : 5));
+    else if (e.code === "Home") seek(0);
+  });
+
+  // ---- frame loop
+  const view = $("view3d");
   const resize = (): void => {
-    renderer.setSize(canvas.clientWidth, canvas.clientHeight, false);
-    camera.aspect = canvas.clientWidth / Math.max(1, canvas.clientHeight);
+    const w = view.clientWidth, h = view.clientHeight;
+    renderer.setSize(w, h, false);
+    camera.aspect = w / Math.max(1, h);
     camera.updateProjectionMatrix();
   };
-  addEventListener("resize", resize);
+  new ResizeObserver(resize).observe(view);
   resize();
+
+  let lastStatus = "";
   renderer.setAnimationLoop(() => {
+    const t = player.tick();
+    updateView(t);
+    playBtn.textContent = player.transport.isPlaying ? "❚❚" : "▶";
+    $("time").textContent = `${fmt(t)} / ${fmt(m.duration_seconds)}`;
     controls.update();
     renderer.render(scene, camera);
+    pane.draw();
+    strip.draw();
+    const s = player.audioError
+      ? status.textContent ?? ""
+      : `${m.n_frames} frames × ${m.n_bins} bins · level ${page.level} · ${cache.size} tiles cached${player.hasAudio ? "" : " · loading audio…"}`;
+    if (s !== lastStatus) status.textContent = lastStatus = s;
   });
-  status.textContent = `${m.source.name}: ${m.n_frames} frames x ${m.n_bins} bins, ${m.duration_seconds.toFixed(2)} s`;
 }
 
 main().catch((e: unknown) => {
