@@ -1,7 +1,8 @@
 // orchspec viewer: 3D CQT surface + linked 2D pane + LUFS strip, synced to Web Audio.
 import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
-import { loadManifest, loadSeries } from "./bundle";
+import { loadManifest, loadNotes, loadSeries, midiName } from "./bundle";
+import { NoteIndex, applyMask, frameSeconds, measureAt, rasterizeF0, rasterizeNotes } from "./notes";
 import { frameGaps, frameSpans, smoothPage } from "./gaps";
 import { COLORMAPS, colormapLut, cssColor, stemPalette } from "./colormap";
 import { initToken } from "./net";
@@ -53,6 +54,13 @@ async function main(): Promise<void> {
   const lufs = m.features.find((f) => f.name === "lufs_short_term");
   if (lufs) strip.setData(await loadSeries(base, lufs), lufs.hop_seconds);
 
+  // ---- score (Phase 2): notes, parts, measures; or per-stem f0 tracks without a score
+  const notes = await loadNotes(base, m);
+  const nix = notes ? new NoteIndex(notes) : null;
+  const f0Series = m.tables.find((t) => t.name === "f0_hz");
+  const f0Data = f0Series ? await loadSeries(base, f0Series) : null;
+  const parts = m.score?.parts ?? [];
+
   const player = new Player(m.duration_seconds);
   void player.load(base, m.audio_path).then(() => {
     if (player.audioError) status.textContent = `audio unavailable (${player.audioError}); playhead runs silently`;
@@ -73,6 +81,18 @@ async function main(): Promise<void> {
     stemPalette(m.stems.length, (i) => ui.selected.has(m.stems[i]!.id));
   surface.setColormap(lut);
   surface.setPalette(palette());
+
+  // part colors: a matched part shares its stem's color; others get further palette entries
+  const partPal = stemPalette(m.stems.length + parts.length);
+  const partColorIndex = parts.map((p, j) => {
+    const si = p.stem_id === null ? -1 : m.stems.findIndex((s) => s.id === p.stem_id);
+    return si >= 0 ? si : m.stems.length + j;
+  });
+  const partLut = new Uint8Array(256 * 4);
+  partColorIndex.forEach((ci, part) => partLut.set(partPal.subarray(ci * 4, ci * 4 + 4), (part + 1) * 4));
+  surface.setPartPalette(partLut);
+  const partColor = (part: number): string => cssColor(partPal, partColorIndex[part] ?? 0);
+  const partsVisible = new Set(parts.map((p) => p.index));
 
   const secToF0 = (t: number): number => (t * m.sr) / m.hop;
   const nLevels = m.lods.length;
@@ -132,6 +152,79 @@ async function main(): Promise<void> {
   $("stems-all").addEventListener("click", () => setAll(true));
   $("stems-none").addEventListener("click", () => setAll(false));
 
+  // ---- parts list
+  let scoreStatus = "";
+  const notesBox = $<HTMLInputElement>("notes");
+  const fundBox = $<HTMLInputElement>("fund");
+  const fundW = $<HTMLSelectElement>("fundw");
+  if (params.get("notes") === "0") notesBox.checked = false;
+  if (params.get("fund") === "1") fundBox.checked = true;
+  if (params.get("fundw")) fundW.value = params.get("fundw")!;
+  if (!nix) notesBox.disabled = true;
+  if (!nix && !f0Data) fundBox.disabled = true;
+  let focus: number | null = parts.find((p) => p.range_low !== null)?.index ?? null;
+  if (parts.length) {
+    $("stems").hidden = false;
+    $("parts-sec").hidden = false;
+    const plist = $("part-list");
+    const renderFocus = (): void => {
+      plist.querySelectorAll("li").forEach((li, i) => li.classList.toggle("focus", i === focus));
+    };
+    parts.forEach((p) => {
+      const li = document.createElement("li");
+      const cb = document.createElement("input");
+      cb.type = "checkbox";
+      cb.checked = true;
+      cb.addEventListener("change", () => {
+        if (cb.checked) partsVisible.add(p.index);
+        else partsVisible.delete(p.index);
+        rebuildDisplay();
+      });
+      const sw = document.createElement("span");
+      sw.className = "sw";
+      sw.style.background = partColor(p.index);
+      const name = document.createElement("span");
+      name.className = "pname";
+      name.textContent = p.name;
+      name.title = `${p.instrument}${p.stem_id ? ` · stem ${p.stem_id} (${p.stem_match})` : " · no stem"}`;
+      name.addEventListener("click", () => {
+        focus = focus === p.index ? null : p.index;
+        renderFocus();
+        if (pane.score) pane.score.focus = focus;
+      });
+      const rng = document.createElement("span");
+      rng.className = "rng";
+      rng.textContent = p.range_low !== null && p.range_high !== null
+        ? `${midiName(p.range_low)}–${midiName(p.range_high)}` : "";
+      li.append(cb, sw, name, rng);
+      plist.append(li);
+    });
+    renderFocus();
+    const setAllParts = (on: boolean): void => {
+      plist.querySelectorAll<HTMLInputElement>("input").forEach((cb) => (cb.checked = on));
+      partsVisible.clear();
+      if (on) parts.forEach((p) => partsVisible.add(p.index));
+      rebuildDisplay();
+    };
+    $("parts-all").addEventListener("click", () => setAllParts(true));
+    $("parts-none").addEventListener("click", () => setAllParts(false));
+  }
+  if (notes && nix && m.score) {
+    pane.score = {
+      notes, index: nix, parts, measures: m.score.measures, partColor,
+      visible: (p) => partsVisible.has(p), focus, showNotes: notesBox.checked,
+    };
+    const a = m.score.alignment;
+    const warn = a.warnings.length ? ` · ⚠ ${a.warnings.join("; ")}` : "";
+    scoreStatus = `score: ${parts.length} parts, ${notes.n} notes · offset ${a.offset_sec.toFixed(3)} s (${a.method}, confidence ${a.confidence.toFixed(2)})${warn} · `;
+  }
+  notesBox.addEventListener("change", () => {
+    if (pane.score) pane.score.showNotes = notesBox.checked;
+    rebuildDisplay();
+  });
+  fundBox.addEventListener("change", () => rebuildDisplay());
+  fundW.addEventListener("change", () => rebuildDisplay());
+
   // ---- paging: assemble a page of `pageFrames` frames at the chosen level
   let page = { level: -1, start: 0, key: "", ready: false };
   let pageGen = 0;
@@ -180,8 +273,29 @@ async function main(): Promise<void> {
     // sigma = half the chosen width; time sigma covers the same world distance as pitch
     const sigmaB = (semis * (m.bins_per_octave / 12)) / 2;
     const sigmaF = sigmaB * colsPerBin(m.n_bins) * (raw.winFrames / GRID_COLS);
-    const height = smoothPage(raw.height, m.n_bins, pageFrames, sigmaB, sigmaF, m.db_min, m.db_max);
+    const k = m.bins_per_octave / 12;
+    const ft = frameSeconds(m, raw.level);
+    const inPage = nix ? nix.inRange(raw.start * ft, (raw.start + pageFrames) * ft) : [];
+    const visiblePart = (p: number): boolean => partsVisible.has(p);
+    // fundamentals only: keep +-width around each sounding note's fundamental
+    let src = raw.height;
+    if (fundBox.checked && !fundBox.disabled) {
+      const wBins = (Number(fundW.value) / 100) * k;
+      let mask: Uint8Array | null = null;
+      if (notes && nix) {
+        mask = rasterizeNotes(notes, inPage, m, raw.level, raw.start, pageFrames, wBins, visiblePart);
+      } else if (f0Data && f0Series) {
+        const [rows, frames0] = f0Series.shape as [number, number];
+        const visibleStem = (r: number): boolean => ui.selected.has(m.stems[r]?.id ?? "");
+        mask = rasterizeF0(f0Data, rows, frames0, m, raw.level, raw.start, pageFrames, wBins, visibleStem);
+      }
+      if (mask) src = applyMask(src, mask);
+    }
+    const height = smoothPage(src, m.n_bins, pageFrames, sigmaB, sigmaF, m.db_min, m.db_max);
     surface.setPage(height, raw.dom, raw.start);
+    surface.setNotes(notes && nix && notesBox.checked
+      ? rasterizeNotes(notes, inPage, m, raw.level, raw.start, pageFrames, k / 2, visiblePart)
+      : null);
     last = { height, dom: raw.dom, start: raw.start, level: raw.level };
     applyGaps();
   }
@@ -357,13 +471,18 @@ async function main(): Promise<void> {
     gapReadout(t);
     playBtn.textContent = player.transport.isPlaying ? "❚❚" : "▶";
     $("time").textContent = `${fmt(t)} / ${fmt(m.duration_seconds)}`;
+    if (m.score) {
+      const bb = measureAt(m.score.measures, t);
+      const txt = bb ? `m. ${bb.number}${bb.pass > 1 ? ` (pass ${bb.pass})` : ""} · beat ${bb.beat.toFixed(1)}` : "";
+      if ($("barbeat").textContent !== txt) $("barbeat").textContent = txt;
+    }
     controls.update();
     renderer.render(scene, camera);
     pane.draw();
     strip.draw();
     const s = player.audioError
       ? status.textContent ?? ""
-      : `${m.n_frames} frames × ${m.n_bins} bins · level ${page.level} · ${cache.size} tiles cached${player.hasAudio ? "" : " · loading audio…"}`;
+      : `${scoreStatus}${m.n_frames} frames × ${m.n_bins} bins · level ${page.level} · ${cache.size} tiles cached${player.hasAudio ? "" : " · loading audio…"}`;
     if (s !== lastStatus) status.textContent = lastStatus = s;
   });
 }

@@ -1,4 +1,4 @@
-# Session bundle format — schema version 1
+# Session bundle format — schema version 2
 
 A bundle is a directory (conventionally `<name>.bundle/`). It is the only contract
 between the analysis core and any viewer. This document is normative; the reference
@@ -16,6 +16,7 @@ implementations are `src/orchspec/bundle/schema.py` (pydantic) and
   tiles/dominant/L<level>/<index>.u8  dominant-stem index tiles
   features/<name>.f32                 1-D time series
   tables/<name>.f32                   2-D tables (rows x time)
+  score/notes.f32                     note table (v2, when a score or MIDI was given)
 ```
 
 `<level>` and `<index>` are decimal; `<index>` zero-padded to 5 digits. Readers must use the
@@ -76,11 +77,48 @@ Phase 1 series:
 | `onset_envelope` | features | `[n_frames]` | a.u. | librosa onset strength of the mono mix |
 | `stem_energy_db` | tables | `[n_stems, n]` | dB | per-stem total CQT power (sum over bins, calibrated scale), mean over `2^L` level-0 frames at `energy_level` |
 
+| `f0_hz` | tables | `[n_stems, n_frames]` | Hz | per-stem fundamental (yin/pyin), 0 = unvoiced; written when there is no score/MIDI (or `--f0 yin|pyin`) |
+
+## Score section (schema v2)
+
+Present when the session had `score.musicxml` / `.mxl` and/or `render.mid`. All times
+are **audio seconds**; `alignment.offset_sec` records how score/MIDI time was shifted
+(`audio = score_or_midi_seconds + offset_sec`).
+
+- `score.kind`: `musicxml` (notes from MusicXML, timed through the render.mid tempo map or
+  the score's tempo marks) or `midi` (notes straight from render.mid).
+- `score.parts[]`: `{index, id, name, instrument, abbreviation, staves,
+  transpose_chromatic, transpose_octave, stem_id, stem_match, range_id, range_low,
+  range_high, practical_low, practical_high}`. `stem_id` refers to `stems[].id`
+  (`stem_match` = `name|fuzzy|order|none`). Ranges are sounding MIDI pitches from
+  `data/instruments/ranges.yaml`.
+- `score.measures[]`: playback order (repeats and endings unrolled):
+  `{play_index, number, start_s, end_s, beats, beat_type, pass_no}`.
+- `score.alignment`: `{method: xcorr|manual|preroll_only, offset_sec, preroll_sec,
+  confidence, time_source: midi|score_tempo, pitch_agreement, pitch_shift_mode, warnings}`.
+- `score.notes`: `{path, n, columns, dtype: "f32le", layout: "column_major"}`. The file is
+  `len(columns) * n` float32 values; column `c` occupies bytes `[4*c*n, 4*(c+1)*n)`.
+  Columns, in order:
+
+| column | meaning |
+| --- | --- |
+| `part` | index into `score.parts` |
+| `staff`, `voice` | 1-based; never collapsed |
+| `midi` | **sounding** pitch (fractional for microtones) |
+| `onset_s`, `offset_s` | audio seconds |
+| `measure` | index into `score.measures` (playback order) |
+| `beat` | 1-based beat in the measure (beat-type units) |
+| `velocity` | from render.mid when available, else 0 |
+| `f0_db` | measured level at the fundamental (dB re full-scale sine), from the part's stem when matched, else the mix |
+| `f0_ok` | 1.0 when the fundamental is within 12 dB of the strongest of harmonics 2-4 and above -80 dB, else 0.0 (weak/missing fundamental) |
+
+Readers must accept schema_version 1 (no score) and 2.
+
 ## manifest.json fields
 
 | field | type | notes |
 | --- | --- | --- |
-| `schema_version` | int | `1` |
+| `schema_version` | int | `2` (`1` still accepted) |
 | `created_by` | string | e.g. `orchspec 0.1.0` |
 | `created_at` | string | ISO 8601 UTC |
 | `sr`, `hop`, `n_samples` | int | mix sample rate, CQT hop, mix length |
@@ -99,6 +137,7 @@ Phase 1 series:
 | `source` | object | `{kind: wav|session, name, renderer, render_config}` |
 | `stems` | Stem[] | `{id, index, name, source_file, lods}`; index = position |
 | `dominant` | object\|null | `{none_value, floor_db, lods}` |
+| `score` | object\|null | v2; see "Score section" |
 | `features`, `tables` | Series[] | `{name, unit, description, path, shape, dtype: "f32le", t0_seconds, hop_seconds, row_labels}` |
 
 `Lod = {level, hop_factor = 2^level, n_frames, tiles: Tile[]}`,

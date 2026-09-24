@@ -1,18 +1,250 @@
-# Instrument ranges (Phase 2+). Empty for now.
+# Instrument ranges (SOUNDING pitch, MIDI numbers; A0 = 21, middle C = 60).
 #
 # Schema (one entry per instrument, keyed by a stable lowercase id):
 #
 #   <instrument_id>:
 #     name: str                 # display name, e.g. "Horn in F"
 #     family: str               # woodwinds | brass | percussion | keyboards | strings | voices
-#     sounding_range: [int, int]    # MIDI note numbers, lowest..highest SOUNDING pitch
+#     sounding_range: [int, int]    # lowest..highest SOUNDING pitch (full professional range)
 #     practical_range: [int, int]   # optional; comfortable orchestral range (sounding)
-#     transposition: int        # semitones written -> sounding (e.g. horn in F = -7,
+#     transposition: int        # semitones written -> sounding (horn in F = -7,
 #                               # piccolo = +12, double bass = -12, clarinet in Bb = -2)
-#     aliases: [str]            # names that match MusicXML <part-name>/<instrument-name>
-#                               # and stem player names (case-insensitive)
+#     aliases: [str]            # matched against MusicXML part/instrument names and stem
+#                               # player names after normalization (score/match.normalize);
+#                               # the longest matching alias wins
 #     source: str               # citation for the range data
 #
-# All pitches are MIDI numbers (A0 = 21, middle C = 60), matching the bundle frequency
-# axis invariant: bin b <-> midi 21 + b/k.
-{}
+# Values are approximate, compiled from standard orchestration references (Adler, The
+# Study of Orchestration, 4th ed.; Blatter, Instrumentation and Orchestration). Ranges vary
+# with instrument model, extensions and sample library; treat them as guides (see PLAN.md
+# "Unverified assumptions").
+
+piccolo:
+  name: Piccolo
+  family: woodwinds
+  sounding_range: [74, 108]
+  transposition: 12
+  aliases: [piccolo, picc]
+  source: Adler 4th ed. (approx.)
+flute:
+  name: Flute
+  family: woodwinds
+  sounding_range: [60, 96]
+  practical_range: [60, 93]
+  transposition: 0
+  aliases: [flute, fl]
+  source: Adler 4th ed. (approx.)
+alto_flute:
+  name: Alto Flute
+  family: woodwinds
+  sounding_range: [55, 91]
+  transposition: -5
+  aliases: [alto flute]
+  source: Adler 4th ed. (approx.)
+oboe:
+  name: Oboe
+  family: woodwinds
+  sounding_range: [58, 91]
+  practical_range: [58, 88]
+  transposition: 0
+  aliases: [oboe, ob]
+  source: Adler 4th ed. (approx.)
+english_horn:
+  name: English Horn
+  family: woodwinds
+  sounding_range: [52, 81]
+  transposition: -7
+  aliases: [english horn, cor anglais]
+  source: Adler 4th ed. (approx.)
+clarinet_bb:
+  name: Clarinet in Bb
+  family: woodwinds
+  sounding_range: [50, 94]
+  practical_range: [50, 89]
+  transposition: -2
+  aliases: [clarinet, cl]
+  source: Adler 4th ed. (approx.)
+clarinet_eb:
+  name: Clarinet in Eb
+  family: woodwinds
+  sounding_range: [55, 98]
+  transposition: 3
+  aliases: [e flat clarinet, eb clarinet, piccolo clarinet]
+  source: Adler 4th ed. (approx.)
+bass_clarinet:
+  name: Bass Clarinet
+  family: woodwinds
+  sounding_range: [34, 77]
+  transposition: -14
+  aliases: [bass clarinet]
+  source: Adler 4th ed. (approx., low C extension)
+bassoon:
+  name: Bassoon
+  family: woodwinds
+  sounding_range: [34, 76]
+  practical_range: [34, 72]
+  transposition: 0
+  aliases: [bassoon, bsn, fagott]
+  source: Adler 4th ed. (approx.)
+contrabassoon:
+  name: Contrabassoon
+  family: woodwinds
+  sounding_range: [22, 58]
+  transposition: -12
+  aliases: [contrabassoon, contrafagotto, double bassoon]
+  source: Adler 4th ed. (approx.)
+horn_f:
+  name: Horn in F
+  family: brass
+  sounding_range: [35, 77]
+  practical_range: [41, 74]
+  transposition: -7
+  aliases: [horn, french horn, hn, cor]
+  source: Adler 4th ed. (approx.)
+trumpet:
+  name: Trumpet
+  family: brass
+  sounding_range: [52, 84]
+  practical_range: [54, 82]
+  transposition: -2
+  aliases: [trumpet, tpt, cornet]
+  source: Adler 4th ed. (approx., Bb trumpet)
+trombone:
+  name: Trombone
+  family: brass
+  sounding_range: [40, 77]
+  practical_range: [40, 72]
+  transposition: 0
+  aliases: [trombone, tenor trombone, tbn]
+  source: Adler 4th ed. (approx., pedals below omitted)
+bass_trombone:
+  name: Bass Trombone
+  family: brass
+  sounding_range: [28, 70]
+  transposition: 0
+  aliases: [bass trombone]
+  source: Adler 4th ed. (approx.)
+tuba:
+  name: Tuba
+  family: brass
+  sounding_range: [26, 65]
+  practical_range: [28, 62]
+  transposition: 0
+  aliases: [tuba, bass tuba]
+  source: Adler 4th ed. (approx.)
+timpani:
+  name: Timpani
+  family: percussion
+  sounding_range: [38, 60]
+  transposition: 0
+  aliases: [timpani, timp, kettledrums]
+  source: Adler 4th ed. (approx., standard set + piccolo drum)
+glockenspiel:
+  name: Glockenspiel
+  family: percussion
+  sounding_range: [79, 108]
+  transposition: 24
+  aliases: [glockenspiel, orchestra bells, glock]
+  source: Adler 4th ed. (approx.)
+xylophone:
+  name: Xylophone
+  family: percussion
+  sounding_range: [65, 108]
+  transposition: 12
+  aliases: [xylophone, xyl]
+  source: Adler 4th ed. (approx.)
+marimba:
+  name: Marimba
+  family: percussion
+  sounding_range: [36, 96]
+  transposition: 0
+  aliases: [marimba]
+  source: Adler 4th ed. (approx., 5-octave)
+vibraphone:
+  name: Vibraphone
+  family: percussion
+  sounding_range: [53, 89]
+  transposition: 0
+  aliases: [vibraphone, vibes]
+  source: Adler 4th ed. (approx.)
+celesta:
+  name: Celesta
+  family: keyboards
+  sounding_range: [60, 108]
+  transposition: 12
+  aliases: [celesta, celeste]
+  source: Adler 4th ed. (approx.)
+harp:
+  name: Harp
+  family: strings
+  sounding_range: [23, 104]
+  transposition: 0
+  aliases: [harp]
+  source: Adler 4th ed. (approx.)
+piano:
+  name: Piano
+  family: keyboards
+  sounding_range: [21, 108]
+  transposition: 0
+  aliases: [piano, pianoforte, pno]
+  source: standard 88-key piano
+violin:
+  name: Violin
+  family: strings
+  sounding_range: [55, 103]
+  practical_range: [55, 96]
+  transposition: 0
+  aliases: [violin, vln, vn]
+  source: Adler 4th ed. (approx.)
+viola:
+  name: Viola
+  family: strings
+  sounding_range: [48, 88]
+  practical_range: [48, 84]
+  transposition: 0
+  aliases: [viola, vla, va]
+  source: Adler 4th ed. (approx.)
+cello:
+  name: Violoncello
+  family: strings
+  sounding_range: [36, 81]
+  practical_range: [36, 76]
+  transposition: 0
+  aliases: [cello, violoncello, vc, vlc]
+  source: Adler 4th ed. (approx.)
+double_bass:
+  name: Double Bass
+  family: strings
+  sounding_range: [24, 67]
+  practical_range: [28, 62]
+  transposition: -12
+  aliases: [double bass, contrabass, bass, kontrabass, db, cb]
+  source: Adler 4th ed. (approx., C extension)
+soprano:
+  name: Soprano
+  family: voices
+  sounding_range: [60, 84]
+  transposition: 0
+  aliases: [soprano, sop]
+  source: common choral range (approx.)
+alto:
+  name: Alto
+  family: voices
+  sounding_range: [53, 77]
+  transposition: 0
+  aliases: [alto, mezzo soprano, contralto]
+  source: common choral range (approx.)
+tenor:
+  name: Tenor
+  family: voices
+  sounding_range: [48, 72]
+  transposition: -12
+  aliases: [tenor]
+  source: common choral range (approx.)
+baritone_bass_voice:
+  name: Bass (voice)
+  family: voices
+  sounding_range: [40, 64]
+  transposition: 0
+  aliases: [baritone, bass voice]
+  source: common choral range (approx.)

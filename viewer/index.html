@@ -16,6 +16,7 @@
       <header id="bar">
         <button id="play" type="button" title="Play/pause (Space)">▶</button>
         <span id="time">0:00.00 / 0:00.00</span>
+        <span id="barbeat"></span>
         <label>window <select id="window"></select></label>
         <label>view
           <select id="mode">
@@ -34,6 +35,16 @@
           </select>
         </label>
         <label title="Gaussian smoothing width in semitones (0 = raw). Merges partials into the ensemble's spectral envelope so register gaps stand out.">smooth <input id="smooth" type="range" min="0" max="12" step="0.5" value="0" /> <span id="smoothval">off</span></label>
+        <label title="Outline the score's notes (colored by part; dashed = weak fundamental)">
+          <input id="notes" type="checkbox" checked /> notes</label>
+        <label title="Keep only a band around each sounding note's fundamental (hides overtones). Uses the score/MIDI, or per-stem f0 tracks when there is no score.">
+          <input id="fund" type="checkbox" /> fundamentals ±
+          <select id="fundw">
+            <option value="25">25¢</option>
+            <option value="50" selected>50¢</option>
+            <option value="100">100¢</option>
+          </select>
+        </label>
         <label title="Spectral gaps: quiet pitch regions inside the ensemble's sounding span">
           <input id="gaps" type="checkbox" /> gaps ≤
           <input id="gapdb" type="range" min="-90" max="-15" step="1" value="-50" />
@@ -56,6 +67,14 @@
             <button id="stems-none" type="button">none</button>
           </div>
           <ul id="stem-list"></ul>
+          <section id="parts-sec" hidden>
+            <div class="stems-head"><strong>Parts</strong>
+              <button id="parts-all" type="button">all</button>
+              <button id="parts-none" type="button">none</button>
+            </div>
+            <ul id="part-list"></ul>
+            <p class="hint">Click a name to show its range on the keyboard.</p>
+          </section>
         </aside>
       </main>
       <section id="pane">

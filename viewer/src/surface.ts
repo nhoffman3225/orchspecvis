@@ -55,8 +55,9 @@ void main() {
 
 const fragmentShader = /* glsl */ `
 precision highp float;
-uniform sampler2D uCmap, uDom, uPalette;
+uniform sampler2D uCmap, uDom, uPalette, uNotes, uPartPal;
 uniform float uPageStart, uPageFrames, uNBins, uK, uMode, uGrid, uStyle, uContours, uGapV;
+uniform float uNotesOn;
 in float vH;
 in float vV;
 in float vGap;
@@ -126,6 +127,14 @@ void main() {
       col += vec3(1.0, 0.55, 0.15) * (0.25 + 0.5 * depth);
     }
   }
+  if (uNotesOn > 0.5) {
+    vec2 nst = vec2((floor(vBin + 0.5) + 0.5) / uNBins, (floor(vFrame) - uPageStart + 0.5) / uPageFrames);
+    float nid = texture(uNotes, nst).r * 255.0;
+    if (nid > 0.5) {
+      vec3 pc = texture(uPartPal, vec2((nid + 0.5) / 256.0, 0.5)).rgb;
+      col = mix(col, pc, 0.55) + pc * 0.15;
+    }
+  }
   outColor = vec4(col, 1.0);
 }`;
 
@@ -154,6 +163,8 @@ export class Surface {
   private cmapTex: THREE.DataTexture;
   private paletteTex: THREE.DataTexture;
   private spanTex: THREE.DataTexture;
+  private notesTex: THREE.DataTexture;
+  private partPalTex: THREE.DataTexture;
   private playhead: THREE.Mesh;
   private winStart = 0;
   private winFrames = 1;
@@ -202,6 +213,9 @@ export class Surface {
     this.spanTex.minFilter = this.spanTex.magFilter = THREE.NearestFilter;
     this.spanTex.needsUpdate = true;
 
+    this.notesTex = dataTex(new Uint8Array(nBins * pageFrames), nBins, pageFrames, THREE.RedFormat, THREE.NearestFilter);
+    this.partPalTex = dataTex(new Uint8Array(256 * 4), 256, 1, THREE.RGBAFormat, THREE.NearestFilter);
+
     this.material = new THREE.ShaderMaterial({
       glslVersion: THREE.GLSL3,
       vertexShader,
@@ -225,6 +239,9 @@ export class Surface {
         uContours: { value: 20 },
         uSpan: { value: this.spanTex },
         uGapV: { value: -1 },
+        uNotes: { value: this.notesTex },
+        uPartPal: { value: this.partPalTex },
+        uNotesOn: { value: 0 },
       },
     });
     this.group.add(new THREE.Mesh(geom, this.material));
@@ -288,6 +305,21 @@ export class Surface {
 
   setHeightScale(s: number): void {
     this.u("uHeightScale").value = s;
+  }
+
+  /** Note overlay mask for the current page (value = part + 1), or null to hide it. */
+  setNotes(mask: Uint8Array | null): void {
+    const d = this.notesTex.image.data as Uint8Array;
+    if (mask) d.set(mask.subarray(0, this.nBins * this.pageFrames));
+    else d.fill(0);
+    this.notesTex.needsUpdate = true;
+    this.u("uNotesOn").value = mask ? 1 : 0;
+  }
+
+  /** 256-entry RGBA palette indexed by part + 1. */
+  setPartPalette(lut: Uint8Array): void {
+    (this.partPalTex.image.data as Uint8Array).set(lut);
+    this.partPalTex.needsUpdate = true;
   }
 
   /** Per-frame sounding spans for the current page (from gaps.frameSpans). */

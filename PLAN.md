@@ -76,16 +76,36 @@ test_session_validation, test_no_network (pytest-socket + vitest request guard),
 test_serve_hardening, perf smoke (slow): 20 min 48 kHz mix + 30 stems, CPU and CUDA wall
 time (target < 2 min CUDA) + peak VRAM.
 
-### Phase 2 — score & timeline
-- [ ] score/: MusicXML (+ .mxl with zip size/path checks) via defusedxml/lxml safe parser;
-      parts/staves/voices kept distinct; transposition to sounding pitch
-- [ ] timeline/: render.mid tempo map; score time -> audio seconds; repeats (repeat barlines
-      + n-th endings only; segno/coda/D.C./D.S. detected -> stop with clear message)
-- [ ] Note events table in bundle (part, staff, voice, midi, onset_s, offset_s, measure, beat)
-- [ ] Viewer: note overlays on surface + 2D pane; 88-key keyboard with instrument ranges
-      (data/instruments/ranges.yaml) and sounding notes
-- [ ] Offset estimation audio<->MIDI (onset xcorr) with synthetic tests
-Acceptance: synthetic MusicXML+MIDI+rendered audio fixture aligns within +-1 frame.
+### Phase 2 — score & timeline  (branch `phase-2-score`)
+- [x] score/: MusicXML (+ .mxl with zip size/path checks) via defusedxml safe parser;
+      parts/staves/voices kept distinct; ties merged; grace/cue notes skipped;
+      transposition to sounding pitch (`<transpose>` chromatic + octave-change, `<double>`)
+- [x] score/repeats.py: repeat barlines (incl. times="n") + n-th endings unrolled;
+      segno/coda/D.C./D.S./fine/to-coda detected -> stop with a clear message
+- [x] timeline/midi.py: minimal bounded SMF parser (format 0/1, PPQ, running status,
+      tempo map); no new dependency
+- [x] timeline/: score quarter-notes -> MIDI ticks -> seconds via the render.mid tempo map
+      (score `<sound tempo>` when there is no MIDI); MIDI-only sessions use MIDI notes
+- [x] Offset estimation audio<->MIDI (onset-envelope cross-correlation around
+      preroll_sec, parabolic peak) with synthetic tests; manual `--offset` override
+- [x] MusicXML vs MIDI pitch cross-check (tests the "Dorico MIDI = sounding pitch"
+      assumption); agreement ratio recorded in the bundle
+- [x] Part <-> stem matching (normalized names, then order), recorded in the bundle
+- [x] Bundle schema v2: `score` section; notes table (column-major f32:
+      part, staff, voice, midi, onset_s, offset_s, measure_index, beat, velocity, f0_db,
+      f0_ok), score.json (parts, playback-order measures, alignment report)
+- [x] **Fundamentals only** (2026-09-24 request): per note, measured level at its
+      fundamental (from its stem when matched, else the mix) and a weak-fundamental flag;
+      score-informed fundamentals view in the viewer (keep ± width around each sounding
+      note's fundamental, hide overtones); audio-only fallback for sessions without
+      score/MIDI: per-stem f0 tracks (librosa yin/pyin) stored as a table
+- [x] Viewer: note overlays (surface + 2D pane, colored by part), hover shows
+      part/measure/beat; 88-key keyboard with sounding notes at the playhead and the
+      selected part's range (data/instruments/ranges.yaml); bar/beat readout
+- [x] data/instruments/ranges.yaml populated for the standard orchestra
+- [x] PR for Phase 2 (#3, stacked on #2; CI green on windows + macos)
+Acceptance (met 2026-09-24, tests/test_score_bundle.py + viewer screenshots): synthetic MusicXML+MIDI+rendered audio fixture aligns within +-1 frame;
+fundamentals view keeps only the notated fundamentals on a synthetic harmonic fixture.
 
 ### Phase 3 — alignment & score view
 - [ ] Verovio (bundled wasm) score rendering, highlight at playhead
@@ -115,6 +135,13 @@ Acceptance: synthetic "overbalanced brass" fixture is flagged.
       the 2D pane) or on the GPU (texture array), AudioWorklet streaming playback
 
 ## Unverified assumptions
+
+- (Phase 2) MusicXML `<pitch>` is written pitch and `<octave-shift>` is display-only;
+  sounding = written + chromatic + 12*octave-change; `<double>` sounds an extra octave.
+  Dorico's per-staff `<transpose number=...>` is applied to all staves of a part.
+- (Phase 2) Dorico/Cubase render.mid tick 0 coincides with the score's first beat
+  (pickup bars included) and uses the same repeat expansion as the MusicXML.
+- (Phase 2) Instrument ranges in ranges.yaml are approximate textbook values.
 
 - Dorico audio export and MIDI export share time origin (sample 0 == MIDI tick 0)?
   Preroll handling via render.yaml `preroll_sec`.
@@ -186,6 +213,23 @@ Acceptance: synthetic "overbalanced brass" fixture is flagged.
 - 2026-09-24: Fixed Phase 1 bug: surface triangles were wound clockwise seen from above,
   so top faces were back-face culled; only ridge flanks were visible. Unnoticed because the
   flat floor is near-black in magma.
+
+- 2026-09-24: MIDI parsing is a ~200-line bounded SMF reader (timeline/midi.py) instead of
+  mido: render.mid is untrusted input and the dependency list is closed.
+- 2026-09-24: Score time -> audio: MusicXML quarters -> render.mid tempo map (MIDI tick 0
+  = first beat) -> + offset. Offset = xcorr of note onsets vs an onset envelope with a
+  ~23 ms window at ~3 ms hop, searched +-1.5 s around preroll_sec, parabolic peak.
+  Measured on the synthetic fixture: +8 ms bias (spectral-flux lag) at 22.05 kHz, well
+  inside +-1 frame (23 ms); not corrected, to avoid a magic constant.
+- 2026-09-24: Notes are stored with AUDIO-second times (offset applied) so viewers never
+  do alignment math; the offset is recorded in score.alignment.
+- 2026-09-24: Fundamentals: score-informed (band around each sounding note's fundamental)
+  is the primary method; per-stem yin tracks are the fallback only when there is no
+  score/MIDI (pyin is ~20x slower; available via --f0 pyin). Weak = more than 12 dB below
+  the strongest of harmonics 2-4. Viewer applies the fundamentals mask before smoothing,
+  so smoothing + gaps can run on fundamentals only.
+- 2026-09-24: Instrument ranges travel inside the bundle (score.parts[].range_*), so the
+  viewer never parses ranges.yaml. ranges.yaml is read from the repo (not packaged yet).
 
 ## API drift
 

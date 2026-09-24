@@ -16,7 +16,7 @@ from typing import Annotated, Literal
 
 from pydantic import AfterValidator, BaseModel, ConfigDict, Field, model_validator
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2  # v2 (2026-09-24): optional `score` section (notes, measures, alignment)
 MANIFEST_NAME = "manifest.json"
 NONE_STEM = 255  # value in dominant-stem tiles meaning "no stem above the floor"
 
@@ -116,8 +116,98 @@ class SourceInfo(_Model):
     render_config: dict[str, object] | None = None
 
 
+NOTE_COLUMNS = (
+    "part",
+    "staff",
+    "voice",
+    "midi",
+    "onset_s",
+    "offset_s",
+    "measure",
+    "beat",
+    "velocity",
+    "f0_db",
+    "f0_ok",
+)
+
+
+class ScorePart(_Model):
+    index: int = Field(ge=0)
+    id: str
+    name: str
+    instrument: str
+    abbreviation: str = ""
+    staves: int = Field(ge=1, default=1)
+    transpose_chromatic: int = 0
+    transpose_octave: int = 0
+    stem_id: str | None = None
+    stem_match: Literal["name", "fuzzy", "order", "none"] = "none"
+    # sounding range from data/instruments/ranges.yaml (MIDI), when the instrument matched
+    range_id: str | None = None
+    range_low: int | None = None
+    range_high: int | None = None
+    practical_low: int | None = None
+    practical_high: int | None = None
+
+
+class ScoreMeasure(_Model):
+    """One measure in PLAYBACK order (repeats unrolled). Times are audio seconds."""
+
+    play_index: int = Field(ge=0)
+    number: str
+    start_s: float
+    end_s: float
+    beats: int
+    beat_type: int
+    pass_no: int = Field(ge=1, default=1)
+
+
+class Alignment(_Model):
+    method: Literal["xcorr", "manual", "preroll_only"]
+    offset_sec: float  # audio seconds = score/MIDI seconds + offset_sec
+    preroll_sec: float
+    confidence: float
+    time_source: Literal["midi", "score_tempo"]
+    pitch_agreement: float | None = None  # MusicXML vs MIDI (None if only one exists)
+    pitch_shift_mode: int | None = None
+    warnings: list[str] = []
+
+
+class NotesTable(_Model):
+    """Column-major f32le table: column c is n float32 values at byte offset 4*c*n.
+
+    Columns: see NOTE_COLUMNS. Times are audio seconds; `measure` indexes `measures`;
+    `f0_ok` is 1.0 when the note's fundamental is not weak (see dsp/fundamentals.py).
+    """
+
+    path: RelPath
+    n: int = Field(ge=0)
+    columns: list[str]
+    dtype: Literal["f32le"] = "f32le"
+    layout: Literal["column_major"] = "column_major"
+
+
+class ScoreInfo(_Model):
+    kind: Literal["musicxml", "midi"]
+    source_files: list[str]
+    parts: list[ScorePart]
+    measures: list[ScoreMeasure]
+    notes: NotesTable
+    alignment: Alignment
+
+    @model_validator(mode="after")
+    def _consistent(self) -> ScoreInfo:
+        if [p.index for p in self.parts] != list(range(len(self.parts))):
+            raise ValueError("score part indices must be 0..n-1 in order")
+        if [m.play_index for m in self.measures] != list(range(len(self.measures))):
+            raise ValueError("score measures must be in playback order")
+        if tuple(self.notes.columns) != NOTE_COLUMNS:
+            raise ValueError(f"notes columns must be {list(NOTE_COLUMNS)}")
+        return self
+
+
 class Manifest(_Model):
-    schema_version: Literal[1] = SCHEMA_VERSION
+    schema_version: Literal[1, 2] = SCHEMA_VERSION
     created_by: str
     created_at: str  # ISO 8601 UTC
 
@@ -150,6 +240,7 @@ class Manifest(_Model):
     dominant: DominantStem | None = None
     features: list[Series] = []
     tables: list[Series] = []
+    score: ScoreInfo | None = None
 
     @model_validator(mode="after")
     def _consistent(self) -> Manifest:
@@ -173,6 +264,13 @@ class Manifest(_Model):
             raise ValueError("stem ids must be unique")
         if [s.index for s in self.stems] != list(range(len(self.stems))):
             raise ValueError("stem indices must be 0..n-1 in order")
+        if self.score is not None:
+            if self.schema_version < 2:
+                raise ValueError("a score section requires schema_version 2")
+            known = set(ids)
+            for p in self.score.parts:
+                if p.stem_id is not None and p.stem_id not in known:
+                    raise ValueError(f"score part {p.name!r} refers to unknown stem {p.stem_id!r}")
         return self
 
     def _all_lods(self) -> list[tuple[str, list[Lod]]]:

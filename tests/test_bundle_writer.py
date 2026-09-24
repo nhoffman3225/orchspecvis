@@ -82,7 +82,9 @@ def test_dominant_and_energy(bundle: Path) -> None:
     f_early, f_late = round(0.7 * SR / 512), round(2.5 * SR / 512)
     assert dom[f_early, 144] == 0 and dom[f_late, 117] == 1
     assert dom[f_early, 5] == NONE_STEM  # nothing near A0
-    (tbl,) = m.tables
+    tbl = next(t for t in m.tables if t.name == "stem_energy_db")
+    # stems without a score/MIDI -> automatic per-stem f0 tracks
+    assert {t.name for t in m.tables} == {"stem_energy_db", "f0_hz"}
     e = np.frombuffer((bundle / tbl.path).read_bytes(), "<f4").reshape(tbl.shape)
     assert tbl.row_labels == ["01_Oboe", "02_Viola"]
     t = np.arange(tbl.shape[1]) * tbl.hop_seconds
