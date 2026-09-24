@@ -43,6 +43,8 @@ def test_manifest_v2_score_section(bundle) -> None:  # type: ignore[no-untyped-d
     assert s.kind == "musicxml" and s.source_files == ["score.musicxml", "render.mid"]
     assert [p.stem_match for p in s.parts] == ["name"] * 4
     assert [p.stem_id for p in s.parts] == [st.id for st in m2.stems]
+    assert [p.range_id for p in s.parts] == ["flute", "clarinet_bb", "double_bass", "piano"]
+    assert (s.parts[2].range_low, s.parts[2].range_high) == (24, 67)
     assert [x.number for x in s.measures] == ["1", "2", "3", "2", "4", "5"]
     assert s.alignment.method == "xcorr" and s.alignment.time_source == "midi"
     assert s.alignment.pitch_agreement == 1.0

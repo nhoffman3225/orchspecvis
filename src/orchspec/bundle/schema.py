@@ -142,6 +142,12 @@ class ScorePart(_Model):
     transpose_octave: int = 0
     stem_id: str | None = None
     stem_match: Literal["name", "fuzzy", "order", "none"] = "none"
+    # sounding range from data/instruments/ranges.yaml (MIDI), when the instrument matched
+    range_id: str | None = None
+    range_low: int | None = None
+    range_high: int | None = None
+    practical_low: int | None = None
+    practical_high: int | None = None
 
 
 class ScoreMeasure(_Model):

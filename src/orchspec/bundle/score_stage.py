@@ -21,6 +21,7 @@ from orchspec.dsp.cqt import CQTSpec
 from orchspec.dsp.fundamentals import note_fundamental_levels
 from orchspec.score.match import match_parts_to_stems
 from orchspec.score.musicxml import parse_musicxml
+from orchspec.score.ranges import find_range
 from orchspec.timeline.align import (
     estimate_offset,
     onset_envelope_fine,
@@ -42,7 +43,6 @@ class PartMeta:
     transpose_octave: int = 0
 
 
-StemMatch = Literal["name", "fuzzy", "order", "none"]
 AlignMethod = Literal["xcorr", "manual", "preroll_only"]
 
 
@@ -186,6 +186,21 @@ def _from_midi(midi: MidiFile):  # type: ignore[no-untyped-def]
     return cols, measures, parts
 
 
+def _range_fields(p: PartMeta) -> dict[str, object]:
+    hit = find_range(p.instrument, p.name)
+    if hit is None:
+        return {}
+    key, r = hit
+    pr = r.practical_range
+    return {
+        "range_id": key,
+        "range_low": r.sounding_range[0],
+        "range_high": r.sounding_range[1],
+        "practical_low": pr[0] if pr else None,
+        "practical_high": pr[1] if pr else None,
+    }
+
+
 def prepare_score(
     score_path: Path | None,
     midi_path: Path | None,
@@ -251,10 +266,13 @@ def prepare_score(
         if mt.stem_index is not None:
             part_stem[p.index] = mt.stem_index
         part_models.append(
-            ScorePart(
-                **asdict(p),
-                stem_id=None if mt.stem_index is None else stem_ids[mt.stem_index],
-                stem_match=cast(StemMatch, mt.method),
+            ScorePart.model_validate(
+                {
+                    **asdict(p),
+                    "stem_id": None if mt.stem_index is None else stem_ids[mt.stem_index],
+                    "stem_match": mt.method,
+                    **_range_fields(p),
+                }
             )
         )
     measures_m = [
