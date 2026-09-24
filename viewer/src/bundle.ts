@@ -4,7 +4,12 @@
 
 import { fetchSameOrigin } from "./net";
 
-export const SCHEMA_VERSION = 1;
+export const SUPPORTED_VERSIONS = [1, 2] as const;
+export const NOTE_COLUMNS = [
+  "part", "staff", "voice", "midi", "onset_s", "offset_s", "measure", "beat", "velocity",
+  "f0_db", "f0_ok",
+] as const;
+export type NoteColumn = (typeof NOTE_COLUMNS)[number];
 
 export interface Tile {
   index: number;
@@ -49,8 +54,52 @@ export interface CqtInfo {
   tuning: number;
   frame_convention: "centered";
 }
+export interface ScorePart {
+  index: number;
+  id: string;
+  name: string;
+  instrument: string;
+  abbreviation: string;
+  staves: number;
+  transpose_chromatic: number;
+  transpose_octave: number;
+  stem_id: string | null;
+  stem_match: "name" | "fuzzy" | "order" | "none";
+  range_id: string | null;
+  range_low: number | null;
+  range_high: number | null;
+  practical_low: number | null;
+  practical_high: number | null;
+}
+export interface ScoreMeasure {
+  play_index: number;
+  number: string;
+  start_s: number;
+  end_s: number;
+  beats: number;
+  beat_type: number;
+  pass_no: number;
+}
+export interface Alignment {
+  method: "xcorr" | "manual" | "preroll_only";
+  offset_sec: number;
+  preroll_sec: number;
+  confidence: number;
+  time_source: "midi" | "score_tempo";
+  pitch_agreement: number | null;
+  pitch_shift_mode: number | null;
+  warnings: string[];
+}
+export interface ScoreInfo {
+  kind: "musicxml" | "midi";
+  source_files: string[];
+  parts: ScorePart[];
+  measures: ScoreMeasure[];
+  notes: { path: string; n: number; columns: string[]; dtype: "f32le"; layout: "column_major" };
+  alignment: Alignment;
+}
 export interface Manifest {
-  schema_version: 1;
+  schema_version: 1 | 2;
   created_by: string;
   created_at: string;
   sr: number;
@@ -82,6 +131,7 @@ export interface Manifest {
   dominant: DominantStem | null;
   features: Series[];
   tables: Series[];
+  score: ScoreInfo | null;
 }
 
 export class BundleError extends Error {}
@@ -185,12 +235,101 @@ const REQUIRED = [
 ];
 const OPTIONAL = [
   "fmin_midi", "db_reference", "lod_reduce", "tile_layout", "offsets", "stems", "dominant",
-  "features", "tables",
+  "features", "tables", "score",
 ];
+
+const intOrNull = (v: unknown, w: string): number | null => (v == null ? null : int(v, w, -1e9));
+const strList = (v: unknown, w: string): string[] => arr(v, w).map((x, i) => str(x, `${w}[${i}]`));
+function oneOf<T extends string>(v: unknown, w: string, allowed: readonly T[]): T {
+  if (!allowed.includes(v as T)) fail(w, `must be one of ${allowed.join("|")}`);
+  return v as T;
+}
+
+function parseScorePart(p: unknown, i: number, w0: string): ScorePart {
+  const w = `${w0}.parts[${i}]`;
+  const o = obj(p, w, ["index", "id", "name", "instrument"], [
+    "abbreviation", "staves", "transpose_chromatic", "transpose_octave", "stem_id",
+    "stem_match", "range_id", "range_low", "range_high", "practical_low", "practical_high",
+  ]);
+  const index = int(o.index, `${w}.index`);
+  if (index !== i) fail(w, "part indices must be 0..n-1 in order");
+  return {
+    index,
+    id: str(o.id, `${w}.id`),
+    name: str(o.name, `${w}.name`),
+    instrument: str(o.instrument, `${w}.instrument`),
+    abbreviation: o.abbreviation === undefined ? "" : str(o.abbreviation, `${w}.abbreviation`),
+    staves: o.staves === undefined ? 1 : int(o.staves, `${w}.staves`, 1),
+    transpose_chromatic: intOrNull(o.transpose_chromatic, w) ?? 0,
+    transpose_octave: intOrNull(o.transpose_octave, w) ?? 0,
+    stem_id: o.stem_id == null ? null : str(o.stem_id, `${w}.stem_id`),
+    stem_match: o.stem_match === undefined ? "none"
+      : oneOf(o.stem_match, `${w}.stem_match`, ["name", "fuzzy", "order", "none"] as const),
+    range_id: o.range_id == null ? null : str(o.range_id, `${w}.range_id`),
+    range_low: intOrNull(o.range_low, w),
+    range_high: intOrNull(o.range_high, w),
+    practical_low: intOrNull(o.practical_low, w),
+    practical_high: intOrNull(o.practical_high, w),
+  };
+}
+
+function parseScoreMeasure(v: unknown, i: number, w0: string): ScoreMeasure {
+  const w = `${w0}.measures[${i}]`;
+  const o = obj(v, w, ["play_index", "number", "start_s", "end_s", "beats", "beat_type"], ["pass_no"]);
+  const play_index = int(o.play_index, `${w}.play_index`);
+  if (play_index !== i) fail(w, "measures must be in playback order");
+  return {
+    play_index,
+    number: str(o.number, `${w}.number`),
+    start_s: num(o.start_s, `${w}.start_s`),
+    end_s: num(o.end_s, `${w}.end_s`),
+    beats: int(o.beats, `${w}.beats`),
+    beat_type: int(o.beat_type, `${w}.beat_type`),
+    pass_no: o.pass_no === undefined ? 1 : int(o.pass_no, `${w}.pass_no`, 1),
+  };
+}
+
+function parseScore(v: unknown): ScoreInfo {
+  const w = "manifest.score";
+  const o = obj(v, w, ["kind", "source_files", "parts", "measures", "notes", "alignment"]);
+  const no = obj(o.notes, `${w}.notes`, ["path", "n", "columns"], ["dtype", "layout"]);
+  const columns = strList(no.columns, `${w}.notes.columns`);
+  if (columns.join(",") !== NOTE_COLUMNS.join(",")) {
+    fail(`${w}.notes.columns`, `must be ${NOTE_COLUMNS.join(",")}`);
+  }
+  if (no.dtype !== undefined && no.dtype !== "f32le") fail(`${w}.notes.dtype`, "must be f32le");
+  if (no.layout !== undefined && no.layout !== "column_major") fail(`${w}.notes.layout`, "must be column_major");
+  const aw = `${w}.alignment`;
+  const ao = obj(o.alignment, aw, ["method", "offset_sec", "preroll_sec", "confidence", "time_source"],
+    ["pitch_agreement", "pitch_shift_mode", "warnings"]);
+  return {
+    kind: oneOf(o.kind, `${w}.kind`, ["musicxml", "midi"] as const),
+    source_files: strList(o.source_files, `${w}.source_files`),
+    parts: arr(o.parts, `${w}.parts`).map((p, i) => parseScorePart(p, i, w)),
+    measures: arr(o.measures, `${w}.measures`).map((mv, i) => parseScoreMeasure(mv, i, w)),
+    notes: {
+      path: checkRelPath(no.path, `${w}.notes.path`),
+      n: int(no.n, `${w}.notes.n`),
+      columns,
+      dtype: "f32le",
+      layout: "column_major",
+    },
+    alignment: {
+      method: oneOf(ao.method, `${aw}.method`, ["xcorr", "manual", "preroll_only"] as const),
+      offset_sec: num(ao.offset_sec, `${aw}.offset_sec`),
+      preroll_sec: num(ao.preroll_sec, `${aw}.preroll_sec`),
+      confidence: num(ao.confidence, `${aw}.confidence`),
+      time_source: oneOf(ao.time_source, `${aw}.time_source`, ["midi", "score_tempo"] as const),
+      pitch_agreement: ao.pitch_agreement == null ? null : num(ao.pitch_agreement, `${aw}.pitch_agreement`),
+      pitch_shift_mode: intOrNull(ao.pitch_shift_mode, aw),
+      warnings: ao.warnings === undefined ? [] : strList(ao.warnings, `${aw}.warnings`),
+    },
+  };
+}
 
 export function parseManifest(json: unknown): Manifest {
   const o = obj(json, "manifest", REQUIRED, OPTIONAL);
-  if (o.schema_version !== SCHEMA_VERSION) {
+  if (!(SUPPORTED_VERSIONS as readonly unknown[]).includes(o.schema_version)) {
     fail("manifest.schema_version", `unsupported version ${String(o.schema_version)}`);
   }
   const lit = <T extends string>(k: string, val: T): T => {
@@ -205,7 +344,7 @@ export function parseManifest(json: unknown): Manifest {
   const off = o.offsets === undefined ? {} : obj(o.offsets, "manifest.offsets", [], ["preroll_sec"]);
 
   const m: Manifest = {
-    schema_version: 1,
+    schema_version: o.schema_version as 1 | 2,
     created_by: str(o.created_by, "manifest.created_by"),
     created_at: str(o.created_at, "manifest.created_at"),
     sr: int(o.sr, "manifest.sr", 1),
@@ -271,7 +410,17 @@ export function parseManifest(json: unknown): Manifest {
           })(),
     features: o.features === undefined ? [] : parseSeries(o.features, "manifest.features"),
     tables: o.tables === undefined ? [] : parseSeries(o.tables, "manifest.tables"),
+    score: o.score == null ? null : parseScore(o.score),
   };
+  if (m.score && m.schema_version < 2) fail("manifest.score", "requires schema_version 2");
+  if (m.score) {
+    const ids = new Set(m.stems.map((st) => st.id));
+    for (const p of m.score.parts) {
+      if (p.stem_id !== null && !ids.has(p.stem_id)) {
+        fail("manifest.score", `part ${p.name} refers to unknown stem ${p.stem_id}`);
+      }
+    }
+  }
 
   if (m.bins_per_octave % 12 !== 0) fail("manifest", "bins_per_octave must be a multiple of 12");
   if (m.db_max <= m.db_min) fail("manifest", "db_max must exceed db_min");
@@ -345,4 +494,25 @@ export async function loadSeries(base: string, s: Series): Promise<Float32Array>
   if (buf.byteLength !== n * 4) throw new BundleError(`${s.path}: wrong size`);
   // f32le: every supported platform (x86, ARM) is little-endian, so view directly.
   return new Float32Array(buf);
+}
+
+export type NotesTable = Record<NoteColumn, Float32Array> & { n: number };
+
+/** Column-major f32le notes table -> one Float32Array view per column. */
+export function notesFromBuffer(buf: ArrayBuffer, n: number): NotesTable {
+  if (buf.byteLength !== NOTE_COLUMNS.length * n * 4) {
+    throw new BundleError(`notes table: ${buf.byteLength} bytes, expected ${NOTE_COLUMNS.length * n * 4}`);
+  }
+  const out = { n } as NotesTable;
+  NOTE_COLUMNS.forEach((c, i) => {
+    out[c] = new Float32Array(buf, i * n * 4, n);
+  });
+  return out;
+}
+
+export async function loadNotes(base: string, m: Manifest): Promise<NotesTable | null> {
+  if (!m.score) return null;
+  const r = await fetchSameOrigin(bundleUrl(base, m.score.notes.path));
+  if (!r.ok) throw new BundleError(`${m.score.notes.path}: HTTP ${r.status}`);
+  return notesFromBuffer(await r.arrayBuffer(), m.score.notes.n);
 }
