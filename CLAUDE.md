@@ -23,6 +23,8 @@ uv run orchspec serve out/<name>.bundle          # 127.0.0.1, random port, print
 uv run orchspec session-template [session_dir]   # print (or write) a render.yaml template
 uv run orchspec validate <session_dir | file.wav>
 uv run python tests/fixtures/make_demo_session.py  # 30 s, 4-stem demo in session/demo
+uv run python -m tests.fixtures.make_score_session  # score+MIDI+stems demo in session/score-demo
+uv run orchspec bundle <session> -o out/ [--offset S] [--no-align] [--f0 auto|yin|pyin|off]
 ORCHSPEC_PERF_MINUTES=2 ORCHSPEC_PERF_STEMS=4 uv run pytest -m slow -s   # quick perf smoke
 uv run python -c "import torch; print(torch.cuda.get_device_name(0), torch.version.cuda)"
 ```
@@ -40,7 +42,8 @@ npm test           # vitest (includes schema cross-check + no-network check)
 `npm run dev` shows viewer/public/tiny-bundle; add `?bundle=/path/` for another bundle
 served by Vite, or use `orchspec serve` for a real one. `?mode=mix|stems|dominant` sets the
 initial view; also `style=surface|terrain|fabric`, `smooth=<semitones>`, `gaps=<dB>`
-(e.g. `&mode=ensemble&style=terrain&smooth=4&gaps=-45`). The cross-language test reads viewer/test-data/py-bundle, written by
+(e.g. `&mode=ensemble&style=terrain&smooth=4&gaps=-45`); with a score also `notes=0`,
+`fund=1`, `fundw=25|50|100` (fundamentals-only band in cents). The cross-language test reads viewer/test-data/py-bundle, written by
 `uv run pytest tests/test_bundle_writer.py` (git-ignored) — run pytest before vitest.
 
 On this Windows box Node comes from Scoop `nodejs-lts`, which is added to PATH by the
@@ -54,8 +57,10 @@ src/orchspec/
   io/               audio + session folder loading (session.py, audio.py)
   dsp/              cqt.py (CQTSpec + backends), tiles.py, features.py
   bundle/           schema.py (pydantic manifest v1)
-  score/            (Phase 2) MusicXML parsing
-  timeline/         (Phase 2) tempo map, alignment
+  score/            musicxml.py (safe parser), repeats.py, match.py (part<->stem), ranges.py
+  timeline/         midi.py (bounded SMF reader), align.py (tempo maps, offset xcorr)
+  dsp/fundamentals.py  per-note fundamental level/weak flag, yin/pyin f0 tracks
+  bundle/score_stage.py  score/MIDI -> audio-timed notes table for the bundle
   server.py         read-only FastAPI for `orchspec serve`
   bundle/writer.py  session -> bundle (atomic temp-dir + rename)
 viewer/             Vite + TS + three.js (WebGL2 only)
@@ -63,6 +68,7 @@ viewer/             Vite + TS + three.js (WebGL2 only)
   src/net.ts        the only network I/O (same-origin guard)
   src/tiles.ts      tile LRU cache, page assembly, stem power-sum
   src/surface.ts    heightmap shader surface; src/pane2d.ts 2D pane + LUFS strip
+  src/notes.ts      note index, note/f0 rasterization (overlay + fundamentals mask), bar/beat
   src/gaps.ts       energy-domain smoothing, sounding spans, spectral-gap detection
   src/clock.ts      Transport (AudioContext master clock); src/player.ts Web Audio
 data/instruments/   ranges.yaml (schema documented in-file)

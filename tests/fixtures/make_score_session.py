@@ -1,6 +1,6 @@
 """Synthetic score session: MusicXML + render.mid + rendered audio with a known offset.
 
-    uv run python tests/fixtures/make_score_session.py [session/score-demo]
+    uv run python -m tests.fixtures.make_score_session [session/score-demo]
 
 Four parts (Flute; Clarinet in Bb, chromatic -2; Double Bass, octave-change -1 and
 rendered WITHOUT its fundamental; Piano, 2 staves with chords and a 2nd voice), a repeat
