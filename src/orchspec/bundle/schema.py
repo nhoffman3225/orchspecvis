@@ -16,7 +16,7 @@ from typing import Annotated, Literal
 
 from pydantic import AfterValidator, BaseModel, ConfigDict, Field, model_validator
 
-SCHEMA_VERSION = 2  # v2 (2026-09-24): optional `score` section (notes, measures, alignment)
+SCHEMA_VERSION = 3  # v2: `score` section; v3 (2026-09-25): alignment warp + part latency
 MANIFEST_NAME = "manifest.json"
 NONE_STEM = 255  # value in dominant-stem tiles meaning "no stem above the floor"
 
@@ -148,6 +148,9 @@ class ScorePart(_Model):
     range_high: int | None = None
     practical_low: int | None = None
     practical_high: int | None = None
+    # v3: this part's onset lag relative to the common warp (seconds), when measured
+    latency_sec: float | None = None
+    snapped: float | None = None  # v3: fraction of this part's notes snapped to an onset
 
 
 class ScoreMeasure(_Model):
@@ -163,7 +166,7 @@ class ScoreMeasure(_Model):
 
 
 class Alignment(_Model):
-    method: Literal["xcorr", "manual", "preroll_only"]
+    method: Literal["warp", "xcorr", "manual", "preroll_only"]
     offset_sec: float  # audio seconds = score/MIDI seconds + offset_sec
     preroll_sec: float
     confidence: float
@@ -171,6 +174,10 @@ class Alignment(_Model):
     pitch_agreement: float | None = None  # MusicXML vs MIDI (None if only one exists)
     pitch_shift_mode: int | None = None
     warnings: list[str] = []
+    # v3: piecewise-linear score/MIDI seconds -> audio seconds (monotonic), common to all
+    # parts; each part adds its latency_sec. Empty = constant offset_sec.
+    warp: list[tuple[float, float]] = []
+    snapped: float | None = None  # fraction of notes snapped to an audio onset
 
 
 class NotesTable(_Model):
@@ -207,7 +214,7 @@ class ScoreInfo(_Model):
 
 
 class Manifest(_Model):
-    schema_version: Literal[1, 2] = SCHEMA_VERSION
+    schema_version: Literal[1, 2, 3] = SCHEMA_VERSION
     created_by: str
     created_at: str  # ISO 8601 UTC
 

@@ -220,7 +220,8 @@ def _build(
         inputs.score_path,
         inputs.midi_path,
         mono,
-        spec.sr,
+        mix_db,
+        spec,
         inputs.offsets.preroll_sec,
         [st.name for st in inputs.stems],
         [st.id for st in inputs.stems],
@@ -229,8 +230,6 @@ def _build(
         search=opts.align_search,
         log=log,
     )
-    if plan is not None:
-        plan.measure_fundamentals(mix_db, spec, stem_index=None)  # parts without a stem
     tm.add("score", t0)
 
     t0 = time.perf_counter()
@@ -303,7 +302,7 @@ def _build(
         acc.add(i, levels)
         energy[i] = _frame_energy_db(db, e_level)
         if plan is not None:
-            plan.measure_fundamentals(db, spec, stem_index=i)
+            plan.add_stem(i, y)
         if f0_hz is not None:
             f0_hz[i] = f0_track(y, spec.sr, spec.hop, n_frames, method=f0_mode)
         tm.add("tiles", t0)
@@ -342,7 +341,15 @@ def _build(
                 description=f"per-stem fundamental frequency ({f0_mode}; 0 = unvoiced)",
             )
         )
-    score_info = plan.write(root) if plan is not None else None
+    score_info = None
+    if plan is not None:
+        t0 = time.perf_counter()
+        plan.finalize()
+        plan.measure_fundamentals_from_tiles(
+            root, spec, lods[0], {i: st.lods[0] for i, st in enumerate(stems)}, db_min, db_max
+        )
+        score_info = plan.write(root)
+        tm.add("score", t0)
 
     # ---- audio copy + manifest
     t0 = time.perf_counter()

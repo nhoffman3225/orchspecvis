@@ -4,7 +4,7 @@
 
 import { fetchSameOrigin } from "./net";
 
-export const SUPPORTED_VERSIONS = [1, 2] as const;
+export const SUPPORTED_VERSIONS = [1, 2, 3] as const;
 export const NOTE_COLUMNS = [
   "part", "staff", "voice", "midi", "onset_s", "offset_s", "measure", "beat", "velocity",
   "f0_db", "f0_ok",
@@ -70,6 +70,8 @@ export interface ScorePart {
   range_high: number | null;
   practical_low: number | null;
   practical_high: number | null;
+  latency_sec: number | null;
+  snapped: number | null;
 }
 export interface ScoreMeasure {
   play_index: number;
@@ -81,7 +83,7 @@ export interface ScoreMeasure {
   pass_no: number;
 }
 export interface Alignment {
-  method: "xcorr" | "manual" | "preroll_only";
+  method: "warp" | "xcorr" | "manual" | "preroll_only";
   offset_sec: number;
   preroll_sec: number;
   confidence: number;
@@ -89,6 +91,8 @@ export interface Alignment {
   pitch_agreement: number | null;
   pitch_shift_mode: number | null;
   warnings: string[];
+  warp: [number, number][];
+  snapped: number | null;
 }
 export interface ScoreInfo {
   kind: "musicxml" | "midi";
@@ -99,7 +103,7 @@ export interface ScoreInfo {
   alignment: Alignment;
 }
 export interface Manifest {
-  schema_version: 1 | 2;
+  schema_version: 1 | 2 | 3;
   created_by: string;
   created_at: string;
   sr: number;
@@ -250,6 +254,7 @@ function parseScorePart(p: unknown, i: number, w0: string): ScorePart {
   const o = obj(p, w, ["index", "id", "name", "instrument"], [
     "abbreviation", "staves", "transpose_chromatic", "transpose_octave", "stem_id",
     "stem_match", "range_id", "range_low", "range_high", "practical_low", "practical_high",
+    "latency_sec", "snapped",
   ]);
   const index = int(o.index, `${w}.index`);
   if (index !== i) fail(w, "part indices must be 0..n-1 in order");
@@ -270,6 +275,8 @@ function parseScorePart(p: unknown, i: number, w0: string): ScorePart {
     range_high: intOrNull(o.range_high, w),
     practical_low: intOrNull(o.practical_low, w),
     practical_high: intOrNull(o.practical_high, w),
+    latency_sec: o.latency_sec == null ? null : num(o.latency_sec, `${w}.latency_sec`),
+    snapped: o.snapped == null ? null : num(o.snapped, `${w}.snapped`),
   };
 }
 
@@ -301,7 +308,7 @@ function parseScore(v: unknown): ScoreInfo {
   if (no.layout !== undefined && no.layout !== "column_major") fail(`${w}.notes.layout`, "must be column_major");
   const aw = `${w}.alignment`;
   const ao = obj(o.alignment, aw, ["method", "offset_sec", "preroll_sec", "confidence", "time_source"],
-    ["pitch_agreement", "pitch_shift_mode", "warnings"]);
+    ["pitch_agreement", "pitch_shift_mode", "warnings", "warp", "snapped"]);
   return {
     kind: oneOf(o.kind, `${w}.kind`, ["musicxml", "midi"] as const),
     source_files: strList(o.source_files, `${w}.source_files`),
@@ -315,7 +322,7 @@ function parseScore(v: unknown): ScoreInfo {
       layout: "column_major",
     },
     alignment: {
-      method: oneOf(ao.method, `${aw}.method`, ["xcorr", "manual", "preroll_only"] as const),
+      method: oneOf(ao.method, `${aw}.method`, ["warp", "xcorr", "manual", "preroll_only"] as const),
       offset_sec: num(ao.offset_sec, `${aw}.offset_sec`),
       preroll_sec: num(ao.preroll_sec, `${aw}.preroll_sec`),
       confidence: num(ao.confidence, `${aw}.confidence`),
@@ -323,6 +330,12 @@ function parseScore(v: unknown): ScoreInfo {
       pitch_agreement: ao.pitch_agreement == null ? null : num(ao.pitch_agreement, `${aw}.pitch_agreement`),
       pitch_shift_mode: intOrNull(ao.pitch_shift_mode, aw),
       warnings: ao.warnings === undefined ? [] : strList(ao.warnings, `${aw}.warnings`),
+      warp: ao.warp === undefined ? [] : arr(ao.warp, `${aw}.warp`).map((pt, i): [number, number] => {
+        const a = arr(pt, `${aw}.warp[${i}]`);
+        if (a.length !== 2) fail(`${aw}.warp[${i}]`, "expected [score_s, audio_s]");
+        return [num(a[0], `${aw}.warp[${i}][0]`), num(a[1], `${aw}.warp[${i}][1]`)];
+      }),
+      snapped: ao.snapped == null ? null : num(ao.snapped, `${aw}.snapped`),
     },
   };
 }
@@ -344,7 +357,7 @@ export function parseManifest(json: unknown): Manifest {
   const off = o.offsets === undefined ? {} : obj(o.offsets, "manifest.offsets", [], ["preroll_sec"]);
 
   const m: Manifest = {
-    schema_version: o.schema_version as 1 | 2,
+    schema_version: o.schema_version as 1 | 2 | 3,
     created_by: str(o.created_by, "manifest.created_by"),
     created_at: str(o.created_at, "manifest.created_at"),
     sr: int(o.sr, "manifest.sr", 1),
