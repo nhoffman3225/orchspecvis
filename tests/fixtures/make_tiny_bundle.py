@@ -99,7 +99,9 @@ def build(out: Path) -> Manifest:
         cqt=CqtInfo(backend="hand-made", k=K),
         source=SourceInfo(kind="wav", name="tiny"),
     )
-    (out / MANIFEST_NAME).write_text(m.model_dump_json(indent=2) + "\n", encoding="utf-8")
+    (out / MANIFEST_NAME).write_text(
+        m.model_dump_json(indent=2) + "\n", encoding="utf-8", newline="\n"
+    )
     return m
 
 
