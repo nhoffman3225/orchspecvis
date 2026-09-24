@@ -108,6 +108,13 @@ time (target < 2 min CUDA) + peak VRAM.
 - [x] Keyboard heat map: per-key activity with exponential decay tau; sources "sound"
       (decay-weighted power in the key's semitone band from the displayed, filtered page)
       and "notes" (exact decayed note-time); stateless, so seeking/scrubbing is exact
+- [x] Full-screen piano view (branch `phase-2c-piano-view`): 88-key keyboard with part
+      colors + heat, live per-key spectrum strip, in-moment falling-notes roll with bar
+      lines (score notes, or notes derived from per-stem f0 tracks without a score)
+- [x] Harmonics slider: off, then 0 dB going down; presets off/0/-6/-12/-20/-30/-40/-60 dB
+      (ticks, snap within 1 dB, menu)
+- [x] Y-axis stretch: 2D pane pitch zoom (wheel) / pan (shift+wheel) / reset (dbl-click),
+      piano-view time stretch (wheel = lookahead) and key height; 3D height up to 3x
 - [x] PR for Phase 2 (#3, stacked on #2; CI green on windows + macos)
 Acceptance (met 2026-09-24, tests/test_score_bundle.py + viewer screenshots): synthetic MusicXML+MIDI+rendered audio fixture aligns within +-1 frame;
 fundamentals view keeps only the notated fundamentals on a synthetic harmonic fixture.

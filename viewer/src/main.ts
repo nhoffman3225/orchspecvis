@@ -3,7 +3,9 @@ import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { loadManifest, loadNotes, loadSeries, midiName } from "./bundle";
 import { NoteIndex, applyMask, frameSeconds, measureAt, overtones, rasterizeF0, rasterizeNotes } from "./notes";
-import { heatFromNotes, heatFromPage, normalizeHeat } from "./heat";
+import { heatFromNotes, heatFromPage, keyLevelsAt, normalizeHeat } from "./heat";
+import { PianoView, notesFromF0 } from "./piano";
+import { HARM_PRESETS, harmSliderValue, snapHarm } from "./presets";
 import { frameGaps, frameSpans, smoothPage } from "./gaps";
 import { COLORMAPS, colormapLut, cssColor, stemPalette } from "./colormap";
 import { initToken } from "./net";
@@ -51,6 +53,11 @@ async function main(): Promise<void> {
   scene.add(surface.group);
 
   const pane = new Pane2D($<HTMLCanvasElement>("cqt2d"), m, $("tip"));
+  const pr = /^(\d+)-(\d+)$/.exec(params.get("pitch") ?? ""); // ?pitch=36-84 (MIDI range)
+  if (pr) {
+    const kk = m.bins_per_octave / 12;
+    pane.setPitchRange((Number(pr[1]) - m.fmin_midi) * kk, (Number(pr[2]) + 1 - m.fmin_midi) * kk);
+  }
   const strip = new LufsStrip($<HTMLCanvasElement>("lufs"), m.duration_seconds);
   const lufs = m.features.find((f) => f.name === "lufs_short_term");
   if (lufs) strip.setData(await loadSeries(base, lufs), lufs.hop_seconds);
@@ -226,16 +233,35 @@ async function main(): Promise<void> {
   fundBox.addEventListener("change", () => rebuildDisplay());
   fundW.addEventListener("change", () => rebuildDisplay());
   // overtones back in when loud enough (only meaningful with fundamentals on)
-  const HARM_OFF = -97;
+  // slider: 0 = off, 1 = 0 dB, 2 = -1 dB, ... 97 = -96 dB (right lets quieter harmonics in)
   const MAX_HARMONIC = 16;
   const harm = $<HTMLInputElement>("harm");
-  if (params.get("harm")) harm.value = params.get("harm")!;
-  const harmDb = (): number | null => (Number(harm.value) <= HARM_OFF ? null : Number(harm.value));
+  if (params.get("harm") !== null && Number.isFinite(Number(params.get("harm")))) {
+    harm.value = String(Math.min(97, Math.max(1, 1 - Math.round(Number(params.get("harm"))))));
+  }
+  const harmDb = (): number | null => (Number(harm.value) === 0 ? null : 1 - Number(harm.value));
+  // preset stops: tick marks on the slider, a snap when dragging near one, and a menu
+  const presetSel = $<HTMLSelectElement>("harmpreset");
+  const ticks = $("harmticks");
+  for (const p of HARM_PRESETS) {
+    const v = harmSliderValue(p);
+    ticks.append(new Option("", String(v)));
+    presetSel.add(new Option(p === null ? "off" : `${p} dB`, String(v)));
+  }
+  presetSel.addEventListener("change", () => {
+    if (presetSel.value === "") return;
+    harm.value = presetSel.value;
+    presetSel.value = "";
+    syncHarm();
+    rebuildDisplay();
+  });
   const syncHarm = (): void => {
     harm.disabled = !fundBox.checked || fundBox.disabled;
-    $("harmval").textContent = harmDb() === null ? "off" : `${harm.value} dB`;
+    const hd = harmDb();
+    $("harmval").textContent = hd === null ? "off" : `${hd === 0 ? "0" : hd} dB`;
   };
   harm.addEventListener("input", () => {
+    harm.value = String(snapHarm(Number(harm.value)));
     syncHarm();
     rebuildDisplay();
   });
@@ -515,6 +541,68 @@ async function main(): Promise<void> {
     else if (e.code === "Home") seek(0);
   });
 
+  // ---- full-screen piano view (in-moment roll + keyboard + live spectrum)
+  const piano = new PianoView($<HTMLCanvasElement>("piano"));
+  let pianoOpen = params.get("view") === "piano";
+  const pianoEl = $("pianoview");
+  const lookahead = $<HTMLInputElement>("lookahead");
+  if (params.get("lookahead")) lookahead.value = params.get("lookahead")!;
+  const pspec = $<HTMLInputElement>("pspec");
+  const keyh = $<HTMLInputElement>("keyh");
+  if (params.get("keyh")) keyh.value = params.get("keyh")!;
+  // wheel over the roll stretches the time axis (lookahead)
+  $("piano").addEventListener("wheel", (e) => {
+    e.preventDefault();
+    const v = Number(lookahead.value) * (e.deltaY > 0 ? 1.15 : 1 / 1.15);
+    lookahead.value = String(Math.min(12, Math.max(1, Math.round(v * 2) / 2)));
+    syncLook();
+  }, { passive: false });
+  // notes for the roll: the score, else notes derived from the per-stem f0 tracks
+  let rollNotes = notes;
+  let rollIndex = nix;
+  let rollColor = partColor;
+  let rollVisible = (p: number): boolean => partsVisible.has(p);
+  if (!notes && f0Data && f0Series) {
+    const [rows, frames0] = f0Series.shape as [number, number];
+    rollNotes = notesFromF0(f0Data, rows, frames0, f0Series.hop_seconds);
+    rollIndex = new NoteIndex(rollNotes);
+    const stemPal = stemPalette(m.stems.length);
+    rollColor = (p) => cssColor(stemPal, p);
+    rollVisible = (p) => ui.selected.has(m.stems[p]?.id ?? "");
+  }
+  const setPiano = (open: boolean): void => {
+    pianoOpen = open;
+    pianoEl.hidden = !open;
+  };
+  setPiano(pianoOpen);
+  const syncLook = (): void => {
+    $("lookval").textContent = `${Number(lookahead.value)} s`;
+  };
+  lookahead.addEventListener("input", syncLook);
+  syncLook();
+  $("pianobtn").addEventListener("click", () => setPiano(true));
+  $("pianoclose").addEventListener("click", () => setPiano(false));
+  addEventListener("keydown", (e) => {
+    if (e.target instanceof HTMLInputElement || e.target instanceof HTMLSelectElement) return;
+    if (e.code === "KeyP") setPiano(!pianoOpen);
+    else if (e.code === "Escape" && pianoOpen) setPiano(false);
+  });
+  function drawPiano(t: number): void {
+    let levels: Float32Array | null = null;
+    if (pspec.checked && heatSrc) {
+      levels = keyLevelsAt({ data: heatSrc.data, nBins: m.n_bins, start: heatSrc.start,
+        frames: pageFrames, frameSec: frameSeconds(m, heatSrc.level) }, m.bins_per_octave / 12, m.fmin_midi, t);
+    }
+    piano.draw({
+      t, lookahead: Number(lookahead.value), notes: rollNotes, index: rollIndex,
+      parts, measures: m.score?.measures ?? [], partColor: rollColor, visible: rollVisible,
+      focus: pane.score?.focus ?? null, heat: pane.heat, levels, keyScale: Number(keyh.value),
+    });
+    const bb = m.score ? measureAt(m.score.measures, t) : null;
+    const txt = `${fmt(t)}${bb ? ` · m. ${bb.number}${bb.pass > 1 ? ` (pass ${bb.pass})` : ""} · beat ${bb.beat.toFixed(1)}` : ""}`;
+    if ($("piano-time").textContent !== txt) $("piano-time").textContent = txt;
+  }
+
   // ---- frame loop
   const view = $("view3d");
   const resize = (): void => {
@@ -539,8 +627,12 @@ async function main(): Promise<void> {
       const txt = bb ? `m. ${bb.number}${bb.pass > 1 ? ` (pass ${bb.pass})` : ""} · beat ${bb.beat.toFixed(1)}` : "";
       if ($("barbeat").textContent !== txt) $("barbeat").textContent = txt;
     }
-    controls.update();
-    renderer.render(scene, camera);
+    if (pianoOpen) {
+      drawPiano(t);
+    } else {
+      controls.update();
+      renderer.render(scene, camera);
+    }
     pane.draw();
     strip.draw();
     const s = player.audioError

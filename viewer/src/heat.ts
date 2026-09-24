@@ -92,3 +92,22 @@ export function normalizeHeat(h: Float32Array, mode: "notes" | "sound", tau: num
   }
   return out;
 }
+
+/** Live per-key level (0..1) at time t: max over the key's semitone bins in the page,
+ * mapped from [db_min, db_max] quantization (u8 / 255). */
+export function keyLevelsAt(page: PageRef, k: number, fminMidi: number, t: number): Float32Array {
+  const out = new Float32Array(N_KEYS);
+  const f = Math.floor(t / page.frameSec + 0.5) - page.start;
+  if (f < 0 || f >= page.frames) return out;
+  const row = f * page.nBins;
+  const half = (k - 1) / 2;
+  for (let key = 0; key < N_KEYS; key++) {
+    const c = (key + KEY0 - fminMidi) * k;
+    let v = 0;
+    for (let b = Math.round(c - half); b <= Math.round(c + half); b++) {
+      if (b >= 0 && b < page.nBins) v = Math.max(v, page.data[row + b]!);
+    }
+    out[key] = v / 255;
+  }
+  return out;
+}
