@@ -119,12 +119,38 @@ time (target < 2 min CUDA) + peak VRAM.
 Acceptance (met 2026-09-24, tests/test_score_bundle.py + viewer screenshots): synthetic MusicXML+MIDI+rendered audio fixture aligns within +-1 frame;
 fundamentals view keeps only the notated fundamentals on a synthetic harmonic fixture.
 
-### Phase 3 — alignment & score view
-- [ ] Verovio (bundled wasm) score rendering, highlight at playhead
-- [ ] MusicXML<->MIDI<->audio alignment (DTW on chroma/CQT where offsets drift)
-- [ ] Register-distribution views (per section/stem pitch histograms over time windows)
-- [ ] Streaming audio playback (AudioWorklet chunks) for 20-min sessions
-Acceptance: highlighting stays within one beat on a 20-min fixture.
+### Phase 3 — alignment & score view  (branch `phase-3-alignment`)
+0. Real-session validation (gate for the rest; needs a Dorico+NP5 and a Cubase+BBCSO
+   session in git-ignored session/):
+- [ ] Bundle both; record alignment offset/confidence, pitch agreement + shift, stem
+      matches, weak-fundamental rate per section; resolve or re-scope each Phase 2
+      "Unverified assumption" in this file
+1. Drift-aware alignment
+- [ ] Synthetic drift fixtures first: gradual tempo drift, rubato, per-part latency
+      (e.g. +60 ms legato brass), pickup bar, missing/extra notes
+- [ ] Score-informed DTW: synthesize a chroma/CQT template from the notes, DTW against the
+      audio's CQT (GPU-friendly), onset-refined; piecewise-linear warp map
+- [ ] Per-part (per-stem) latency estimate against its own stem (BBCSO articulation delays)
+- [ ] Schema v3: `score.alignment.warp` [(score_s, audio_s)] + per-part offsets; notes
+      stay in audio seconds; viewer shows alignment confidence over time
+  Acceptance: synthetic drift fixtures align every note within +-1 frame (hop 512 @ 48k)
+2. Engraved score view
+- [ ] Verovio (bundled wasm via Vite; LGPL-3.0 — needs approval) renders the MusicXML;
+      follows the playhead (page/system turns), highlights sounding notes by part color,
+      click a note/measure -> seek; part filter shared with the piano view
+- [ ] Map Verovio element ids <-> bundle notes (part/staff/voice/measure/beat), incl.
+      repeats (pass number)
+  Acceptance: highlight stays within one beat over a 20-min fixture
+3. Register-distribution views
+- [ ] Per-section/stem pitch-energy histograms over sliding windows (from tiles or notes),
+      register "center of mass" and spread over time, per-family stacks
+- [ ] Bundle table `register_hist` [n_stems, 88, n_windows] (f32) or computed in viewer
+4. Scale & playback
+- [ ] Streaming playback (AudioWorklet + chunked decode) so 20-min stereo does not need
+      ~460 MB of decoded audio
+- [ ] Compressed tiles (gzip + DecompressionStream) and/or stems from LOD 1 (schema v3)
+- [ ] Viewer page assembly, smoothing, stem sums in a Web Worker
+- [ ] Playwright E2E smoke + network check (needs approval as a dev dependency)
 
 ### Phase 3b — Rust core + Tauri desktop
 - [ ] rust/orchspec-core: bundle read/write (docs/bundle-format.md), LOD build, xcorr;
