@@ -27,8 +27,10 @@ from orchspec.bundle.schema import (
     SourceInfo,
     Stem,
 )
+from orchspec.bundle.score_stage import ScorePlan, prepare_score
 from orchspec.dsp.cqt import CQTBackend, CQTSpec, TorchBackend, calibrated_db, get_backend
 from orchspec.dsp.features import onset_envelope, short_term_lufs, spectral_centroid
+from orchspec.dsp.fundamentals import f0_track
 from orchspec.dsp.tiles import (
     DominantAccumulator,
     lod_frame_counts,
@@ -55,6 +57,10 @@ class BundleOptions:
     dominant_floor_db: float = -60.0
     energy_min_seconds: float = 0.05  # stem energy table at the first level >= this hop
     lufs_hop_seconds: float = 0.1
+    offset: float | None = None  # manual score/MIDI -> audio offset (seconds)
+    align: bool = True  # estimate the offset by onset cross-correlation
+    align_search: float = 1.5  # +- seconds around preroll_sec
+    f0: str = "auto"  # auto | yin | pyin | off  (per-stem f0 tracks; auto = only without score)
 
 
 @dataclass
@@ -74,6 +80,8 @@ class BundleInputs:
     stems: list[StemInput] = field(default_factory=list)
     source: SourceInfo | None = None
     offsets: Offsets = field(default_factory=Offsets)
+    score_path: Path | None = None
+    midi_path: Path | None = None
 
 
 @dataclass
@@ -109,6 +117,8 @@ def inputs_from_session(s: Session) -> BundleInputs:
             render_config=cfg.model_dump(mode="json") if s.root else None,
         ),
         offsets=Offsets(preroll_sec=cfg.preroll_sec),
+        score_path=s.score_path,
+        midi_path=s.midi_path,
     )
 
 
@@ -206,6 +216,24 @@ def _build(
     tm.add("tiles", t0)
 
     t0 = time.perf_counter()
+    plan: ScorePlan | None = prepare_score(
+        inputs.score_path,
+        inputs.midi_path,
+        mono,
+        spec.sr,
+        inputs.offsets.preroll_sec,
+        [st.name for st in inputs.stems],
+        [st.id for st in inputs.stems],
+        offset=opts.offset,
+        align=opts.align,
+        search=opts.align_search,
+        log=log,
+    )
+    if plan is not None:
+        plan.measure_fundamentals(mix_db, spec, stem_index=None)  # parts without a stem
+    tm.add("score", t0)
+
+    t0 = time.perf_counter()
     hop_s = spec.hop / spec.sr
     lufs = short_term_lufs(mix, spec.sr, hop_seconds=opts.lufs_hop_seconds)
     features = []
@@ -254,6 +282,12 @@ def _build(
     )
     stems: list[Stem] = []
     energy = np.zeros((len(inputs.stems), counts[e_level]), dtype=np.float32)
+    f0_mode = opts.f0 if opts.f0 != "auto" else ("off" if plan is not None else "yin")
+    f0_hz = (
+        np.zeros((len(inputs.stems), n_frames), dtype=np.float32)
+        if f0_mode != "off" and inputs.stems
+        else None
+    )
     for i, st in enumerate(inputs.stems):
         t0 = time.perf_counter()
         y = to_mono(st.load())
@@ -268,6 +302,10 @@ def _build(
         assert acc is not None
         acc.add(i, levels)
         energy[i] = _frame_energy_db(db, e_level)
+        if plan is not None:
+            plan.measure_fundamentals(db, spec, stem_index=i)
+        if f0_hz is not None:
+            f0_hz[i] = f0_track(y, spec.sr, spec.hop, n_frames, method=f0_mode)
         tm.add("tiles", t0)
         stems.append(Stem(id=st.id, index=i, name=st.name, source_file=st.source_file, lods=slods))
         log(f"stem {i + 1}/{len(inputs.stems)}: {st.id}")
@@ -290,6 +328,21 @@ def _build(
             )
         )
         tm.add("tiles", t0)
+
+    if f0_hz is not None:
+        _write_f32(root, "tables/f0_hz.f32", f0_hz)
+        tables.append(
+            Series(
+                name="f0_hz",
+                unit="Hz",
+                path="tables/f0_hz.f32",
+                shape=list(f0_hz.shape),
+                hop_seconds=spec.hop / spec.sr,
+                row_labels=[s.id for s in stems],
+                description=f"per-stem fundamental frequency ({f0_mode}; 0 = unvoiced)",
+            )
+        )
+    score_info = plan.write(root) if plan is not None else None
 
     # ---- audio copy + manifest
     t0 = time.perf_counter()
@@ -325,6 +378,7 @@ def _build(
         dominant=dominant,
         features=features,
         tables=tables,
+        score=score_info,
     )
     (root / MANIFEST_NAME).write_text(
         m.model_dump_json(indent=2) + "\n", encoding="utf-8", newline="\n"

@@ -40,7 +40,7 @@ def test_manifest_roundtrip() -> None:
         (lambda d: d.update(audio_path="C:/x.wav"), "inside the bundle"),
         (lambda d: d["lods"][0]["tiles"][0].update(path="/etc/passwd"), "inside the bundle"),
         (lambda d: d.update(n_frames=d["n_frames"] + 1), "n_frames"),
-        (lambda d: d.update(schema_version=2), "schema_version"),
+        (lambda d: d.update(schema_version=3), "schema_version"),
         (lambda d: d.update(surprise=1), "surprise"),
         (lambda d: d["lods"][1].update(n_frames=999), "level 1"),
     ],

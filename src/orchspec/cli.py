@@ -60,8 +60,19 @@ def bundle(
     db_max: float = 6.0,
     tile_frames: int = 1024,
     overwrite: Annotated[bool, typer.Option(help="replace an existing bundle")] = False,
+    offset: Annotated[
+        float | None,
+        typer.Option(help="score/MIDI -> audio offset in seconds (skips automatic alignment)"),
+    ] = None,
+    align: Annotated[
+        bool, typer.Option(help="estimate the offset from note onsets around preroll_sec")
+    ] = True,
+    f0: Annotated[
+        str,
+        typer.Option(help="per-stem f0 tracks: auto (only without score/MIDI) | yin | pyin | off"),
+    ] = "auto",
 ) -> None:
-    """Analyse a session (mix + stems) or a single WAV into a session bundle."""
+    """Analyse a session (mix + stems, optional score.musicxml / render.mid) or a WAV."""
     from orchspec.bundle.writer import (
         BundleOptions,
         build_bundle,
@@ -83,12 +94,15 @@ def bundle(
         db_min=db_min,
         db_max=db_max,
         tile_frames=tile_frames,
+        offset=offset,
+        align=align,
+        f0=f0,
     )
     try:
         rep = build_bundle(
             inputs_from_session(s), target, opts, overwrite=overwrite, log=typer.echo
         )
-    except (FileExistsError, ValueError, RuntimeError) as e:
+    except (FileExistsError, ValueError, RuntimeError) as e:  # incl. score/MIDI errors
         typer.echo(f"error: {e}", err=True)
         raise typer.Exit(2) from e
     times = ", ".join(f"{key} {v:.1f}s" for key, v in rep.seconds.items())
