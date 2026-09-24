@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { NOTE_COLUMNS, type Manifest, type NotesTable, type ScoreMeasure } from "./bundle";
-import { NoteIndex, applyMask, measureAt, rasterizeF0, rasterizeNotes } from "./notes";
+import { NoteIndex, applyMask, measureAt, overtones, rasterizeF0, rasterizeNotes } from "./notes";
 
 // k = 1, hop/sr = 0.1 s per level-0 frame
 const M = { n_bins: 88, bins_per_octave: 12, fmin_midi: 21, hop: 100, sr: 1000 } as Manifest;
@@ -81,5 +81,27 @@ describe("bar/beat", () => {
     expect(measureAt(ms, 5.0)).toMatchObject({ number: "2", pass: 2 });
     expect(measureAt(ms, 5.0)!.beat).toBeCloseTo(2);
     expect(measureAt(ms, 7)).toBeNull();
+  });
+});
+
+describe("harmonics filter", () => {
+  const t = table([[0, 45, 0.0, 0.5]]); // A2 (bin 24 at k=1)
+  it("rasterizes overtone bands at n * f0", () => {
+    const h = rasterizeNotes(t, [0], M, 0, 0, 8, 0, () => true, overtones(4));
+    const at = (b: number): number => h[0 * 88 + b]!;
+    expect([at(24), at(36), at(43), at(48)]).toEqual([0, 1, 1, 1]); // 2f=A3, 3f=E4, 4f=A4
+  });
+  it("keeps overtones only when loud enough", () => {
+    const page = new Uint8Array(8 * 88);
+    page[24] = 200; // fundamental
+    page[36] = 180; // loud 2nd harmonic
+    page[43] = 90; // quiet 3rd harmonic
+    page[60] = 250; // unrelated energy (not a harmonic of A2 up to 4)
+    const fund = rasterizeNotes(t, [0], M, 0, 0, 8, 0);
+    const harm = rasterizeNotes(t, [0], M, 0, 0, 8, 0, () => true, overtones(4));
+    const off = applyMask(page, fund);
+    expect([off[24], off[36], off[43], off[60]]).toEqual([200, 0, 0, 0]);
+    const on = applyMask(page, fund, harm, 150);
+    expect([on[24], on[36], on[43], on[60]]).toEqual([200, 180, 0, 0]);
   });
 });

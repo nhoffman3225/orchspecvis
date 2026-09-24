@@ -103,6 +103,11 @@ time (target < 2 min CUDA) + peak VRAM.
       part/measure/beat; 88-key keyboard with sounding notes at the playhead and the
       selected part's range (data/instruments/ranges.yaml); bar/beat readout
 - [x] data/instruments/ranges.yaml populated for the standard orchestra
+- [x] Harmonics filter (2026-09-24 request, branch `phase-2b-harmonics-heat`): with
+      fundamentals on, overtones 2..16 of each note (or f0 track) pass where >= X dB
+- [x] Keyboard heat map: per-key activity with exponential decay tau; sources "sound"
+      (decay-weighted power in the key's semitone band from the displayed, filtered page)
+      and "notes" (exact decayed note-time); stateless, so seeking/scrubbing is exact
 - [x] PR for Phase 2 (#3, stacked on #2; CI green on windows + macos)
 Acceptance (met 2026-09-24, tests/test_score_bundle.py + viewer screenshots): synthetic MusicXML+MIDI+rendered audio fixture aligns within +-1 frame;
 fundamentals view keeps only the notated fundamentals on a synthetic harmonic fixture.
@@ -230,6 +235,14 @@ Acceptance: synthetic "overbalanced brass" fixture is flagged.
   so smoothing + gaps can run on fundamentals only.
 - 2026-09-24: Instrument ranges travel inside the bundle (score.parts[].range_*), so the
   viewer never parses ranges.yaml. ranges.yaml is read from the repo (not packaged yet).
+
+- 2026-09-24: Harmonics filter uses an absolute dB threshold (same scale as the display)
+  rather than "within X dB of the fundamental", so weak-fundamental instruments (low
+  brass, basses) still show their strong upper partials.
+- 2026-09-24: Heat map is computed per frame from the data around the playhead
+  (integral of input * exp(-(t-s)/tau) over the last 8 tau), not accumulated during
+  playback: identical result for play, seek and scrub. "sound" is normalized to the
+  hottest key (40 dB range), "notes" linearly to the hottest key (floor 0.5 tau).
 
 ## API drift
 

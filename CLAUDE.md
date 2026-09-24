@@ -43,7 +43,8 @@ npm test           # vitest (includes schema cross-check + no-network check)
 served by Vite, or use `orchspec serve` for a real one. `?mode=mix|stems|dominant` sets the
 initial view; also `style=surface|terrain|fabric`, `smooth=<semitones>`, `gaps=<dB>`
 (e.g. `&mode=ensemble&style=terrain&smooth=4&gaps=-45`); with a score also `notes=0`,
-`fund=1`, `fundw=25|50|100` (fundamentals-only band in cents). The cross-language test reads viewer/test-data/py-bundle, written by
+`fund=1`, `fundw=25|50|100` (fundamentals-only band in cents), `harm=<dB>` (overtones
+that loud pass too), `heat=off|sound|notes`, `tau=<s>`, and `t=<s>` (start position). The cross-language test reads viewer/test-data/py-bundle, written by
 `uv run pytest tests/test_bundle_writer.py` (git-ignored) — run pytest before vitest.
 
 On this Windows box Node comes from Scoop `nodejs-lts`, which is added to PATH by the
@@ -69,6 +70,7 @@ viewer/             Vite + TS + three.js (WebGL2 only)
   src/tiles.ts      tile LRU cache, page assembly, stem power-sum
   src/surface.ts    heightmap shader surface; src/pane2d.ts 2D pane + LUFS strip
   src/notes.ts      note index, note/f0 rasterization (overlay + fundamentals mask), bar/beat
+  src/heat.ts       keyboard heat map (decayed per-key activity from sound or notes)
   src/gaps.ts       energy-domain smoothing, sounding spans, spectral-gap detection
   src/clock.ts      Transport (AudioContext master clock); src/player.ts Web Audio
 data/instruments/   ranges.yaml (schema documented in-file)
