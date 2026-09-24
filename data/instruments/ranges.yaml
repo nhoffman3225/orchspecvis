@@ -1,0 +1,18 @@
+# Instrument ranges (Phase 2+). Empty for now.
+#
+# Schema (one entry per instrument, keyed by a stable lowercase id):
+#
+#   <instrument_id>:
+#     name: str                 # display name, e.g. "Horn in F"
+#     family: str               # woodwinds | brass | percussion | keyboards | strings | voices
+#     sounding_range: [int, int]    # MIDI note numbers, lowest..highest SOUNDING pitch
+#     practical_range: [int, int]   # optional; comfortable orchestral range (sounding)
+#     transposition: int        # semitones written -> sounding (e.g. horn in F = -7,
+#                               # piccolo = +12, double bass = -12, clarinet in Bb = -2)
+#     aliases: [str]            # names that match MusicXML <part-name>/<instrument-name>
+#                               # and stem player names (case-insensitive)
+#     source: str               # citation for the range data
+#
+# All pitches are MIDI numbers (A0 = 21, middle C = 60), matching the bundle frequency
+# axis invariant: bin b <-> midi 21 + b/k.
+{}

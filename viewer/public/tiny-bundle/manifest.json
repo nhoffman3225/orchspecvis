@@ -1,0 +1,76 @@
+{
+  "schema_version": 1,
+  "created_by": "orchspec tests/fixtures/make_tiny_bundle.py",
+  "created_at": "2026-09-24T00:00:00Z",
+  "sr": 8000,
+  "hop": 128,
+  "n_samples": 16000,
+  "duration_seconds": 2.0,
+  "fmin_midi": 21.0,
+  "bins_per_octave": 12,
+  "n_bins": 88,
+  "n_frames": 126,
+  "db_min": -96.0,
+  "db_max": 6.0,
+  "db_reference": "full_scale_sine_per_bin",
+  "lod_reduce": "max",
+  "tile_frames": 64,
+  "tile_layout": "frame_major_u8",
+  "lods": [
+    {
+      "level": 0,
+      "hop_factor": 1,
+      "n_frames": 126,
+      "tiles": [
+        {
+          "index": 0,
+          "start_frame": 0,
+          "n_frames": 64,
+          "path": "tiles/mix/L0/00000.u8"
+        },
+        {
+          "index": 1,
+          "start_frame": 64,
+          "n_frames": 62,
+          "path": "tiles/mix/L0/00001.u8"
+        }
+      ]
+    },
+    {
+      "level": 1,
+      "hop_factor": 2,
+      "n_frames": 63,
+      "tiles": [
+        {
+          "index": 0,
+          "start_frame": 0,
+          "n_frames": 63,
+          "path": "tiles/mix/L1/00000.u8"
+        }
+      ]
+    }
+  ],
+  "audio_path": "audio/mix.wav",
+  "audio_sha256": "e17b7c8267abb45d4f7c8bf9d1fa8752bd26c4edbea7e392d5b9a1c0c8e0c1b5",
+  "cqt": {
+    "backend": "hand-made",
+    "k": 1,
+    "filter_scale": 1.0,
+    "window": "hann",
+    "tuning": 0.0,
+    "frame_convention": "centered"
+  },
+  "offsets": {
+    "preroll_sec": 0.0
+  },
+  "source": {
+    "kind": "wav",
+    "name": "tiny",
+    "renderer": null,
+    "render_config": null
+  },
+  "stems": [],
+  "dominant": null,
+  "features": [],
+  "tables": []
+}
