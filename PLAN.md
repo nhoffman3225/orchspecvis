@@ -103,7 +103,7 @@ time (target < 2 min CUDA) + peak VRAM.
       part/measure/beat; 88-key keyboard with sounding notes at the playhead and the
       selected part's range (data/instruments/ranges.yaml); bar/beat readout
 - [x] data/instruments/ranges.yaml populated for the standard orchestra
-- [ ] PR for Phase 2
+- [x] PR for Phase 2 (#3, stacked on #2; CI green on windows + macos)
 Acceptance (met 2026-09-24, tests/test_score_bundle.py + viewer screenshots): synthetic MusicXML+MIDI+rendered audio fixture aligns within +-1 frame;
 fundamentals view keeps only the notated fundamentals on a synthetic harmonic fixture.
 
