@@ -1,0 +1,102 @@
+import numpy as np
+import pytest
+
+from orchspec.score.match import match_parts_to_stems, normalize
+from orchspec.score.musicxml import parse_musicxml
+from orchspec.timeline.align import (
+    TempoMap,
+    estimate_offset,
+    onset_envelope_fine,
+    pitch_agreement,
+    quarter_clock,
+)
+from orchspec.timeline.midi import parse_midi_bytes
+from tests.fixtures import make_score_session as fx
+
+FRAME = 512 / fx.SR  # bundle hop at the fixture rate
+
+
+def test_tempo_map() -> None:
+    tm = TempoMap([(0.0, 120.0), (16.0, 90.0)])
+    assert tm.seconds(16) == pytest.approx(8.0)
+    assert tm.seconds(19) == pytest.approx(10.0)
+    assert TempoMap([]).seconds(2) == pytest.approx(1.0)  # default 120
+
+
+def test_midi_and_score_clocks_agree(tmp_path) -> None:  # type: ignore[no-untyped-def]
+    p = tmp_path / "s.musicxml"
+    p.write_text(fx.musicxml(), encoding="utf-8")
+    score = parse_musicxml(p)
+    midi = parse_midi_bytes(fx.render_mid())
+    by_midi, src = quarter_clock(score, midi)
+    by_score, src2 = quarter_clock(score, None)
+    assert (src, src2) == ("midi", "score_tempo")
+    for q in (0, 5, 16, 21.5, 24):
+        assert by_midi(q) == pytest.approx(fx.q_to_seconds(q))
+        assert by_score(q) == pytest.approx(fx.q_to_seconds(q))
+
+
+def test_pitch_agreement_detects_written_pitch_midi(tmp_path) -> None:  # type: ignore[no-untyped-def]
+    p = tmp_path / "s.musicxml"
+    p.write_text(fx.musicxml(), encoding="utf-8")
+    score = parse_musicxml(p)
+    good = pitch_agreement(score, parse_midi_bytes(fx.render_mid()))
+    assert good.agreement == 1.0 and good.compared == len(score.notes)
+    # a MIDI file one octave off (e.g. written-pitch export) is reported with its shift
+    from tests.fixtures.smf import write_smf
+
+    shifted = write_smf(
+        fx.PPQ,
+        [(0, 120.0)],
+        [
+            (
+                "all",
+                [
+                    (
+                        round(n.onset_q * fx.PPQ),
+                        round((n.onset_q + n.dur_q) * fx.PPQ),
+                        0,
+                        int(n.midi) + 12,
+                        90,
+                    )
+                    for n in score.notes
+                ],
+            )
+        ],
+    )
+    bad = pitch_agreement(score, parse_midi_bytes(shifted))
+    # a few notes still match by coincidence (octave doublings between parts)
+    assert bad.agreement < 0.5 and bad.shift_mode == 12
+
+
+def test_offset_recovered_within_one_frame() -> None:
+    mix, _ = fx.render_audio()
+    env, fsec = onset_envelope_fine(mix, fx.SR)
+    onsets = np.array([t["onset_s"] for t in fx.truth_notes()])
+    est = estimate_offset(env, fsec, onsets, prior=fx.PREROLL)
+    assert est.method == "xcorr" and est.confidence > 0.3
+    assert abs(est.offset_sec - fx.OFFSET) < FRAME, est
+
+
+def test_offset_with_wrong_prior_is_still_found_inside_window() -> None:
+    mix, _ = fx.render_audio()
+    env, fsec = onset_envelope_fine(mix, fx.SR)
+    onsets = np.array([t["onset_s"] for t in fx.truth_notes()])
+    est = estimate_offset(env, fsec, onsets, prior=0.0, search=1.5)
+    assert abs(est.offset_sec - fx.OFFSET) < FRAME
+
+
+def test_no_onsets_falls_back_to_prior() -> None:
+    est = estimate_offset(np.zeros(100), 0.01, np.array([]), prior=0.25)
+    assert est.offset_sec == 0.25 and est.method == "preroll_only" and est.warnings
+
+
+def test_name_matching() -> None:
+    assert normalize("Clarinet in B♭ 1") == "clarinet 1"
+    assert normalize("01_Violins I") == normalize("Violin 1")
+    m = match_parts_to_stems(
+        ["Violin I", "Horn in F 1", "Timpani"], ["03_Timp", "01_Violins I", "02_Horn 1"]
+    )
+    assert [(x.stem_index, x.method) for x in m] == [(1, "name"), (2, "name"), (0, "order")]
+    m2 = match_parts_to_stems(["Flute", "Oboe"], ["01_Tuba"])
+    assert [x.method for x in m2] == ["none", "none"]
