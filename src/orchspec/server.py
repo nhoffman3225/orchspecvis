@@ -126,8 +126,8 @@ def serve(bundle_root: Path, viewer_dist: Path | None = None) -> None:  # pragma
     app = create_app(bundle_root, token, viewer_dist)
     sock = bind_socket()
     port = sock.getsockname()[1]
-    print(f"orchspec serve: http://{LOCALHOST}:{port}/?token={token}&bundle=bundle/")
-    print("(local only; Ctrl+C to stop)")
+    print(f"orchspec serve: http://{LOCALHOST}:{port}/?token={token}&bundle=bundle/", flush=True)
+    print("(local only; Ctrl+C to stop)", flush=True)
     config = uvicorn.Config(
         app, log_level="warning", proxy_headers=False, server_header=False, date_header=False
     )
