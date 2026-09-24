@@ -71,4 +71,5 @@ addopts = "--disable-socket --allow-hosts=127.0.0.1,localhost -ra"
 markers = [
     "gpu: requires CUDA (skipped when unavailable)",
     "slow: long-running perf smoke tests",
+    "real: uses private sessions in session/ (local only; run with -m real)",
 ]

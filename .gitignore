@@ -7,6 +7,9 @@ tests/fixtures/real/
 *.aiff
 *.dorico
 *.cpr
+*.mid
+*.midi
+*.mxl
 out/
 bundles/
 *.bundle/

@@ -106,3 +106,35 @@ def test_manual_offset_and_f0_tracks_without_score(tmp_path: Path) -> None:
 
 def m_sr(rep) -> int:  # type: ignore[no-untyped-def]
     return rep.manifest.sr
+
+
+def test_report_on_synthetic_session(bundle, tmp_path: Path) -> None:  # type: ignore[no-untyped-def]
+    from orchspec.report import build_report, to_markdown
+
+    root, _ = bundle
+    rep = build_report(root)
+    status = {c.name: c.status for c in rep.checks}
+    assert status["midi_sounding_pitch"] == "PASS"
+    assert status["time_origin"] == "PASS"
+    assert status["notes_inside_audio"] == "PASS"
+    assert status["notes_in_instrument_range"] == "PASS"
+    assert status["stem_separation"] == "PASS"  # synthetic stems are perfectly dry
+    bass = next(r for r in rep.parts if r.name == "Double Bass")
+    assert bass.weak_f0_pct == 100 and bass.stem_match == "name"
+    assert all(r.weak_f0_pct == 0 for r in rep.parts if r.name != "Double Bass")
+    md = to_markdown(rep)
+    assert "| midi_sounding_pitch | PASS |" in md and "Double Bass" in md
+
+
+def test_cli_report(bundle, tmp_path: Path) -> None:  # type: ignore[no-untyped-def]
+    from typer.testing import CliRunner
+
+    from orchspec.cli import app
+
+    root, _ = bundle
+    copy = tmp_path / "copy.bundle"
+    shutil.copytree(root, copy)
+    r = CliRunner().invoke(app, ["report", str(copy)])
+    assert r.exit_code == 0, r.output
+    assert "[PASS] midi_sounding_pitch" in r.output
+    assert (copy / "report.md").is_file() and (copy / "report.json").is_file()

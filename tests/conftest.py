@@ -31,3 +31,13 @@ BACKEND_PARAMS = [
 @pytest.fixture(params=BACKEND_PARAMS)
 def backend(request: pytest.FixtureRequest):  # type: ignore[no-untyped-def]
     return get_backend(request.param, device=TORCH_DEVICE)
+
+
+def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item]) -> None:
+    """`real` tests touch private local sessions: run them only when asked (-m real)."""
+    if "real" in (config.getoption("-m") or ""):
+        return
+    skip = pytest.mark.skip(reason="local-only real-session test; run with -m real")
+    for item in items:
+        if "real" in item.keywords:
+            item.add_marker(skip)

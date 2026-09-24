@@ -38,7 +38,7 @@ jobs:
           uv run pyright
 
       - name: pytest
-        run: uv run pytest -m "not gpu and not slow"
+        run: uv run pytest -m "not gpu and not slow and not real"
 
       - name: Viewer install
         working-directory: viewer

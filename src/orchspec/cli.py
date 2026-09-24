@@ -113,6 +113,22 @@ def bundle(
 
 
 @app.command()
+def report(
+    bundle_dir: Annotated[Path, typer.Argument(help="a .bundle directory")],
+) -> None:
+    """Check a bundle's score alignment and assumptions; writes report.md/.json into it."""
+    from orchspec.report import write_report
+
+    if not (bundle_dir / "manifest.json").is_file():
+        typer.echo(f"error: {bundle_dir} is not a bundle directory", err=True)
+        raise typer.Exit(2)
+    rep, md, _ = write_report(bundle_dir)
+    for c in rep.checks:
+        typer.echo(f"[{c.status:4}] {c.name}: {c.detail}")
+    typer.echo(f"wrote {md}")
+
+
+@app.command()
 def serve(
     bundle_dir: Annotated[Path, typer.Argument(help="a .bundle directory")],
     viewer_dist: Annotated[Path | None, typer.Option(help="built viewer (viewer/dist)")] = None,

@@ -28,8 +28,10 @@ against measured live-orchestra balance.
 Runtime: librosa, soundfile, numpy, pyloudnorm, pydantic, typer, fastapi (+ uvicorn as
 its server), pyyaml, defusedxml. Extra `gpu`: torch (cu130 index on non-darwin).
 Extra `dev`: ruff, pyright, pytest, pytest-socket, hypothesis, httpx (FastAPI TestClient).
-Viewer: three, vite, typescript, vitest, eslint (+ typescript-eslint), @types/three.
-Deferred until approved: pyarrow (Parquet side tables), verovio, Playwright.
+Viewer: three, vite, typescript, vitest, eslint (+ typescript-eslint), @types/three,
+@eslint/js, @types/node. Approved 2026-09-24: verovio (LGPL-3.0, bundled wasm, Phase 3
+score view), @playwright/test (dev, E2E). Python additions approved in use: uvicorn, httpx.
+Deferred until approved: pyarrow (Parquet side tables).
 
 ## Phases
 
@@ -119,23 +121,31 @@ time (target < 2 min CUDA) + peak VRAM.
 Acceptance (met 2026-09-24, tests/test_score_bundle.py + viewer screenshots): synthetic MusicXML+MIDI+rendered audio fixture aligns within +-1 frame;
 fundamentals view keeps only the notated fundamentals on a synthetic harmonic fixture.
 
-### Phase 3 — alignment & score view  (branch `phase-3-alignment`)
-0. Real-session validation (gate for the rest; needs a Dorico+NP5 and a Cubase+BBCSO
-   session in git-ignored session/):
-- [ ] Bundle both; record alignment offset/confidence, pitch agreement + shift, stem
-      matches, weak-fundamental rate per section; resolve or re-scope each Phase 2
-      "Unverified assumption" in this file
+### Phase 3A — Dorico sessions & drift-aware alignment  (branch `phase-3-alignment`)
+Decision 2026-09-24: Dorico + NotePerformer 5 first; Cubase + BBCSO moves after Phase 3.
+Real sessions stay LOCAL (git-ignored session/, tests/fixtures/real/); tests that use them
+carry the `real` marker and never run in CI.
+0. Real-session validation (gate; needs a Dorico + NP5 session in session/, see
+   docs/dorico-session.md):
+- [ ] `orchspec report <bundle>`: alignment, pitch agreement/shift, part<->stem matches,
+      notes and weak-fundamental rate per part, warnings (Markdown + JSON)
+- [ ] `real`-marked local tests that bundle + report every folder in session/
+- [ ] Bundle the Dorico session; resolve or re-scope each Phase 2 "Unverified assumption"
+- [ ] Dorico export importer (rename exported files into the session layout) once the real
+      file names are known
 1. Drift-aware alignment
 - [ ] Synthetic drift fixtures first: gradual tempo drift, rubato, per-part latency
       (e.g. +60 ms legato brass), pickup bar, missing/extra notes
 - [ ] Score-informed DTW: synthesize a chroma/CQT template from the notes, DTW against the
       audio's CQT (GPU-friendly), onset-refined; piecewise-linear warp map
-- [ ] Per-part (per-stem) latency estimate against its own stem (BBCSO articulation delays)
+- [ ] Per-part (per-stem) latency estimate against its own stem (NotePerformer
+      articulation lag; later BBCSO)
 - [ ] Schema v3: `score.alignment.warp` [(score_s, audio_s)] + per-part offsets; notes
       stay in audio seconds; viewer shows alignment confidence over time
   Acceptance: synthetic drift fixtures align every note within +-1 frame (hop 512 @ 48k)
+### Phase 3 (cont.) — score view, registers, scale
 2. Engraved score view
-- [ ] Verovio (bundled wasm via Vite; LGPL-3.0 — needs approval) renders the MusicXML;
+- [ ] Verovio (bundled wasm via Vite; LGPL-3.0, approved 2026-09-24) renders the MusicXML;
       follows the playhead (page/system turns), highlights sounding notes by part color,
       click a note/measure -> seek; part filter shared with the piano view
 - [ ] Map Verovio element ids <-> bundle notes (part/staff/voice/measure/beat), incl.
@@ -150,7 +160,9 @@ fundamentals view keeps only the notated fundamentals on a synthetic harmonic fi
       ~460 MB of decoded audio
 - [ ] Compressed tiles (gzip + DecompressionStream) and/or stems from LOD 1 (schema v3)
 - [ ] Viewer page assembly, smoothing, stem sums in a Web Worker
-- [ ] Playwright E2E smoke + network check (needs approval as a dev dependency)
+- [ ] Playwright E2E smoke + network check (@playwright/test approved 2026-09-24)
+
+- [ ] Cubase + BBC SO Pro sessions (moved from 3A)
 
 ### Phase 3b — Rust core + Tauri desktop
 - [ ] rust/orchspec-core: bundle read/write (docs/bundle-format.md), LOD build, xcorr;
