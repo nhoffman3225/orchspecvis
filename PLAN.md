@@ -1,0 +1,159 @@
+# orchspec — plan
+
+Status legend: `[x]` done, `[ ]` open, `[~]` partial. Dates are ISO (YYYY-MM-DD).
+
+## Goal
+
+Input: a session folder per render (Dorico+NotePerformer 5 or Cubase+BBC SO Pro):
+`mix.wav`, `stems/NN_<Player>.wav` (dry, same start/length), `render.mid` (tempo track),
+`score.musicxml`, `render.yaml`. `mix.wav` alone must also work. Scores: solo .. ~100
+staves / 20 min. Output: interactive viewer — 3D CQT surface (time x pitch x dB) with synced
+playback; later score overlays, 88-key keyboard with ranges + sounding notes, register
+distribution, MusicXML<->MIDI<->audio alignment with Verovio highlighting, realism check
+against measured live-orchestra balance.
+
+## Architecture (fixed; deviations need a dated reason here)
+
+- Python >=3.12 core `src/orchspec/` (uv, ruff, pyright, pytest) writes a versioned
+  **session bundle** (docs/bundle-format.md). The bundle is the only contract.
+- Viewer `viewer/`: Vite + TS + three.js, WebGL2 only (WKWebView portability), one WebGL
+  context, heightmap texture displacing a ~2048 x n_bins grid in the vertex shader for the
+  visible window. AudioContext is the master clock (getOutputTimestamp when available).
+- `orchspec serve`: dev-only read-only FastAPI on 127.0.0.1 (replaced by Tauri 2 in 3b).
+- Phase 3b: `rust/orchspec-core` (bundle io, LOD, xcorr) + PyO3; `desktop/` Tauri 2 app
+  (Windows + macOS).
+
+## Dependencies (approved list; ask before adding others)
+
+Runtime: librosa, soundfile, numpy, pyloudnorm, pydantic, typer, fastapi (+ uvicorn as
+its server), pyyaml, defusedxml. Extra `gpu`: torch (cu130 index on non-darwin).
+Extra `dev`: ruff, pyright, pytest, pytest-socket, hypothesis, httpx (FastAPI TestClient).
+Viewer: three, vite, typescript, vitest, eslint (+ typescript-eslint), @types/three.
+Deferred until approved: pyarrow (Parquet side tables), verovio, Playwright.
+
+## Phases
+
+### Phase 0 — scaffold  (branch `phase-0-scaffold`)
+- [ ] CLAUDE.md, PLAN.md, git init, .gitignore, .gitattributes, first commit, private GitHub repo
+- [ ] uv package: pinned .python-version, extras gpu/dev, cu130 index, uv.lock committed
+- [ ] Layout: cli.py, io/, dsp/, bundle/, score/, timeline/, viewer/, tests/,
+      data/instruments/ranges.yaml (schema comment), rust/ + desktop/ READMEs, SECURITY.md
+- [ ] io/session.py: RenderConfig (render.yaml) pydantic model; validate stems same
+      sr/length/channels-compat as mix; clear errors; `orchspec session-template`
+- [ ] bundle/schema.py: manifest v1 (+ docs/bundle-format.md)
+- [ ] tests/fixtures/make_synthetic.py: sweep A1->A7 10 s, A4, C4, click train, pink noise
+- [ ] Viewer skeleton: loads hand-made tiny bundle, renders flat surface
+- [ ] CI workflow (windows-latest + macos-latest)
+- [ ] PR for Phase 0
+
+Acceptance: `uv sync --locked --extra dev` + `uv run pytest` green on Windows; `npm ci &&
+npm test && npm run build` green; CI green on both OSes.
+
+### Phase 1 — MVP  (branch `phase-1-mvp`)
+- [ ] dsp/cqt.py: CQTSpec; librosa backend (fmin A0, bpo 12k, k in {1,3}, A0..C8);
+      torch backend (hand-written kernel CQT) behind `--backend torch`
+- [ ] dsp/tiles.py: dB, clamp, uint8 quantize, LOD pyramid, tile writer
+- [ ] dsp/features.py: short-term LUFS (BS.1770 K-weighting via pyloudnorm filters),
+      spectral centroid, onset envelope
+- [ ] `orchspec bundle <wav|session_dir> -o out/x.bundle`: mix + stems on one axis,
+      per-stem low-LOD energy table, dominant-stem tiles
+- [ ] `orchspec serve`: hardened (token, TrustedHost, 127.0.0.1, random port, no CORS,
+      read-only, root confinement)
+- [ ] Viewer: heightmap shader, colormap, orbit camera, playhead plane, linked 2D CQT pane
+      with MIDI/pitch-name axis, play/pause/seek, LUFS strip, stem toggles,
+      color-by-dominant-stem
+- [ ] Required tests (see "Exit gate") + perf smoke numbers recorded below
+- [ ] PR for Phase 1
+
+Exit gate tests: test_cqt_axes, test_click_alignment, test_tiles_roundtrip,
+test_torch_vs_librosa (gpu/torch), test_bundle_schema (py writer -> vitest parse),
+test_session_validation, test_no_network (pytest-socket + vitest request guard),
+test_serve_hardening, perf smoke (slow): 20 min 48 kHz mix + 30 stems, CPU and CUDA wall
+time (target < 2 min CUDA) + peak VRAM.
+
+### Phase 2 — score & timeline
+- [ ] score/: MusicXML (+ .mxl with zip size/path checks) via defusedxml/lxml safe parser;
+      parts/staves/voices kept distinct; transposition to sounding pitch
+- [ ] timeline/: render.mid tempo map; score time -> audio seconds; repeats (repeat barlines
+      + n-th endings only; segno/coda/D.C./D.S. detected -> stop with clear message)
+- [ ] Note events table in bundle (part, staff, voice, midi, onset_s, offset_s, measure, beat)
+- [ ] Viewer: note overlays on surface + 2D pane; 88-key keyboard with instrument ranges
+      (data/instruments/ranges.yaml) and sounding notes
+- [ ] Offset estimation audio<->MIDI (onset xcorr) with synthetic tests
+Acceptance: synthetic MusicXML+MIDI+rendered audio fixture aligns within +-1 frame.
+
+### Phase 3 — alignment & score view
+- [ ] Verovio (bundled wasm) score rendering, highlight at playhead
+- [ ] MusicXML<->MIDI<->audio alignment (DTW on chroma/CQT where offsets drift)
+- [ ] Register-distribution views (per section/stem pitch histograms over time windows)
+- [ ] Streaming audio playback (AudioWorklet chunks) for 20-min sessions
+Acceptance: highlighting stays within one beat on a 20-min fixture.
+
+### Phase 3b — Rust core + Tauri desktop
+- [ ] rust/orchspec-core: bundle read/write (docs/bundle-format.md), LOD build, xcorr;
+      PyO3 bindings; cross-check against Python writer byte-for-byte
+- [ ] desktop/: Tauri 2 app replacing `orchspec serve` (custom protocol, same CSP),
+      Windows + macOS builds
+Acceptance: same bundle opens identically in Tauri on Windows and macOS.
+
+### Phase 4 — realism check
+- [ ] Balance model from measured live-orchestra data (per section level/spectral balance)
+- [ ] Compare mockup stems/sections vs reference; report deviations over time
+Acceptance: synthetic "overbalanced brass" fixture is flagged.
+
+### Phase 5 — polish
+- [ ] Performance for 100 staves / 20 min; accessibility; docs; packaging
+
+## Unverified assumptions
+
+- Dorico audio export and MIDI export share time origin (sample 0 == MIDI tick 0)?
+  Preroll handling via render.yaml `preroll_sec`.
+- Dorico MIDI export writes sounding pitch (not written pitch) for transposing instruments.
+- MusicXML `<transpose>` / `<concert-score>` / `<octave-change>` semantics as exported by
+  Dorico (concert vs transposed score export).
+- NotePerformer ~1 s lookahead is compensated in exported audio; ~25 ms residual offset.
+- nnAudio2 agreement with librosa (not used; hand-written torch CQT instead).
+- NotePerformer 5 per-player export gives clean per-player separation (no bleed, no shared
+  reverb tail) when `reverb_in_stems: false`.
+- Dorico condensing/divisi MusicXML export: is the 2nd divisi staff blank in unison?
+- Cubase MIDI export preserves Dorico's tempo map.
+- BBC SO per-articulation onset delays (sample start offsets) — magnitude and whether
+  Cubase compensates.
+- Stems sum approximately to mix when `mix_edited: false` (used later for balance checks).
+
+## Decision log
+
+- 2026-09-24: PyTorch index `pytorch-cu130` (uv guide's current recommendation; >= cu128
+  required for sm_120 Blackwell). Mapped via [tool.uv.sources] with
+  `sys_platform != 'darwin'`; macOS gets PyPI torch (MPS/CPU).
+- 2026-09-24: Python pinned to 3.13 in .python-version (requires-python >=3.12): widest
+  wheel coverage for torch/soundfile/soxr on both OSes; 3.14 is newer than needed.
+- 2026-09-24: n_bins = 88*k covering MIDI 21 .. 108+(k-1)/k (A0..C8 inclusive, top bins
+  at C8 and above it for k=3). Keeps "88 keys" == 88 semitone rows.
+- 2026-09-24: Frame convention: centered frames, frame t is centered at sample t*hop;
+  n_frames = 1 + floor(n_samples / hop). Default hop 512 @ 48 kHz (~10.7 ms); hop must be
+  a multiple of 2^(n_octaves-1)=128 for multirate CQT.
+- 2026-09-24: Side tables: Phase 1 uses JSON (metadata) + little-endian float32 raw
+  arrays (`.f32`, shape in manifest) instead of Parquet, to avoid adding pyarrow and to keep
+  the format trivially readable from TS/Rust. Parquet can come later with approval.
+- 2026-09-24: Manifest extends the required v1 fields with `stems[]` (each with its own
+  `lods`), `dominant` (per-LOD uint8 stem-index tiles), `features[]`, `offsets`, `source`.
+  Top-level `lods` is always the mix track. Reason: stems must share axis/time base with the
+  mix, and "color by dominant stem" needs per-cell argmax that is cheap in Python and
+  expensive in the browser.
+- 2026-09-24: `orchspec serve` auth: token in `?token=` on first load sets an HttpOnly
+  SameSite=Strict cookie; subsequent requests may use cookie, `X-Orchspec-Token` header or
+  query param. Needed because `<script src>` cannot send custom headers.
+- 2026-09-24: Mix audio is copied into the bundle (`audio/mix.<ext>`) so the bundle is
+  self-contained and `serve` never reads outside the bundle root.
+
+## API drift
+
+(Record here whenever an installed library differs from what the original prompt assumed.)
+
+## Perf numbers
+
+(filled in by the slow perf smoke)
+
+## Open issues
+

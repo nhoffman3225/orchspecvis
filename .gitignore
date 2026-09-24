@@ -1,0 +1,34 @@
+# private material — never commit
+session/
+tests/fixtures/real/
+*.wav
+*.flac
+*.mp3
+*.aiff
+*.dorico
+*.cpr
+out/
+bundles/
+*.bundle/
+.cache/
+.env*
+.claude/settings.local.json
+
+# python
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.ruff_cache/
+.hypothesis/
+
+# node / viewer
+node_modules/
+viewer/dist/
+
+# rust
+target/
+
+# os
+.DS_Store
+Thumbs.db

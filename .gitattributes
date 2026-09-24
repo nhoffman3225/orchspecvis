@@ -1,0 +1,15 @@
+* text=auto eol=lf
+*.wav binary
+*.flac binary
+*.mp3 binary
+*.aiff binary
+*.ogg binary
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.npy binary
+*.u8 binary
+*.f32 binary
+*.woff2 binary
