@@ -51,7 +51,7 @@ class StreamProcessor extends AudioWorkletProcessor {
     if (++this.quanta % REPORT_EVERY === 0) {
       const p = this.q.position(currentFrame);
       if (p) this.feeder?.postMessage(p satisfies PositionMessage);
-      if (this.quanta % (REPORT_EVERY * 4) === 0) this.port.postMessage({ underruns: this.q.underruns });
+      if (this.quanta % (REPORT_EVERY * 4) === 0) this.port.postMessage({ underruns: this.q.underruns, state: this.q.describe(currentFrame), feeder: !!this.feeder });
     }
     return true;
   }
