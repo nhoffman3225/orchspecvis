@@ -74,3 +74,16 @@ describe("pitch axis", () => {
     expect(axisLabel(24, "hz")).toBe("33 Hz");
   });
 });
+
+describe("fundamentals overlapped by partials", () => {
+  it("marks a written pitch that another note's harmonic lands on", async () => {
+    const { overlappedFundamentals } = await import("./registerview");
+    const keys = 88, frames = 1;
+    const fund = new Uint8Array(2 * frames * keys);
+    fund[0 * keys + 20] = 1; // group 0: key 20
+    fund[1 * keys + 32] = 1; // group 1: key 32 = octave (2nd harmonic) above key 20
+    fund[1 * keys + 33] = 1; // key 33: no harmonic of 20 or 32 lands here
+    const got = overlappedFundamentals(fund, 2, frames, 0, keys);
+    expect([...got]).toEqual([32]);
+  });
+});

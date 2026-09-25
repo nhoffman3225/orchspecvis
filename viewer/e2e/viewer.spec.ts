@@ -151,6 +151,9 @@ test("register view: sections from stem spectra and from the score", async ({ pa
   await page.locator("#reg-partials").selectOption("dots"); // partials patterned, fundamentals solid
   await page.locator("#reg-axis").selectOption("both");
   await expect(page.locator("html")).toHaveAttribute("data-registers", /^sound:[1-9]/);
+  // by section, the score's fundamentals are drawn solid (regression: family key match)
+  await expect.poll(async () => Number(await page.locator("#regcanvas").getAttribute("data-fund-bars")))
+    .toBeGreaterThan(0);
   await page.locator("#reg-src").selectOption("notes");
   await page.locator("#reg-by").selectOption("each");
   await expect(page.locator("html")).toHaveAttribute("data-registers", "notes:4"); // 4 parts

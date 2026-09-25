@@ -704,7 +704,7 @@ async function main(): Promise<void> {
     const fams = names.map(familyOf);
     const present = FAMILIES.filter((f) => fams.includes(f));
     return { groupOf: fams.map((f) => present.indexOf(f)),
-      groups: present.map((f: Family) => ({ label: f[0]!.toUpperCase() + f.slice(1), color: FAMILY_COLORS[f] })) };
+      groups: present.map((f: Family) => ({ key: f, label: f[0]!.toUpperCase() + f.slice(1), color: FAMILY_COLORS[f] })) };
   };
   function buildRegisters(): Promise<void> {
     return busy.while("registers", buildRegistersNow());
@@ -746,7 +746,7 @@ async function main(): Promise<void> {
           if (!partsVisible.has(p)) return -1;
           if (!byFamily) return stemOf[p] ?? -1;
           const f = familyOf(parts[p]?.instrument || parts[p]?.name || "");
-          return fg.groups.findIndex((g2) => g2.label === f);
+          return fg.groups.findIndex((g2) => g2.key === f); // the family, not the display label
         };
         fund = notesGrid(notes, groupOfPart, groups.length, frames, frameSec);
       }
