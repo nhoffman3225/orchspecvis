@@ -42,9 +42,9 @@ npm run lint       # eslint + tsc --noEmit
 npm test           # vitest (includes schema cross-check + no-network check)
 npm run e2e        # Playwright (needs viewer/test-data from `uv run pytest`); PW_CHANNEL=msedge locally
 E2E_URL="<orchspec serve URL>" PW_CHANNEL=msedge npx playwright test real   # LOCAL real session
-cargo test -p orchspec-core   # Rust bundle core (needs MSVC build tools on Windows)
+cargo test -p orchspec-core   # Rust bundle core (Windows: VS 'Desktop development with C++')
 uv run python scripts/credits.py  # regenerate CREDITS.md + viewer licence texts after dependency changes
-npm --prefix desktop run dev  # Tauri desktop app (desktop/README.md)
+npm --prefix desktop run build  # desktop app -> target/release/orchspec-desktop.exe (desktop/README.md)
 ```
 
 `npm run dev` shows viewer/public/tiny-bundle; add `?bundle=/path/` for another bundle

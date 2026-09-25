@@ -9,8 +9,10 @@
 //! stems recomputed in Rust.
 
 use orchspec_core::manifest::{Manifest, TileEncoding};
-use orchspec_core::tiles::{decode_tile, encode_tile, lod_frame_counts, pool_max, pyramid, read_level, write_level};
 use orchspec_core::open_bundle;
+use orchspec_core::tiles::{
+    decode_tile, encode_tile, lod_frame_counts, pool_max, pyramid, read_level, write_level,
+};
 use std::path::{Path, PathBuf};
 
 fn repo() -> PathBuf {
@@ -31,8 +33,11 @@ fn check_bundle(root: &Path) -> Manifest {
         let floor = quantize(d.floor_db, m.db_min, m.db_max);
         for (lv, dl) in d.lods.iter().enumerate() {
             let got = read_level(root, dl, n_bins, m.tile_encoding).unwrap();
-            let stems: Vec<Vec<u8>> =
-                m.stems.iter().map(|s| read_level(root, &s.lods[lv], n_bins, m.tile_encoding).unwrap()).collect();
+            let stems: Vec<Vec<u8>> = m
+                .stems
+                .iter()
+                .map(|s| read_level(root, &s.lods[lv], n_bins, m.tile_encoding).unwrap())
+                .collect();
             let mut best = vec![0u8; got.len()];
             let mut want = vec![d.none_value as u8; got.len()];
             for (si, st) in stems.iter().enumerate() {
@@ -90,7 +95,8 @@ fn manifest_round_trips_through_serde() {
 }
 
 fn tiny_json() -> serde_json::Value {
-    serde_json::from_slice(&std::fs::read(repo().join("viewer/public/tiny-bundle/manifest.json")).unwrap()).unwrap()
+    serde_json::from_slice(&std::fs::read(repo().join("viewer/public/tiny-bundle/manifest.json")).unwrap())
+        .unwrap()
 }
 
 #[test]

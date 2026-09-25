@@ -233,14 +233,16 @@ carry the `real` marker and never run in CI.
 - [x] desktop/: Tauri 2 shell — one custom protocol for viewer + bundle (same origin, same
       CSP), File › Open Bundle (native dialog) or CLI arg, no IPC permissions, navigation
       locked to the app origin, no updater
-- [ ] Local build: needs MSVC Build Tools on this machine (CI builds it on windows-latest)
+- [x] Local build (2026-09-25): rustup stable + VS 2026 C++ workload; release app 14 MB,
+      Beethoven 5 i bundle opens with the first spectrogram page in 130 ms and audio
+      ready to stream in 150 ms; checked through WebView2's DevTools port with Playwright
+- [ ] Import sessions from the app (today: `orchspec bundle` CLI, then File › Open)
 - [ ] macOS build + .dmg in CI (macOS minutes are 10x: on main pushes only)
 - [ ] Desktop release notices: ship the licence texts of the Rust crates compiled into the
       app (generated from `cargo metadata`, like scripts/credits.py) alongside the viewer's
       licenses/THIRD-PARTY.txt; 5 MPL-2.0 crates are used unmodified (file-level copyleft)
 - [ ] xcorr / alignment in Rust; PyO3 bindings (+ maturin) once the Python writer uses it
-- [ ] rustfmt/clippy locally (CI runs clippy -D warnings; rustfmt check once rustfmt is
-      available locally)
+- [x] rustfmt + clippy locally and in CI (rust-core job: fmt --check, test, clippy)
 Acceptance: same bundle opens identically in Tauri on Windows and macOS.
 
 ### Phase 3c — Cubase (after the desktop app; decision 2026-09-25)

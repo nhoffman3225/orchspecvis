@@ -12,5 +12,6 @@ tauri-build = { version = "2.6.3", features = [] }
 
 [dependencies]
 orchspec-core = { path = "../../rust/orchspec-core" }
-tauri = { version = "2.11.6", features = [] }
+# custom-protocol: embed the viewer build (the app never uses a dev server URL)
+tauri = { version = "2.11.6", features = ["custom-protocol"] }
 tauri-plugin-dialog = "2.7.3"
