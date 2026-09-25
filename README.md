@@ -30,3 +30,7 @@ open-source work — see [CREDITS.md](CREDITS.md) (also shown in the viewer unde
 **ⓘ credits**, together with the full licence texts of everything the viewer ships).
 The score view bundles [Verovio](https://www.verovio.org) (LGPL-3.0-or-later) unmodified,
 as a separate, replaceable file.
+
+## Note
+
+This is a vibe-coded personal project build to test Opus 5.5 so don't expect much lol
