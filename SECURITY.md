@@ -51,6 +51,13 @@ no reason to talk to the network.
   repository settings for immediate fixes of newly disclosed vulnerabilities.
 - **Lockfiles are committed and enforced** (`uv sync --locked`, `npm ci`, `cargo --locked`);
   GitHub Actions are pinned to release tags.
+- **Desktop builds ship the analysis runtime** (`scripts/build_runtime.py`): uv's
+  standalone CPython plus exactly the packages in `uv.lock`, installed from a PEP 751
+  `pylock.toml` export (pinned wheel URLs, SHA-256 checked); nothing is installed or
+  downloaded at run time. The app starts it with `-P` (working folder not on the import
+  path), `PYTHONNOUSERSITE=1`, and without `PYTHONPATH` / `PYTHONHOME`, so a Python the
+  user has installed cannot leak in. Release builds attach SHA-256 sums; they are not
+  code-signed yet.
 - **New dependencies need approval** (PLAN.md "Dependencies") and must pass the licence
   policy (MIT project; see CREDITS.md).
 - Locally: `uvx pip-audit -r <(uv export --frozen --all-extras --no-hashes --no-emit-project)`,

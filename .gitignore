@@ -32,6 +32,10 @@ viewer/dist/
 # rust
 target/
 
+# desktop: bundled analysis runtime (scripts/build_runtime.py)
+desktop/runtime/
+dist/
+
 # os
 .DS_Store
 Thumbs.db

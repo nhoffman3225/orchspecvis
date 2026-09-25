@@ -46,6 +46,7 @@ cargo test -p orchspec-core   # Rust bundle core (Windows: VS 'Desktop developme
 uv run python scripts/credits.py  # regenerate CREDITS.md + viewer licence texts after dependency changes
 cargo deny check              # Rust supply chain (advisories, licences, sources; deny.toml)
 npm --prefix desktop run build  # desktop app -> target/release/orchspec-desktop.exe (desktop/README.md)
+npm --prefix desktop run dist   # installer with the bundled analysis runtime (CPU); dist:gpu = CUDA portable .7z
 ```
 
 `npm run dev` shows viewer/public/tiny-bundle; add `?bundle=/path/` for another bundle

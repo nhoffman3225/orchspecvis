@@ -1,0 +1,100 @@
+name: release
+
+# Precompiled desktop builds. A version tag (v0.2.0) builds the installers and attaches
+# them to a *draft* GitHub Release to check and publish by hand; "Run workflow" builds
+# them as run artifacts only. Each installer carries the analysis runtime
+# (scripts/build_runtime.py), so no Python install is needed to import sessions.
+#   windows  x64 NSIS installer, CPU analysis (numpy/librosa)
+#   macos    Apple-silicon .dmg + torch (MPS; the macOS torch wheel is small)
+# The NVIDIA (CUDA torch) build is not published: ~1.8 GB even as .7z, next to GitHub's
+# 2 GiB per-file limit and over NSIS's 2 GB. Build it locally: `npm run dist:gpu` in
+# desktop/ (portable .7z; see desktop/README.md).
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+
+env:
+  CARGO_INCREMENTAL: 0
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: windows-latest, variant: cpu, runtime: "--no-gpu" }
+          - { os: macos-latest, variant: mps, runtime: "--gpu" }
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: |
+            viewer/package-lock.json
+            desktop/package-lock.json
+
+      - uses: astral-sh/setup-uv@v10.2.0
+
+      - name: Analysis runtime (${{ matrix.variant }})
+        run: uv run --locked python scripts/build_runtime.py ${{ matrix.runtime }} --check
+
+      - name: Viewer build
+        working-directory: viewer
+        run: |
+          npm ci
+          npm run build
+
+      - name: Desktop app + installer
+        working-directory: desktop
+        run: |
+          npm ci
+          npx tauri build --config src-tauri/tauri.dist.conf.json
+
+      - name: Collect
+        shell: bash
+        run: |
+          mkdir -p dist
+          v="${GITHUB_REF_NAME#v}"
+          for f in target/release/bundle/nsis/*-setup.exe target/release/bundle/dmg/*.dmg; do
+            [ -f "$f" ] || continue
+            ext="${f##*.}"
+            cp "$f" "dist/orchspec-${v}-${{ runner.os }}-${{ matrix.variant }}.${ext}"
+          done
+          ls -la dist
+          (cd dist && shasum -a 256 * > "SHA256SUMS-${{ matrix.variant }}.txt")
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: orchspec-${{ matrix.variant }}
+          path: dist/*
+          if-no-files-found: error
+
+  publish:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # create the draft release
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: Draft release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" dist/* --repo "$GITHUB_REPOSITORY" \
+            --draft --title "orchspec $GITHUB_REF_NAME" --generate-notes

@@ -8,7 +8,10 @@
     "icon": "tauri icon icon-source.png",
     "dev": "npm --prefix ../viewer run build && tauri dev",
     "build": "npm --prefix ../viewer run build && tauri build --no-bundle",
-    "installer": "npm --prefix ../viewer run build && tauri build"
+    "installer": "npm --prefix ../viewer run build && tauri build",
+    "runtime": "uv run --project .. python ../scripts/build_runtime.py",
+    "dist": "npm run runtime && npm --prefix ../viewer run build && tauri build --config src-tauri/tauri.dist.conf.json",
+    "dist:gpu": "npm run runtime -- --gpu && npm --prefix ../viewer run build && tauri build --no-bundle --config src-tauri/tauri.dist.conf.json && uv run --project .. python ../scripts/package_portable.py"
   },
   "devDependencies": {
     "@tauri-apps/cli": "2.11.5"
