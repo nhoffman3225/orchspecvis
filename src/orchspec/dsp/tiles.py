@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import gzip
 import os
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import Future, ThreadPoolExecutor
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -60,6 +60,7 @@ def pyramid(level0: np.ndarray, tile_frames: int) -> list[np.ndarray]:
 
 
 _POOL: ThreadPoolExecutor | None = None
+_PENDING: list[Future[object]] = []  # background tile writes (see flush_writes)
 
 
 def _pool() -> ThreadPoolExecutor:
@@ -82,6 +83,13 @@ def tile_suffix(encoding: TileEncoding) -> str:
     return ".u8.gz" if encoding == "gzip" else ".u8"
 
 
+def flush_writes() -> None:
+    """Wait for all background tile writes; re-raises the first failure."""
+    pending, _PENDING[:] = list(_PENDING), []
+    for f in pending:
+        f.result()
+
+
 def write_level(
     root: Path,
     prefix: str,
@@ -89,8 +97,14 @@ def write_level(
     data: np.ndarray,
     tile_frames: int,
     encoding: TileEncoding = "gzip",
+    background: bool = False,
 ) -> Lod:
-    """Write one level of frame-major uint8 tiles under root/prefix/L<level>/."""
+    """Write one level of frame-major uint8 tiles under root/prefix/L<level>/.
+
+    `background`: return at once and compress/write in the thread pool (the manifest
+    entries are known up front); call flush_writes() before relying on the files. `data`
+    must not be modified afterwards.
+    """
     d = root / prefix / f"L{level}"
     d.mkdir(parents=True, exist_ok=True)
 
@@ -102,7 +116,18 @@ def write_level(
         return Tile(index=i, start_frame=start, n_frames=chunk.shape[0], path=rel)
 
     n = -(-data.shape[0] // tile_frames)
-    if encoding == "raw" or n < 4:
+    if background:
+        _PENDING.extend(_pool().submit(one, i) for i in range(n))
+        tiles = [
+            Tile(
+                index=i,
+                start_frame=i * tile_frames,
+                n_frames=min(tile_frames, data.shape[0] - i * tile_frames),
+                path=f"{prefix}/L{level}/{i:05d}{tile_suffix(encoding)}",
+            )
+            for i in range(n)
+        ]
+    elif encoding == "raw" or n < 4:
         tiles = [one(i) for i in range(n)]
     else:  # zlib releases the GIL: compress tiles in parallel
         tiles = list(_pool().map(one, range(n)))
@@ -115,9 +140,10 @@ def write_pyramid(
     level0: np.ndarray,
     tile_frames: int,
     encoding: TileEncoding = "gzip",
+    background: bool = False,
 ) -> list[Lod]:
     return [
-        write_level(root, prefix, lv, arr, tile_frames, encoding)
+        write_level(root, prefix, lv, arr, tile_frames, encoding, background)
         for lv, arr in enumerate(pyramid(level0, tile_frames))
     ]
 
@@ -160,9 +186,13 @@ class DominantAccumulator:
             idx[win] = stem_index
 
     def write(
-        self, root: Path, prefix: str = "tiles/dominant", encoding: TileEncoding = "gzip"
+        self,
+        root: Path,
+        prefix: str = "tiles/dominant",
+        encoding: TileEncoding = "gzip",
+        background: bool = False,
     ) -> list[Lod]:
         return [
-            write_level(root, prefix, lv, arr, self.tile_frames, encoding)
+            write_level(root, prefix, lv, arr, self.tile_frames, encoding, background)
             for lv, arr in enumerate(self.idx)
         ]

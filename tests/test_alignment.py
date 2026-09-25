@@ -108,3 +108,20 @@ def test_name_matching() -> None:
     assert [x.stem_index for x in m3] == [2, 1, 0]
     m2 = match_parts_to_stems(["Flute", "Oboe"], ["01_Tuba"])
     assert [x.method for x in m2] == ["none", "none"]
+
+
+def test_fft_pitch_scores_equal_the_gather_version() -> None:
+    from orchspec.timeline.align import ONSET_TAU, SUSTAIN_W, _pitch_scores, _pitch_scores_fft
+
+    rng = np.random.default_rng(7)
+    act = rng.random((88, 900))
+    flux = rng.random((88, 900))
+    k = 4000
+    sem = rng.integers(0, 88, k)
+    frm = rng.integers(0, 1000, k)  # some cells beyond the audio: must count as 0
+    rel = rng.random(k) * 0.3
+    sus = (rng.random(k) > 0.5).astype(float)
+    lags = np.arange(-120, 140)
+    ref = _pitch_scores(act, flux, sem, frm, rel, sus, lags)
+    got = _pitch_scores_fft(act, flux, sem, frm, np.exp(-rel / ONSET_TAU), SUSTAIN_W * sus, lags)
+    np.testing.assert_allclose(got, ref, rtol=1e-9, atol=1e-9 * float(np.abs(ref).max()))

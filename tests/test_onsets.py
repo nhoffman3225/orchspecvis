@@ -41,3 +41,15 @@ def test_torch_cuda_matches_librosa() -> None:
     if not torch.cuda.is_available():
         pytest.skip("no CUDA device")
     _check("cuda", 48000)
+
+
+def test_torch_centroid_matches_librosa() -> None:
+    from orchspec.dsp.features import spectral_centroid
+
+    sr = 48000
+    y = _attacks(sr)
+    y[: sr // 4] = 0.0  # silent frames: both give 0
+    a = spectral_centroid(y, sr, 512)
+    b = spectral_centroid(y, sr, 512, device="cpu")
+    assert a.shape == b.shape
+    np.testing.assert_allclose(b, a, rtol=1e-3, atol=0.5)  # Hz

@@ -6,11 +6,13 @@ crashed run never leaves a half-written bundle that looks valid.
 
 from __future__ import annotations
 
+import contextlib
 import datetime as dt
 import shutil
 import tempfile
 import time
 from collections.abc import Callable
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -34,6 +36,7 @@ from orchspec.dsp.features import onset_envelope, short_term_lufs, spectral_cent
 from orchspec.dsp.fundamentals import f0_track
 from orchspec.dsp.tiles import (
     DominantAccumulator,
+    flush_writes,
     lod_frame_counts,
     pyramid,
     quantize,
@@ -42,6 +45,9 @@ from orchspec.dsp.tiles import (
 )
 from orchspec.io.audio import load_audio, sha256_file, to_mono
 from orchspec.io.session import Session
+from orchspec.timeline.align import onset_envelope_fine
+
+KEEP_LEVEL0_BYTES = 1 << 30  # 1 GiB of level-0 tiles kept in memory for fundamentals
 
 AudioLoader = Callable[[], np.ndarray]  # -> (channels, n) float32
 
@@ -63,6 +69,7 @@ class BundleOptions:
     align: bool = True  # estimate the offset by onset cross-correlation
     align_search: float = 1.5  # +- seconds around preroll_sec
     f0: str = "auto"  # auto | yin | pyin | off  (per-stem f0 tracks; auto = only without score)
+    parallel: bool = True  # with torch: score + mix features in background threads
 
 
 @dataclass
@@ -183,6 +190,10 @@ def build_bundle(
             shutil.rmtree(out)
         tmp.rename(out)
     except BaseException:
+        # let background tile writes finish before deleting their dir; the original
+        # error is the one to report
+        with contextlib.suppress(Exception):
+            flush_writes()
         shutil.rmtree(tmp, ignore_errors=True)
         raise
     report.path = out
@@ -196,6 +207,10 @@ def _build(
     spec = CQTSpec(sr=inputs.sr, hop=opts.hop, k=opts.k)
     backend: CQTBackend = get_backend(opts.backend, device=opts.device)
     db_min, db_max = opts.db_min, opts.db_max
+
+    # onset envelopes and spectral features on the CQT's torch device (same results as
+    # librosa within float32 rounding, much faster); librosa with the librosa backend
+    onset_device = str(backend.device) if isinstance(backend, TorchBackend) else None
 
     def analyse(y_mono: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
         t0 = time.perf_counter()
@@ -216,63 +231,85 @@ def _build(
     log(f"mix: {n_samples / spec.sr:.1f} s, {mix.shape[0]} ch")
     mix_db, mix_u8 = analyse(mono)
     t0 = time.perf_counter()
-    lods = write_pyramid(root, "tiles/mix", mix_u8, opts.tile_frames, opts.tile_encoding)
+    # tiles compress + write in the background; flush_writes() before the manifest
+    lods = write_pyramid(root, "tiles/mix", mix_u8, opts.tile_frames, opts.tile_encoding, True)
     tm.add("tiles", t0)
 
-    t0 = time.perf_counter()
-    plan: ScorePlan | None = prepare_score(
-        inputs.score_path,
-        inputs.midi_path,
-        mono,
-        mix_db,
-        spec,
-        inputs.offsets.preroll_sec,
-        [st.name for st in inputs.stems],
-        [st.id for st in inputs.stems],
-        offset=opts.offset,
-        align=opts.align,
-        search=opts.align_search,
-        log=log,
-        # onset envelopes on the CQT's torch device (same result as librosa, much faster)
-        onset_device=str(backend.device) if isinstance(backend, TorchBackend) else None,
-    )
-    tm.add("score", t0)
+    # Score preparation and the mix features need only the mix: with torch they run in
+    # background threads during the stem loop (stem onset envelopes are then computed for
+    # every stem up front, which is cheap on torch). With librosa they run in order.
+    overlap = opts.parallel and onset_device is not None
+    has_score = inputs.score_path is not None or inputs.midi_path is not None
+    want_envs = has_score and opts.offset is None and opts.align
+    side = ThreadPoolExecutor(max_workers=2)
 
-    t0 = time.perf_counter()
-    hop_s = spec.hop / spec.sr
-    lufs = short_term_lufs(mix, spec.sr, hop_seconds=opts.lufs_hop_seconds)
-    features = []
-    for fname, unit, arr, hop, desc in [
-        (
-            "lufs_short_term",
-            "LUFS",
-            lufs,
-            opts.lufs_hop_seconds,
-            "BS.1770 short-term loudness, 3 s centered window, floor -120",
-        ),
-        (
-            "spectral_centroid",
-            "Hz",
-            spectral_centroid(mono, spec.sr, spec.hop),
-            hop_s,
-            "spectral centroid of the mono mix",
-        ),
-        (
-            "onset_envelope",
-            "a.u.",
-            onset_envelope(mono, spec.sr, spec.hop),
-            hop_s,
-            "librosa onset strength of the mono mix",
-        ),
-    ]:
-        rel = f"features/{fname}.f32"
-        _write_f32(root, rel, arr)
-        features.append(
-            Series(
-                name=fname, unit=unit, description=desc, path=rel, shape=[len(arr)], hop_seconds=hop
-            )
+    def score_job(mono: np.ndarray, mix_db: np.ndarray) -> ScorePlan | None:
+        t0 = time.perf_counter()
+        p = prepare_score(
+            inputs.score_path,
+            inputs.midi_path,
+            mono,
+            mix_db,
+            spec,
+            inputs.offsets.preroll_sec,
+            [st.name for st in inputs.stems],
+            [st.id for st in inputs.stems],
+            offset=opts.offset,
+            align=opts.align,
+            search=opts.align_search,
+            log=log,
+            onset_device=onset_device,
         )
-    tm.add("features", t0)
+        tm.add("score", t0)
+        return p
+
+    def features_job(mix: np.ndarray, mono: np.ndarray) -> list[Series]:
+        t0 = time.perf_counter()
+        hop_s = spec.hop / spec.sr
+        lufs = short_term_lufs(mix, spec.sr, hop_seconds=opts.lufs_hop_seconds)
+        features = []
+        for fname, unit, arr, hop, desc in [
+            (
+                "lufs_short_term",
+                "LUFS",
+                lufs,
+                opts.lufs_hop_seconds,
+                "BS.1770 short-term loudness, 3 s centered window, floor -120",
+            ),
+            (
+                "spectral_centroid",
+                "Hz",
+                spectral_centroid(mono, spec.sr, spec.hop, device=onset_device),
+                hop_s,
+                "spectral centroid of the mono mix",
+            ),
+            (
+                "onset_envelope",
+                "a.u.",
+                onset_envelope(mono, spec.sr, spec.hop),
+                hop_s,
+                "librosa onset strength of the mono mix",
+            ),
+        ]:
+            rel = f"features/{fname}.f32"
+            _write_f32(root, rel, arr)
+            features.append(
+                Series(
+                    name=fname,
+                    unit=unit,
+                    description=desc,
+                    path=rel,
+                    shape=[len(arr)],
+                    hop_seconds=hop,
+                )
+            )
+        tm.add("features", t0)
+        return features
+
+    # arguments, not closures: the names are deleted below while the jobs may still run
+    plan_future = side.submit(score_job, mono, mix_db) if overlap else None
+    plan: ScorePlan | None = None if overlap else score_job(mono, mix_db)
+    features_future = side.submit(features_job, mix, mono)
     del mix, mono, mix_db
 
     # ---- stems
@@ -287,15 +324,31 @@ def _build(
     )
     stems: list[Stem] = []
     energy = np.zeros((len(inputs.stems), counts[e_level]), dtype=np.float32)
-    f0_mode = opts.f0 if opts.f0 != "auto" else ("off" if plan is not None else "yin")
+    f0_mode = opts.f0 if opts.f0 != "auto" else ("off" if has_score else "yin")
     f0_hz = (
         np.zeros((len(inputs.stems), n_frames), dtype=np.float32)
         if f0_mode != "off" and inputs.stems
         else None
     )
+
+    # read the next stem from disk while this one is analysed
+    loader = ThreadPoolExecutor(max_workers=1)
+    load_next = (
+        loader.submit(lambda s: to_mono(s.load()), inputs.stems[0]) if inputs.stems else None
+    )
+    # level-0 u8 kept for the fundamentals step (instead of reading tiles back), within a
+    # memory budget; matched stems only
+    keep: dict[int | None, np.ndarray] = {None: mix_u8}
+    keep_budget = KEEP_LEVEL0_BYTES - mix_u8.nbytes
+    # matched stems are only known once the score is prepared: keep any stem meanwhile
+    wanted = set(plan.part_stem.values()) if plan is not None else set(range(len(inputs.stems)))
+    stem_envs: dict[int, np.ndarray] = {}
     for i, st in enumerate(inputs.stems):
         t0 = time.perf_counter()
-        y = to_mono(st.load())
+        assert load_next is not None
+        y = load_next.result()
+        if i + 1 < len(inputs.stems):
+            load_next = loader.submit(lambda s: to_mono(s.load()), inputs.stems[i + 1])
         tm.add("load", t0)
         if y.shape[0] != n_samples:
             raise ValueError(f"stem {st.id}: {y.shape[0]} samples != mix {n_samples}")
@@ -304,14 +357,19 @@ def _build(
         levels = pyramid(u8, opts.tile_frames)
         prefix = f"tiles/stem-{st.id}"
         slods = [
-            write_level(root, prefix, lv, a, opts.tile_frames, opts.tile_encoding)
+            write_level(root, prefix, lv, a, opts.tile_frames, opts.tile_encoding, True)
             for lv, a in enumerate(levels)
         ]
+        if i in wanted and u8.nbytes <= keep_budget:
+            keep[i] = u8
+            keep_budget -= u8.nbytes
         assert acc is not None
         acc.add(i, levels)
         energy[i] = _frame_energy_db(db, e_level)
         if plan is not None:
             plan.add_stem(i, y)
+        elif overlap and want_envs:
+            stem_envs[i] = onset_envelope_fine(y, spec.sr, onset_device)[0]
         if f0_hz is not None:
             f0_hz[i] = f0_track(y, spec.sr, spec.hop, n_frames, method=f0_mode)
         tm.add("tiles", t0)
@@ -323,7 +381,8 @@ def _build(
     if acc is not None:
         t0 = time.perf_counter()
         dominant = DominantStem(
-            floor_db=opts.dominant_floor_db, lods=acc.write(root, encoding=opts.tile_encoding)
+            floor_db=opts.dominant_floor_db,
+            lods=acc.write(root, encoding=opts.tile_encoding, background=True),
         )
         _write_f32(root, "tables/stem_energy_db.f32", energy)
         tables.append(
@@ -353,6 +412,13 @@ def _build(
             )
         )
     score_info = None
+    if plan_future is not None:
+        plan = plan_future.result()
+        if plan is not None:
+            for i, env in stem_envs.items():
+                plan.add_stem_env(i, env)
+    features = features_future.result()
+    side.shutdown()
     if plan is not None:
         t0 = time.perf_counter()
         plan.finalize()
@@ -364,6 +430,7 @@ def _build(
             db_min,
             db_max,
             opts.tile_encoding,
+            arrays=keep,
         )
         score_info = plan.write(root)
         tm.add("score", t0)
@@ -377,6 +444,10 @@ def _build(
     sha = sha256_file(root / audio_rel)
     tm.add("audio", t0)
 
+    t0 = time.perf_counter()
+    loader.shutdown()
+    flush_writes()  # background tile writes must be on disk before the manifest
+    tm.add("tiles", t0)
     m = Manifest(
         created_by=f"orchspec {__version__}",
         created_at=dt.datetime.now(dt.UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),

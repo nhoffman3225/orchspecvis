@@ -371,6 +371,35 @@ def _pitch_scores(
     return val.sum(axis=1)
 
 
+def _pitch_scores_fft(
+    act: np.ndarray,
+    flux: np.ndarray,
+    sem: np.ndarray,
+    frm: np.ndarray,
+    w_on: np.ndarray,
+    w_sus: np.ndarray,
+    lags: np.ndarray,
+) -> np.ndarray:
+    """_pitch_scores for a long, contiguous lag range, as a cross-correlation.
+
+    score(L) = sum_s sum_f T_on[s, f] flux[s, f + L] + T_sus[s, f] act[s, f + L], where
+    T_* are the template cells' weights accumulated on (semitone, frame). Zero padding
+    makes out-of-range frames contribute 0, exactly like the gather version's mask.
+    """
+    n_sem, n = act.shape
+    m = int(frm.max()) + 1 if len(frm) else 1
+    lo, hi = int(lags.min()), int(lags.max())
+    size = 1 << int(n + m + max(abs(lo), abs(hi)) + 1).bit_length()  # power of two
+    t_on = np.zeros((n_sem, m))
+    t_sus = np.zeros((n_sem, m))
+    np.add.at(t_on, (sem, frm), w_on)
+    np.add.at(t_sus, (sem, frm), w_sus)
+    spec = np.conj(np.fft.rfft(t_on, size, axis=1)) * np.fft.rfft(flux, size, axis=1)
+    spec += np.conj(np.fft.rfft(t_sus, size, axis=1)) * np.fft.rfft(act, size, axis=1)
+    r = np.fft.irfft(spec.sum(axis=0), size)  # r[k] = sum_f T[f] X[(f + k) mod size]
+    return r[np.asarray(lags) % size]
+
+
 @dataclass
 class WarpResult:
     warp: Warp  # coarse score -> audio map (pitch-aware)
@@ -407,10 +436,15 @@ def estimate_warp(
         w = Warp(np.array([0.0]), np.array([prior]))
         return WarpResult(w, prior, 0.0, ["no pitched notes to align; using preroll"])
     flux = pitch_flux(act)
+    # cells in time order: each anchor then takes a contiguous slice
+    order = np.argsort(frm, kind="stable")
+    sem, frm, rel, sus = sem[order], frm[order], rel[order], sus[order]
+    w_on = np.exp(-rel / ONSET_TAU)
+    w_sus = SUSTAIN_W * sus
     lags = np.arange(
         round((prior - search) / act_frame_sec), round((prior + search) / act_frame_sec) + 1
     )
-    sc = _pitch_scores(act, flux, sem, frm, rel, sus, lags)
+    sc = _pitch_scores_fft(act, flux, sem, frm, w_on, w_sus, lags)
     best, frac = _peak(sc)
     g = (lags[best] + frac) * act_frame_sec
     if best in (0, len(lags) - 1):
@@ -422,21 +456,28 @@ def estimate_warp(
     tr = max(1, round(track / act_frame_sec))
     offs, confs = [], []
     prev = g
+    n = act.shape[1]
     for t in anchors:
-        sel = np.abs(cell_t - t) <= 3 * sigma
-        if sel.sum() < 3:
+        a = int(np.searchsorted(cell_t, t - 3 * sigma, side="left"))
+        b = int(np.searchsorted(cell_t, t + 3 * sigma, side="right"))
+        if b - a < 3:
             offs.append(prev)
             confs.append(0.0)
             continue
-        wts = np.exp(-0.5 * ((cell_t[sel] - t) / sigma) ** 2)
+        wts = np.exp(-0.5 * ((cell_t[a:b] - t) / sigma) ** 2)
         c0 = round(prev / act_frame_sec)
         lg = np.arange(c0 - tr, c0 + tr + 1)
-        s2 = _pitch_scores(act, flux, sem[sel], frm[sel], rel[sel], sus[sel], lg, wts)
+        # same sum as _pitch_scores, with the cell weights precomputed
+        j = frm[None, a:b] + lg[:, None]
+        ok = (j >= 0) & (j < n)
+        jj = np.clip(j, 0, n - 1)
+        s_ab = sem[None, a:b]
+        val = (w_on[a:b] * wts) * flux[s_ab, jj] + (w_sus[a:b] * wts) * act[s_ab, jj]
+        s2 = np.where(ok, val, 0.0).sum(axis=1)
         b2, f2 = _peak(s2)
         o = (lg[b2] + f2) * act_frame_sec
         offs.append(o)
-        w_on = np.exp(-rel[sel] / ONSET_TAU) + SUSTAIN_W * sus[sel]
-        confs.append(float(s2[b2] / float((wts * w_on).sum())))
+        confs.append(float(s2[b2] / float((wts * (w_on[a:b] + w_sus[a:b])).sum())))
         prev = o
     offs_a = _median_filter(np.array(offs), 3)
     dst = anchors + offs_a
