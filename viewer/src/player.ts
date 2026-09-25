@@ -28,6 +28,7 @@ export class Player {
   audioError: string | null = null;
   mode: AudioMode = "none";
   underruns = 0;
+  streamState = ""; // worklet diagnostics
 
   // decoded mode
   private buffer: AudioBuffer | null = null;
@@ -87,8 +88,9 @@ export class Player {
       numberOfOutputs: 1,
       outputChannelCount: [2],
     });
-    this.node.port.onmessage = (ev: MessageEvent<{ underruns: number }>) => {
+    this.node.port.onmessage = (ev: MessageEvent<{ underruns: number; state: string; feeder: boolean }>) => {
       this.underruns = ev.data.underruns;
+      this.streamState = `${ev.data.state}${ev.data.feeder ? "" : " (no feeder port)"}`;
     };
     this.node.connect(this.gain);
     // feeder worker <-> worklet, directly

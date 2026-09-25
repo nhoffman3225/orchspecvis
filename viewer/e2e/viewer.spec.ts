@@ -113,7 +113,8 @@ test("streams the mix WAV through the AudioWorklet (Range requests), no underrun
   expect(ranges.length).toBeGreaterThan(3);
   expect(ranges.every((r) => r.startsWith("bytes="))).toBe(true); // never the whole file
   const underruns = Number(await page.locator("html").getAttribute("data-underruns"));
-  console.log(`audio clock rate ${rate.toFixed(2)}x, ${underruns} underruns`);
+  const stream = await page.evaluate(() => (globalThis as { orchspecStream?: () => string }).orchspecStream?.() ?? "");
+  console.log(`audio clock rate ${rate.toFixed(2)}x, ${underruns} underruns; ${stream}; ${ranges.length} ranges`);
   if (clockRuns && rate > 0.7 && rate < 1.4) {
     expect(underruns).toBe(0);
   } else {

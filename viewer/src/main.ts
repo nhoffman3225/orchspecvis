@@ -77,6 +77,8 @@ async function main(): Promise<void> {
     const syncState = (): void => void (document.documentElement.dataset.audioState = player.ctx.state);
     // read-only probe for tests: the audio clock, live (datasets update only per frame)
     (globalThis as { orchspecAudioTime?: () => number }).orchspecAudioTime = () => player.ctx.currentTime;
+    (globalThis as { orchspecStream?: () => string }).orchspecStream = () =>
+      `${player.streamState}; ctx ${player.ctx.sampleRate} Hz ${player.ctx.state}; ${player.audioError ?? ""}`;
     player.ctx.addEventListener("statechange", syncState);
     syncState();
     if (player.audioError) status.textContent = `audio unavailable (${player.audioError}); playhead runs silently`;
