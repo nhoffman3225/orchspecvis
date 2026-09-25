@@ -235,6 +235,63 @@ async function main(): Promise<void> {
     $("parts-all").addEventListener("click", () => setAllParts(true));
     $("parts-none").addEventListener("click", () => setAllParts(false));
   }
+  // run once everything below is set up (URL-driven initial selections)
+  const afterSetup: (() => void)[] = [];
+
+  // ---- sections: quick selection by family (from part and stem names)
+  {
+    const secBox = $("sections");
+    const stemFam = m.stems.map((s) => familyOf(s.name));
+    const partFam = parts.map((p) => familyOf(p.instrument || p.name));
+    const present = FAMILIES.filter((f) => stemFam.includes(f) || partFam.includes(f));
+    const active = new Set<Family>();
+    const apply = (): void => {
+      const all = active.size === 0;
+      ui.selected = new Set(m.stems.filter((_, i) => all || active.has(stemFam[i]!)).map((s) => s.id));
+      list.querySelectorAll<HTMLInputElement>("input").forEach((cb) => {
+        cb.checked = ui.selected.has(cb.dataset.id ?? "");
+      });
+      if (!all && (ui.mode === "mix" || ui.mode === "ensemble")) modeSel.value = ui.mode = "stems";
+      partsVisible.clear();
+      parts.forEach((p, i) => {
+        if (all || active.has(partFam[i]!)) partsVisible.add(p.index);
+      });
+      $("part-list").querySelectorAll<HTMLInputElement>("input").forEach((cb, i) => {
+        cb.checked = partsVisible.has(parts[i]?.index ?? -1);
+      });
+      secBox.querySelectorAll<HTMLButtonElement>("button").forEach((b) => {
+        b.classList.toggle("on", active.has(b.dataset.fam as Family));
+      });
+      invalidate();
+      void rebuildDisplay();
+    };
+    for (const f of present) {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.dataset.fam = f;
+      b.style.setProperty("--fam", FAMILY_COLORS[f]);
+      b.textContent = f;
+      b.addEventListener("click", (e) => {
+        if (e.ctrlKey || e.shiftKey || e.metaKey) {
+          if (active.has(f)) active.delete(f);
+          else active.add(f);
+        } else if (active.size === 1 && active.has(f)) {
+          active.clear(); // clicking the only active section again shows everything
+        } else {
+          active.clear();
+          active.add(f);
+        }
+        apply();
+      });
+      secBox.append(b);
+    }
+    secBox.hidden = present.length < 2;
+    for (const f of (params.get("sec") ?? "").split(",")) {
+      if (present.includes(f as Family)) active.add(f as Family);
+    }
+    if (active.size) afterSetup.push(apply);
+  }
+
   if (notes && nix && m.score) {
     pane.score = {
       notes, index: nix, parts, measures: m.score.measures, partColor,
@@ -787,6 +844,7 @@ async function main(): Promise<void> {
   });
   if (params.get("view") === "score") setScore(true);
   if (params.get("view") === "registers") setRegisters(true);
+  for (const f of afterSetup) f();
 
   // ---- frame loop
   const view = $("view3d");

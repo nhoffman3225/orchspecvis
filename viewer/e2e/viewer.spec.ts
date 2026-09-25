@@ -42,6 +42,7 @@ workers: ${workers.length}; ${alive}
       `errors: ${g.errors.join(" | ")}`, { cause: e });
   }
   await expect(host.locator("g.playing").first()).toBeAttached();
+  await expect(host.locator(".score-line")).toBeVisible(); // playhead through the system
   await expect(page.locator("#score-page")).toContainText("page 1 /");
   // coloured by part (presentation attribute set by the view)
   expect(await host.locator("g.playing").first().getAttribute("fill")).toMatch(/^rgb|^#/);
@@ -160,6 +161,24 @@ test("credits: shipped projects and full licence texts, same origin", async ({ p
   await expect(page.locator("#about-text")).toContainText("orchspec — MIT License");
   await page.keyboard.press("Escape");
   await expect(page.locator("#aboutview")).toBeHidden();
+  expect(g.offOrigin).toEqual([]);
+  expect(g.errors, g.errors.join(" | ")).toEqual([]);
+});
+
+test("section buttons select stems and parts by family", async ({ page, baseURL }) => {
+  const g = guard(page, baseURL!);
+  await page.goto(`/?bundle=${BUNDLE}`);
+  const sec = page.locator("#sections button");
+  await expect(sec).toHaveText(["woodwinds", "keyboards", "strings"]);
+  await sec.filter({ hasText: "woodwinds" }).click(); // flute + clarinet
+  await expect(page.locator("#mode")).toHaveValue("stems");
+  await expect(page.locator("#part-list input:checked")).toHaveCount(2);
+  await sec.filter({ hasText: "strings" }).click({ modifiers: ["Control"] }); // + bass
+  await expect(page.locator("#part-list input:checked")).toHaveCount(3);
+  await sec.filter({ hasText: "woodwinds" }).click({ modifiers: ["Control"] }); // - woodwinds
+  await expect(page.locator("#part-list input:checked")).toHaveCount(1);
+  await sec.filter({ hasText: "strings" }).click({ modifiers: ["Control"] }); // none active: all
+  await expect(page.locator("#part-list input:checked")).toHaveCount(4);
   expect(g.offOrigin).toEqual([]);
   expect(g.errors, g.errors.join(" | ")).toEqual([]);
 });
