@@ -1,0 +1,15 @@
+[package]
+name = "orchspec-desktop"
+version = "0.1.0"
+description = "orchspec desktop app (Tauri 2): the viewer + a local bundle, no network"
+edition.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[build-dependencies]
+tauri-build = { version = "2.6.3", features = [] }
+
+[dependencies]
+orchspec-core = { path = "../../rust/orchspec-core" }
+tauri = { version = "2.11.6", features = [] }
+tauri-plugin-dialog = "2.7.3"

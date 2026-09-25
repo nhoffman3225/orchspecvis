@@ -1,0 +1,12 @@
+[package]
+name = "orchspec-core"
+version = "0.1.0"
+description = "orchspec session bundles: manifest (schema v1-v4), tiles, LOD pyramid, local file serving"
+edition.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.151"
+flate2 = "1.1.10"

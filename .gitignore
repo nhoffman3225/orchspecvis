@@ -42,3 +42,6 @@ viewer/test-data/
 .venv-cpu/
 viewer/test-results/
 viewer/playwright-report/
+
+# Tauri (Phase 3b) generated schemas
+desktop/src-tauri/gen/

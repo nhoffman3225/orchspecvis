@@ -97,3 +97,32 @@ jobs:
           name: e2e-results
           path: viewer/test-results/
           retention-days: 7
+
+  # Rust bundle core (Phase 3b): cross-checked against bundles the Python writer produces.
+  rust-core:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: astral-sh/setup-uv@v10.2.0
+        with:
+          enable-cache: true
+
+      - uses: actions/cache@v6.1.0
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: cargo-core-${{ runner.os }}-${{ hashFiles('Cargo.lock') }}
+
+      - name: Python-written test bundle (gzip tiles + score)
+        run: |
+          uv sync --locked --extra dev
+          uv run pytest tests/test_score_bundle.py
+
+      - name: cargo test / clippy (orchspec-core)
+        run: |
+          cargo test -p orchspec-core --locked
+          cargo clippy -p orchspec-core --locked --all-targets -- -D warnings

@@ -32,6 +32,10 @@ Viewer: three, vite, typescript, vitest, eslint (+ typescript-eslint), @types/th
 @eslint/js, @types/node. Approved 2026-09-24: verovio (LGPL-3.0, bundled wasm, Phase 3
 score view), @playwright/test (dev, E2E). Python additions approved in use: uvicorn, httpx.
 Deferred until approved: pyarrow (Parquet side tables).
+Phase 3b (started 2026-09-25 at the user's request; Tauri 2 + PyO3 were in the plan):
+Rust crates tauri 2.11, tauri-build, tauri-plugin-dialog (native folder picker), serde,
+serde_json, flate2 (gzip tiles); npm @tauri-apps/cli (desktop/, dev). PyO3 + maturin not
+added yet (the Python writer does not need the Rust core yet).
 
 ## Phases
 
@@ -192,11 +196,22 @@ carry the `real` marker and never run in CI.
       Open: on the windows-latest runner the Verovio wasm never finished starting inside the
       worker (passes locally with Edge and Playwright's Chromium, and on macOS CI)
 
-### Phase 3b — Rust core + Tauri desktop
-- [ ] rust/orchspec-core: bundle read/write (docs/bundle-format.md), LOD build, xcorr;
-      PyO3 bindings; cross-check against Python writer byte-for-byte
-- [ ] desktop/: Tauri 2 app replacing `orchspec serve` (custom protocol, same CSP),
-      Windows + macOS builds
+### Phase 3b — Rust core + Tauri desktop  (branch `phase-3b-desktop`)
+- [x] rust/orchspec-core: manifest v1-v4 (serde, deny_unknown_fields, the schema.py
+      rules), tile read/write (raw + gzip, mtime 0), LOD pyramid; cross-checked against
+      Python-written bundles (tiny-bundle, py-score-bundle): every level rebuilt from L0
+      in Rust equals Python's byte-for-byte (decoded; the deflate stream itself may differ
+      between zlib builds, so compressed bytes are not compared)
+- [x] orchspec-core::serve: the `orchspec serve` rules as pure std code for the desktop
+      protocol (confinement, hidden files, GET/HEAD, byte ranges, CSP headers)
+- [x] desktop/: Tauri 2 shell — one custom protocol for viewer + bundle (same origin, same
+      CSP), File › Open Bundle (native dialog) or CLI arg, no IPC permissions, navigation
+      locked to the app origin, no updater
+- [ ] Local build: needs MSVC Build Tools on this machine (CI builds it on windows-latest)
+- [ ] macOS build + .dmg in CI (macOS minutes are 10x: on main pushes only)
+- [ ] xcorr / alignment in Rust; PyO3 bindings (+ maturin) once the Python writer uses it
+- [ ] rustfmt/clippy locally (CI runs clippy -D warnings; rustfmt check once rustfmt is
+      available locally)
 Acceptance: same bundle opens identically in Tauri on Windows and macOS.
 
 ### Phase 3c — Cubase (after the desktop app; decision 2026-09-25)

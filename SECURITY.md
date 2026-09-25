@@ -28,6 +28,12 @@ no reason to talk to the network.
    - no CORS headers, GET/HEAD only;
    - paths are resolved and anything outside the bundle root (or the viewer dist) is 404;
    - read-only: no endpoint writes to disk.
+   The **desktop app** (Tauri 2, `desktop/`) opens no listener at all: the viewer and the
+   opened bundle are served through one in-process custom protocol with the same rules
+   (GET/HEAD only, root confinement, no hidden files, the CSP and headers below;
+   `rust/orchspec-core/src/serve.rs`, tested in `tests/serve.rs`). No updater plugin, no
+   capabilities file (the page gets no IPC permissions), navigation off the app origin is
+   refused. Bundles are opened from a local folder only (argument or native dialog).
 4. **Viewer CSP** (in `viewer/index.html`):
    `default-src 'self'; connect-src 'self'; img-src 'self' blob: data:;
    script-src 'self' 'wasm-unsafe-eval'` (+ `style-src 'self'`, `object-src 'none'`,

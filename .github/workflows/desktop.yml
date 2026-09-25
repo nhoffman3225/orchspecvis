@@ -1,0 +1,60 @@
+name: desktop
+
+# Builds the Tauri desktop shell on Windows. Only when the desktop, the Rust core or the
+# viewer changes (Windows minutes are costly); the core's tests run in ci.yml on Linux.
+on:
+  pull_request:
+    paths:
+      - "desktop/**"
+      - "rust/**"
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - "viewer/src/**"
+      - "viewer/index.html"
+      - ".github/workflows/desktop.yml"
+  push:
+    branches: [main]
+    paths:
+      - "desktop/**"
+      - "rust/**"
+      - "Cargo.toml"
+      - "Cargo.lock"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: desktop-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  build:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: viewer/package-lock.json
+
+      - uses: actions/cache@v6.1.0
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: cargo-desktop-${{ runner.os }}-${{ hashFiles('Cargo.lock') }}
+
+      - name: Viewer build (embedded into the app)
+        working-directory: viewer
+        run: |
+          npm ci
+          npm run build
+
+      - name: cargo build + clippy (desktop shell)
+        run: |
+          cargo build -p orchspec-desktop --locked
+          cargo clippy -p orchspec-desktop --locked -- -D warnings
