@@ -14,7 +14,7 @@ declare class AudioWorkletProcessor {
 declare function registerProcessor(name: string, ctor: new () => AudioWorkletProcessor): void;
 
 export type StreamMessage =
-  | { type: "cue"; gen: number; srcFrame: number; ctxFrame: number }
+  | { type: "cue"; gen: number; srcFrame: number; ctxFrame: number; endFrame: number }
   | { type: "stop"; gen: number }
   | ({ type: "chunk" } & Chunk);
 
@@ -38,7 +38,7 @@ class StreamProcessor extends AudioWorkletProcessor {
       this.feeder = ev.data.feeder;
       this.feeder.onmessage = (e: MessageEvent<StreamMessage>) => {
         const m = e.data;
-        if (m.type === "cue") this.q.cue(m.gen, m.srcFrame, m.ctxFrame);
+        if (m.type === "cue") this.q.cue(m.gen, m.srcFrame, m.ctxFrame, m.endFrame);
         else if (m.type === "stop") this.q.stop(m.gen);
         else this.q.push(m);
       };
@@ -51,7 +51,7 @@ class StreamProcessor extends AudioWorkletProcessor {
     if (++this.quanta % REPORT_EVERY === 0) {
       const p = this.q.position(currentFrame);
       if (p) this.feeder?.postMessage(p satisfies PositionMessage);
-      if (this.quanta % (REPORT_EVERY * 4) === 0) this.port.postMessage({ underruns: this.q.underruns });
+      if (this.quanta % (REPORT_EVERY * 4) === 0) this.port.postMessage({ underruns: this.q.underruns, state: this.q.describe(currentFrame), feeder: !!this.feeder });
     }
     return true;
   }

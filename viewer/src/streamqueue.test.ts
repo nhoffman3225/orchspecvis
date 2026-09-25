@@ -19,6 +19,17 @@ describe("StreamQueue", () => {
     expect(q.underruns).toBe(0);
   });
 
+  it("silence after the end of the source is not an underrun", () => {
+    const q = new StreamQueue();
+    q.cue(1, 0, 0, 6);
+    q.push({ gen: 1, start: 0, data: [ramp(0, 6)] });
+    const out = quantum();
+    q.render(out, 4); // frames 4, 5 real; 6, 7 past the end
+    expect(Array.from(out[0]!)).toEqual([4, 5, 0, 0]);
+    q.render(out, 8);
+    expect(q.underruns).toBe(0);
+  });
+
   it("underruns stay silent without shifting time; stale chunks are ignored", () => {
     const q = new StreamQueue();
     q.cue(1, 0, 0);

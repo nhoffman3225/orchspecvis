@@ -92,7 +92,7 @@ self.onmessage = (ev: MessageEvent<FeederRequest>) => {
     pos = m.srcFrame;
     nextChunk = Math.floor(m.srcFrame / chunkFrames);
     inflight = 0;
-    port?.postMessage(m satisfies StreamMessage);
+    port?.postMessage({ ...m, endFrame: wav?.frames ?? Infinity } satisfies StreamMessage);
     pump();
   } else if (m.type === "stop") {
     gen = m.gen;
