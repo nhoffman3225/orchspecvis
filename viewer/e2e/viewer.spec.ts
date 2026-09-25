@@ -24,7 +24,7 @@ test("score view engraves in a worker, highlights sounding notes, seeks on click
   await page.goto(`/?bundle=${BUNDLE}&view=score&t=1.6`);
   const host = page.locator("#score-host");
   try {
-    await expect(host.locator("svg").first()).toBeVisible({ timeout: 150_000 });
+    await expect(host.locator("svg").first()).toBeVisible({ timeout: 45_000 });
   } catch (e) {
     const info = await page.locator("#score-info").textContent();
     const d = await host.evaluate((el) => ({ ...(el as HTMLElement).dataset }));
