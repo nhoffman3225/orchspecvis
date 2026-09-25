@@ -56,6 +56,18 @@ workers: ${workers.length}; ${alive}
   await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
   await expect(page.locator("#score-time")).not.toHaveText(before ?? "");
   await expect(page.locator("#score-time")).toContainText("m. 5");
+  // zoom: + key and Ctrl+wheel re-engrave, keeping the page with the playhead
+  await page.keyboard.press("+");
+  await expect(page.locator("#score-zoom")).toHaveText("44 %");
+  await host.hover();
+  await page.mouse.wheel(0, 100); // plain wheel: scroll only
+  await expect(page.locator("#score-zoom")).toHaveText("44 %");
+  await page.keyboard.down("Control");
+  await page.mouse.wheel(0, 100);
+  await page.keyboard.up("Control");
+  await expect(page.locator("#score-zoom")).toHaveText("40 %");
+  await expect(host.locator("svg").first()).toBeVisible();
+  await expect(page.locator("#score-page")).toContainText("page 1 /");
   expect(g.offOrigin).toEqual([]);
   expect(g.errors, g.errors.join(" | ")).toEqual([]);
 });

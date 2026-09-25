@@ -37,6 +37,7 @@ export class ScoreView {
   private xCache = new Map<number, number | null>();
   private line = document.createElement("div");
   scale = 38;
+  private lastMs: number | null = null; // Verovio time at the last update
   follow = true;
   condense = false;
 
@@ -133,9 +134,12 @@ export class ScoreView {
   /** Re-layout after a size, zoom or condense change (in the worker). */
   async relayout(): Promise<void> {
     if (!this.lay) return;
+    // keep the reader's place: the bar at the playhead, else the first bar on screen
+    const anchor = this.lastMs ?? this.lay.measures.find((m) => m.page === this.page)?.ms ?? 0;
     this.info.textContent = "re-engraving…";
     this.accept(await this.call<LayoutResult>({ op: "relayout", opts: this.opts() }));
     this.info.textContent = "";
+    await this.show(this.pageAt(anchor));
   }
 
   pageLabel(): string {
@@ -187,6 +191,7 @@ export class ScoreView {
   update(t: number): void {
     if (!this.lay || !this.clock) return;
     const ms = this.clock.audioToVrv(t);
+    this.lastMs = Number.isFinite(ms) ? ms : null;
     if (!Number.isFinite(ms)) {
       this.host.dataset.state = "no-sync"; // no measure anchors: score and bundle disagree
       return;

@@ -820,13 +820,32 @@ async function main(): Promise<void> {
     scoreView.condense = (e.target as HTMLInputElement).checked;
     void scoreView.relayout();
   });
+  // zoom = Verovio scale (re-engraves in the worker); wheel steps are coalesced so a fast
+  // scroll re-engraves once
+  let zoomTimer = 0;
   const zoom = (f: number): void => {
     if (!scoreView) return;
-    scoreView.scale = Math.min(80, Math.max(15, Math.round(scoreView.scale * f)));
-    void scoreView.relayout();
+    scoreView.scale = Math.min(150, Math.max(10, Math.round(scoreView.scale * f)));
+    $("score-zoom").textContent = `${scoreView.scale} %`;
+    clearTimeout(zoomTimer);
+    zoomTimer = window.setTimeout(() => void scoreView?.relayout(), 180);
   };
   $("score-zoomin").addEventListener("click", () => zoom(1.15));
   $("score-zoomout").addEventListener("click", () => zoom(1 / 1.15));
+  $("score-host").addEventListener("wheel", (e) => {
+    if (!e.ctrlKey) return; // plain wheel scrolls the page
+    e.preventDefault();
+    zoom(e.deltaY < 0 ? 1.1 : 1 / 1.1);
+  }, { passive: false });
+  addEventListener("keydown", (e) => {
+    if (!scoreOpen || e.target instanceof HTMLInputElement || e.target instanceof HTMLSelectElement) return;
+    if (e.key === "+" || e.key === "=") zoom(1.15);
+    else if (e.key === "-" || e.key === "_") zoom(1 / 1.15);
+  });
+  if (params.get("zoom") && scoreView) {
+    scoreView.scale = Math.min(150, Math.max(10, Number(params.get("zoom")) || 38));
+    $("score-zoom").textContent = `${scoreView.scale} %`;
+  }
   followBox.addEventListener("change", () => {
     if (scoreView) scoreView.follow = followBox.checked;
   });
