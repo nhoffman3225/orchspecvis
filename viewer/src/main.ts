@@ -9,6 +9,7 @@ import { TuttiView } from "./tuttiview";
 import { chordXml, condense, ink, pitchClassSet, scaleXml, toHex, type MapNote } from "./condense";
 import type { SelectionSummary } from "./tutti";
 import { ScoreView } from "./scoreview";
+import { PdfView } from "./pdfview";
 import { HARM_PRESETS, harmSliderValue, snapHarm } from "./presets";
 import { frameGaps, frameSpans } from "./gaps";
 import { COLORMAPS, colormapLut, cssColor, stemPalette } from "./colormap";
@@ -1077,8 +1078,9 @@ async function main(): Promise<void> {
   // ---- engraved score view (Verovio; loaded on first open)
   let scoreOpen = false;
   let scoreView: ScoreView | null = null;
+  let pdfView: PdfView | null = null; // v6: the imported score PDF
+  const scoreSrc = $<HTMLSelectElement>("score-src");
   if (m.score?.score_file) {
-    $("scorebtn").hidden = false;
     scoreView = new ScoreView($("score-host"), $("score-info"), base, m, {
       partColor,
       visible: (p) => partsVisible.has(p),
@@ -1086,24 +1088,48 @@ async function main(): Promise<void> {
       now: () => player.transport.position(),
     });
   }
+  const hasPdf = !!m.score?.pdf?.pages.length;
+  if (hasPdf) {
+    $("score-src-l").hidden = !scoreView; // choice only when both exist
+    if (!scoreView || params.get("scoresrc") === "pdf") scoreSrc.value = "pdf";
+  }
+  if (scoreView || hasPdf) $("scorebtn").hidden = false;
+  const usePdf = (): boolean => hasPdf && scoreSrc.value === "pdf";
+  const showSource = (): void => {
+    const pdf = usePdf();
+    $("score-host").hidden = pdf;
+    $("score-pdf").hidden = !pdf;
+    $("score-condense").parentElement!.hidden = pdf;
+    if (pdf && !pdfView && m.score?.pdf) {
+      pdfView = new PdfView($("score-pdf"), base, m.score.pdf, m.score.measures, {
+        onSeek: (s) => seek(s), now: () => player.transport.position(),
+      });
+      pdfView.follow = followBox.checked;
+    }
+    if (!pdf && scoreView && scoreOpen) {
+      void busy.while("score", scoreView.load()).catch((e: unknown) => {
+        $("score-info").textContent = `score error: ${e instanceof Error ? e.message : String(e)}`;
+      });
+    }
+  };
   const setScore = (open: boolean): void => {
-    if (open && !scoreView) return;
+    if (open && !scoreView && !hasPdf) return;
     scoreOpen = open;
     $("scoreview").hidden = !open;
     if (open) {
       if (tuttiOpen) setTutti(false);
       if (regOpen) setRegisters(false);
       setPiano(false);
-      void busy.while("score", scoreView!.load()).catch((e: unknown) => {
-        $("score-info").textContent = `score error: ${e instanceof Error ? e.message : String(e)}`;
-      });
+      showSource();
     }
   };
+  scoreSrc.addEventListener("change", showSource);
   $("scorebtn").addEventListener("click", () => setScore(true));
   $("scoreclose").addEventListener("click", () => setScore(false));
   const followBox = $<HTMLInputElement>("score-follow");
   const stepPage = (d: number): void => {
-    scoreView?.step(d); // manual paging turns follow off
+    if (usePdf()) pdfView?.step(d);
+    else scoreView?.step(d); // manual paging turns follow off
     followBox.checked = false;
   };
   $("score-prev").addEventListener("click", () => stepPage(-1));
@@ -1117,6 +1143,11 @@ async function main(): Promise<void> {
   // scroll re-engraves once
   let zoomTimer = 0;
   const zoom = (f: number): void => {
+    if (usePdf() && pdfView) {
+      pdfView.setZoom(pdfView.zoom * f);
+      $("score-zoom").textContent = `${Math.round(pdfView.zoom * 100)} %`;
+      return;
+    }
     if (!scoreView) return;
     scoreView.scale = Math.min(150, Math.max(10, Math.round(scoreView.scale * f)));
     $("score-zoom").textContent = `${scoreView.scale} %`;
@@ -1140,6 +1171,7 @@ async function main(): Promise<void> {
     $("score-zoom").textContent = `${scoreView.scale} %`;
   }
   followBox.addEventListener("change", () => {
+    if (pdfView) pdfView.follow = followBox.checked;
     if (scoreView) scoreView.follow = followBox.checked;
   });
   let relayoutTimer = 0;
@@ -1205,11 +1237,13 @@ async function main(): Promise<void> {
       const rt = `${fmt(t)} / ${fmt(m.duration_seconds)}`;
       if ($("reg-time").textContent !== rt) $("reg-time").textContent = rt;
     } else if (scoreOpen) {
-      scoreView?.update(t);
+      if (usePdf()) pdfView?.update(t);
+      else scoreView?.update(t);
       const bbs = m.score ? measureAt(m.score.measures, t) : null;
       const st = `${fmt(t)}${bbs ? ` · m. ${bbs.number}${bbs.pass > 1 ? ` (pass ${bbs.pass})` : ""} · beat ${bbs.beat.toFixed(1)}` : ""}`;
       if ($("score-time").textContent !== st) $("score-time").textContent = st;
-      const pl = scoreView?.pageLabel() ?? "";
+      const pl = usePdf() && pdfView ? `page ${pdfView.currentPage + 1} / ${pdfView.pageCount}`
+        : scoreView?.pageLabel() ?? "";
       if ($("score-page").textContent !== pl) $("score-page").textContent = pl;
     } else if (pianoOpen) {
       drawPiano(t);

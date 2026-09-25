@@ -143,14 +143,19 @@ and ties, one grand staff) or `sections` (full rhythm per section), `musicxml`
 score) and `map` (JSON: `notes` maps each reduced note's `id` to `parts` (part indices),
 `midi`, `name` and `group`; plus `groups` and `parts` names).
 
-Readers must accept schema_version 1 (no score) to 5; `tile_encoding` other than `raw`
-requires v4, `score.reductions` requires v5.
+Schema v6 adds `score.pdf` (optional, when the session has `score.pdf`): `dpi` and
+`pages` (`path` of a grayscale PNG per page, `width`, `height` in pixels) and `bars`
+(`page`, printed or continued bar `number` as in `score.measures[].number`, and the bar's
+box `x0 y0 x1 y1` in that page's pixels), found by `score/pdf.py`.
+
+Readers must accept schema_version 1 (no score) to 6; `tile_encoding` other than `raw`
+requires v4, `score.reductions` v5, `score.pdf` v6.
 
 ## manifest.json fields
 
 | field | type | notes |
 | --- | --- | --- |
-| `schema_version` | int | `5` (`1` to `4` still accepted) |
+| `schema_version` | int | `6` (`1` to `5` still accepted) |
 | `created_by` | string | e.g. `orchspec 0.1.0` |
 | `created_at` | string | ISO 8601 UTC |
 | `sr`, `hop`, `n_samples` | int | mix sample rate, CQT hop, mix length |

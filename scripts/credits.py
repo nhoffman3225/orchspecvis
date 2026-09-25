@@ -37,6 +37,7 @@ ROLE = {
     "uvicorn": "ASGI server for `orchspec serve`",
     "pyyaml": "instrument range data",
     "defusedxml": "safe MusicXML parsing",
+    "pypdfium2": "rendering score PDFs (PDFium)",
     "torch": "GPU constant-Q transform (optional)",
     "ruff": "linting and formatting",
     "pyright": "static type checking",

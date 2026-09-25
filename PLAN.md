@@ -43,6 +43,8 @@ Phase 3b (started 2026-09-25 at the user's request; Tauri 2 + PyO3 were in the p
 Rust crates tauri 2.11, tauri-build, tauri-plugin-dialog (native folder picker), serde,
 serde_json, flate2 (gzip tiles); npm @tauri-apps/cli (desktop/, dev). PyO3 + maturin not
 added yet (the Python writer does not need the Rust core yet).
+Approved 2026-09-25: pypdfium2 (BSD-3-Clause / Apache-2.0; bundles PDFium, BSD-3 /
+Apache-2.0) for score PDF import. Tooling (not dependencies): pip-audit, cargo-deny.
 
 ## Phases
 
@@ -194,8 +196,15 @@ carry the `real` marker and never run in CI.
       common spelling, ascending from the lowest note) plus pitches with their parts and a
       keyboard strip. The canvas reduction remains for MIDI-only bundles. Dorico 6.2
       MusicXML export writes 18 separate one-staff parts (no condensing information)
-- [ ] PDF import (Dorico condensed layout as page images): needs pdf.js (approval) and a
-      bar->page-position map (manual anchors or barline detection)
+- [x] Score PDF (2026-09-25, schema v6 `score.pdf`): session `score.pdf` rendered once at
+      import (pypdfium2 / PDFium, 150 dpi grayscale PNG); bars found on the image (staff
+      lines, barlines through every staff of a system) and numbered from the PDF's text
+      layer (numbers just after a barline above the system; multi-rest counts ignored).
+      The score view gains a PDF source following playback (current bar + playhead,
+      click to seek). Chosen over pdf.js (re-renders per view; detection awkward) and a
+      Rust renderer (no faster: PDFium either way). Test PDF is hand-written
+- [ ] Score PDF on a real Dorico condensed export: check bar detection (bracketed
+      barlines, multi-bar rests, codas), add manual bar anchors if needed
 4. Scale & playback
 - [x] Streaming playback: WAV mixes play through an AudioWorklet fed with 1 s Range chunks
       ~5 s ahead (sample-accurate cue, starts scheduled 80 ms ahead, underruns = silence,

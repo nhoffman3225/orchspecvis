@@ -4,7 +4,7 @@
 
 import { fetchSameOrigin } from "./net";
 
-export const SUPPORTED_VERSIONS = [1, 2, 3, 4, 5] as const;
+export const SUPPORTED_VERSIONS = [1, 2, 3, 4, 5, 6] as const;
 export const NOTE_COLUMNS = [
   "part", "staff", "voice", "midi", "onset_s", "offset_s", "measure", "beat", "velocity",
   "f0_db", "f0_ok",
@@ -104,6 +104,13 @@ export interface ScoreInfo {
   alignment: Alignment;
   score_file: string | null;
   reductions: Reduction[]; // v5
+  pdf: PdfScore | null; // v6
+}
+/** v6: the score as page images with the bars found on them (pixels of each page). */
+export interface PdfScore {
+  dpi: number;
+  pages: { path: string; width: number; height: number }[];
+  bars: { page: number; number: string; x0: number; y0: number; x1: number; y1: number }[];
 }
 /** v5: engravable reduction of the score and its note map (JSON). */
 export interface Reduction {
@@ -112,7 +119,7 @@ export interface Reduction {
   map: string;
 }
 export interface Manifest {
-  schema_version: 1 | 2 | 3 | 4 | 5;
+  schema_version: 1 | 2 | 3 | 4 | 5 | 6;
   created_by: string;
   created_at: string;
   sr: number;
@@ -308,10 +315,28 @@ function parseScoreMeasure(v: unknown, i: number, w0: string): ScoreMeasure {
   };
 }
 
+function parsePdf(v: unknown, w: string): PdfScore {
+  const o = obj(v, w, ["dpi", "pages", "bars"], []);
+  const pages = arr(o.pages, `${w}.pages`).map((pv, i) => {
+    const p = obj(pv, `${w}.pages[${i}]`, ["path", "width", "height"], []);
+    return { path: checkRelPath(p.path, `${w}.pages[${i}].path`), width: int(p.width, `${w}.pages[${i}].width`, 1),
+      height: int(p.height, `${w}.pages[${i}].height`, 1) };
+  });
+  const bars = arr(o.bars, `${w}.bars`).map((bv, i) => {
+    const bw = `${w}.bars[${i}]`;
+    const b = obj(bv, bw, ["page", "number", "x0", "y0", "x1", "y1"], []);
+    const page = int(b.page, `${bw}.page`, 0);
+    if (page >= pages.length) fail(`${bw}.page`, "refers to a missing page");
+    return { page, number: str(b.number, `${bw}.number`), x0: int(b.x0, `${bw}.x0`, -1e9),
+      y0: int(b.y0, `${bw}.y0`, -1e9), x1: int(b.x1, `${bw}.x1`, -1e9), y1: int(b.y1, `${bw}.y1`, -1e9) };
+  });
+  return { dpi: int(o.dpi, `${w}.dpi`, 1), pages, bars };
+}
+
 function parseScore(v: unknown): ScoreInfo {
   const w = "manifest.score";
   const o = obj(v, w, ["kind", "source_files", "parts", "measures", "notes", "alignment"],
-    ["score_file", "reductions"]);
+    ["score_file", "reductions", "pdf"]);
   const no = obj(o.notes, `${w}.notes`, ["path", "n", "columns"], ["dtype", "layout"]);
   const columns = strList(no.columns, `${w}.notes.columns`);
   if (columns.join(",") !== NOTE_COLUMNS.join(",")) {
@@ -344,6 +369,7 @@ function parseScore(v: unknown): ScoreInfo {
         map: checkRelPath(r.map, `${rw}.map`),
       };
     }),
+    pdf: o.pdf == null ? null : parsePdf(o.pdf, `${w}.pdf`),
     alignment: {
       method: oneOf(ao.method, `${aw}.method`, ["warp", "xcorr", "manual", "preroll_only"] as const),
       offset_sec: num(ao.offset_sec, `${aw}.offset_sec`),
@@ -380,7 +406,7 @@ export function parseManifest(json: unknown): Manifest {
   const off = o.offsets === undefined ? {} : obj(o.offsets, "manifest.offsets", [], ["preroll_sec"]);
 
   const m: Manifest = {
-    schema_version: o.schema_version as 1 | 2 | 3 | 4 | 5,
+    schema_version: o.schema_version as 1 | 2 | 3 | 4 | 5 | 6,
     created_by: str(o.created_by, "manifest.created_by"),
     created_at: str(o.created_at, "manifest.created_at"),
     sr: int(o.sr, "manifest.sr", 1),
@@ -452,6 +478,7 @@ export function parseManifest(json: unknown): Manifest {
   };
   if (m.score && m.schema_version < 2) fail("manifest.score", "requires schema_version 2");
   if (m.score?.reductions.length && m.schema_version < 5) fail("manifest.score.reductions", "requires schema_version 5");
+  if (m.score?.pdf && m.schema_version < 6) fail("manifest.score.pdf", "requires schema_version 6");
   if (m.tile_encoding !== "raw" && m.schema_version < 4) {
     fail("manifest.tile_encoding", "requires schema_version 4");
   }

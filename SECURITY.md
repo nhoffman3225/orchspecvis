@@ -41,6 +41,10 @@ no reason to talk to the network.
 
 ## Untrusted inputs
 
+- **Score PDF** (`score.pdf`, schema v6): parsed by PDFium (pypdfium2; the engine Chrome
+  uses), once, at import; local path only, at most 200 MB and 400 pages. The viewer only
+  ever sees the rendered PNG pages and the bar boxes (never the PDF itself).
+
 Session folders (WAV, MIDI, MusicXML, YAML) and bundles are treated as untrusted.
 
 | Input | Handling |

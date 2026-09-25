@@ -110,6 +110,11 @@
       <div id="scoreview" hidden>
         <div id="score-bar">
           <strong>Score</strong>
+          <label id="score-src-l" hidden title="The engraved MusicXML (Verovio) or the imported PDF (e.g. Dorico's condensed layout)">
+            <select id="score-src">
+              <option value="xml">engraved (MusicXML)</option>
+              <option value="pdf">PDF</option>
+            </select></label>
           <span id="score-time"></span>
           <button id="score-prev" type="button" title="previous page (PgUp)">◀</button>
           <span id="score-page"></span>
@@ -125,6 +130,7 @@
           <button id="scoreclose" type="button">✕ close</button>
         </div>
         <div id="score-host"></div>
+        <div id="score-pdf" hidden></div>
       </div>
       <div id="tuttiview" hidden>
         <div id="tutti-bar">

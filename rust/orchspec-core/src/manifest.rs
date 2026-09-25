@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 use std::fmt;
 
 pub const MANIFEST_NAME: &str = "manifest.json";
-pub const SUPPORTED_VERSIONS: [u32; 5] = [1, 2, 3, 4, 5];
+pub const SUPPORTED_VERSIONS: [u32; 6] = [1, 2, 3, 4, 5, 6];
 pub const NONE_STEM: u32 = 255;
 pub const NOTE_COLUMNS: [&str; 11] = [
     "part", "staff", "voice", "midi", "onset_s", "offset_s", "measure", "beat", "velocity", "f0_db", "f0_ok",
@@ -284,6 +284,36 @@ pub struct ScoreInfo {
     /// v5: engravable reductions (score/reduce.py) and their note maps.
     #[serde(default)]
     pub reductions: Vec<Reduction>,
+    /// v6: the score as page images with the bars found on them.
+    #[serde(default)]
+    pub pdf: Option<PdfScore>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct PdfScore {
+    pub dpi: u32,
+    pub pages: Vec<PdfPage>,
+    pub bars: Vec<PdfBar>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct PdfPage {
+    pub path: String,
+    pub width: u32,
+    pub height: u32,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct PdfBar {
+    pub page: u32,
+    pub number: String,
+    pub x0: i64,
+    pub y0: i64,
+    pub x1: i64,
+    pub y1: i64,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -454,6 +484,17 @@ impl Manifest {
             }
             if !sc.reductions.is_empty() && self.schema_version < 5 {
                 return fail("score reductions require schema_version 5");
+            }
+            if let Some(pdf) = &sc.pdf {
+                if self.schema_version < 6 {
+                    return fail("a score pdf requires schema_version 6");
+                }
+                for p in &pdf.pages {
+                    check_rel_path(&p.path)?;
+                }
+                if pdf.bars.iter().any(|b| b.page as usize >= pdf.pages.len()) {
+                    return fail("score pdf bar refers to a missing page");
+                }
             }
             for r in &sc.reductions {
                 one_of("score.reductions.mode", &r.mode, &["chords", "section-chords", "tutti", "sections"])?;

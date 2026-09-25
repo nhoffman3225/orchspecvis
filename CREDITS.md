@@ -21,6 +21,7 @@ licence column is what each project declares._
 | [uvicorn](https://uvicorn.dev/) | 0.53.0 | BSD-3-Clause | ASGI server for `orchspec serve` |
 | [pyyaml](https://pyyaml.org/) | 6.0.3 | MIT License | instrument range data |
 | [defusedxml](https://github.com/tiran/defusedxml) | 0.7.1 | Python Software Foundation License | safe MusicXML parsing |
+| [pypdfium2](https://github.com/pypdfium2-team/pypdfium2) | 5.13.0 | BSD-3-Clause, Apache-2.0, dependency licenses | rendering score PDFs (PDFium) |
 | [torch](https://pytorch.org) | 2.14.0+cu130 | Apache-2.0 AND Apache-2.0 WITH LLVM-exception AND BSD-2-Clause AND BSD-3-Clause AND BSL-1.0 AND MIT | GPU constant-Q transform (optional) (gpu) |
 | [ruff](https://github.com/astral-sh/ruff) | 0.16.8 | MIT | linting and formatting (dev) |
 | [pyright](https://github.com/RobertCraigie/pyright-python) | 1.1.414 | MIT | static type checking (dev) |

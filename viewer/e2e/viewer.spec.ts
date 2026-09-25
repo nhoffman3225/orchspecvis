@@ -233,6 +233,24 @@ test("tutti: engraved chord-per-bar reduction; a bar condenses into a chord and 
   expect(g.errors, g.errors.join(" | ")).toEqual([]);
 });
 
+test("score PDF: page image follows playback with the current bar and a playhead", async ({ page, baseURL }) => {
+  const g = guard(page, baseURL!);
+  await page.goto(`/?${Q}&view=score&scoresrc=pdf&t=3`); // bar 2
+  const pdf = page.locator("#score-pdf");
+  await expect(pdf.locator("img")).toBeVisible();
+  await expect(pdf).toHaveAttribute("data-pdf-bar", "2");
+  await expect(pdf.locator(".pdf-bar")).toBeVisible();
+  await expect(pdf.locator(".score-line")).toBeVisible();
+  await expect(page.locator("#score-page")).toHaveText("page 1 / 1");
+  // switch to the engraved MusicXML and back
+  await page.locator("#score-src").selectOption("xml");
+  await expect(page.locator("#score-host svg").first()).toBeVisible({ timeout: 90_000 });
+  await page.locator("#score-src").selectOption("pdf");
+  await expect(pdf.locator("img")).toBeVisible();
+  expect(g.offOrigin).toEqual([]);
+  expect(g.errors, g.errors.join(" | ")).toEqual([]);
+});
+
 test("piano view renders", async ({ page, baseURL }) => {
   const g = guard(page, baseURL!);
   await page.goto(`/?${Q}&view=piano&t=3`); // bar 2 starts at ~2.54 s (audio)

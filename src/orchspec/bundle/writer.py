@@ -29,6 +29,7 @@ from orchspec.bundle.schema import (
     SourceInfo,
     Stem,
     TileEncoding,
+    pdf_info,
 )
 from orchspec.bundle.score_stage import ScorePlan, prepare_score
 from orchspec.dsp.cqt import CQTBackend, CQTSpec, TorchBackend, calibrated_db, get_backend
@@ -45,6 +46,7 @@ from orchspec.dsp.tiles import (
 )
 from orchspec.io.audio import load_audio, sha256_file, to_mono
 from orchspec.io.session import Session
+from orchspec.score.pdf import render_pdf
 from orchspec.timeline.align import onset_envelope_fine
 
 KEEP_LEVEL0_BYTES = 1 << 30  # 1 GiB of level-0 tiles kept in memory for fundamentals
@@ -91,6 +93,7 @@ class BundleInputs:
     offsets: Offsets = field(default_factory=Offsets)
     score_path: Path | None = None
     midi_path: Path | None = None
+    pdf_path: Path | None = None  # engraved score to follow (score.pdf)
 
 
 @dataclass
@@ -128,6 +131,7 @@ def inputs_from_session(s: Session) -> BundleInputs:
         offsets=Offsets(preroll_sec=cfg.preroll_sec),
         score_path=s.score_path,
         midi_path=s.midi_path,
+        pdf_path=s.pdf_path,
     )
 
 
@@ -433,6 +437,13 @@ def _build(
             arrays=keep,
         )
         score_info = plan.write(root)
+        if inputs.pdf_path is not None:
+            try:  # a reading aid: never fail the bundle over it
+                pdf = render_pdf(inputs.pdf_path, root)
+                score_info = score_info.model_copy(update={"pdf": pdf_info(pdf)})
+                log(f"score pdf: {len(pdf.pages)} pages, {len(pdf.bars)} bars found")
+            except Exception as e:
+                log(f"warning: score.pdf skipped ({e})")
         tm.add("score", t0)
 
     # ---- audio copy + manifest

@@ -20,6 +20,7 @@ dependencies = [
     "uvicorn>=0.32",
     "pyyaml>=6.0",
     "defusedxml>=0.7.1",
+    "pypdfium2>=5.13",
 ]
 
 [project.optional-dependencies]

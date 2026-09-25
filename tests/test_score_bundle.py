@@ -11,6 +11,7 @@ from orchspec.bundle.schema import NOTE_COLUMNS, Manifest
 from orchspec.bundle.writer import BundleOptions, build_bundle, inputs_from_session
 from orchspec.io.session import load_session
 from tests.fixtures import make_score_session as fx
+from tests.fixtures.make_pdf import make_pdf
 
 VIEWER_FIXTURE = Path(__file__).resolve().parents[1] / "viewer" / "test-data" / "py-score-bundle"
 
@@ -18,6 +19,7 @@ VIEWER_FIXTURE = Path(__file__).resolve().parents[1] / "viewer" / "test-data" / 
 @pytest.fixture(scope="module")
 def bundle(tmp_path_factory: pytest.TempPathFactory) -> tuple[Path, Manifest]:
     sess = fx.make(tmp_path_factory.mktemp("sess") / "score-session")
+    make_pdf(sess / "score.pdf")  # the engraved score to follow (schema v6)
     out = tmp_path_factory.mktemp("out") / "score.bundle"
     rep = build_bundle(
         inputs_from_session(load_session(sess)), out, BundleOptions(k=3, tile_frames=256)
@@ -38,7 +40,7 @@ def _notes(root: Path, m: Manifest) -> dict[str, np.ndarray]:
 def test_manifest_v2_score_section(bundle) -> None:  # type: ignore[no-untyped-def]
     root, _ = bundle
     m2 = Manifest.model_validate_json((root / "manifest.json").read_text(encoding="utf-8"))
-    assert m2.schema_version == 5 and m2.score is not None
+    assert m2.schema_version == 6 and m2.score is not None
     # engravable reductions (tutti grand staff + short score) with their note maps
     assert [r.mode for r in m2.score.reductions] == [
         "chords",
@@ -211,3 +213,12 @@ def test_parallel_build_equals_sequential(tmp_path: Path) -> None:
             )
         else:
             assert (a / rel).read_bytes() == (b / rel).read_bytes(), rel
+
+
+def test_score_pdf_in_bundle(bundle) -> None:  # type: ignore[no-untyped-def]
+    root, m = bundle
+    assert m.score is not None and m.score.pdf is not None
+    pdf = m.score.pdf
+    assert [b.number for b in pdf.bars] == ["1", "2", "3", "5", "6", "7"]
+    assert (root / pdf.pages[0].path).read_bytes()[1:4] == b"PNG"
+    assert all(0 <= b.x0 < b.x1 <= pdf.pages[0].width for b in pdf.bars)

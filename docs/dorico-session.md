@@ -11,6 +11,7 @@ session/<name>/
   ...
   render.mid                 MIDI export of the same flow
   score.musicxml             MusicXML export of the same flow (or score.mxl)
+  score.pdf                  optional: the engraved score to follow (e.g. condensed)
   render.yaml                optional; `uv run orchspec session-template session/<name>`
 ```
 
@@ -36,7 +37,12 @@ between. Menu names differ slightly between Dorico versions; these are the Doric
 4. **MusicXML** — File ▸ Export ▸ MusicXML → `score.musicxml` (uncompressed) or
    `score.mxl`. Either transposed or concert pitch works: orchspec converts to sounding
    pitch.
-5. **render.yaml** (optional):
+5. **score.pdf** (optional) — File ▸ Export ▸ Graphics, format PDF, one file for the
+   whole layout → `score.pdf`. Use the layout you want to read along with (the condensed
+   full score shows Dorico's condensing, which MusicXML does not carry). Show bar numbers
+   (every system, or every bar) — orchspec reads them from the PDF's text to place bars;
+   bars without a printed number continue from the previous one.
+6. **render.yaml** (optional):
    ```yaml
    renderer: dorico_noteperformer5
    preroll_sec: 0.0   # leave 0: the ~0.5 s NotePerformer lead-in is measured automatically
