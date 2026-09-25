@@ -54,7 +54,9 @@ def bundle(
     out: Annotated[Path, typer.Option("-o", "--out", help="output dir or x.bundle path")],
     k: Annotated[int, typer.Option(help="bins per semitone (1 or 3)")] = 3,
     hop: Annotated[int, typer.Option(help="CQT hop in samples")] = 512,
-    backend: Annotated[str, typer.Option(help="librosa | torch")] = "librosa",
+    backend: Annotated[
+        str, typer.Option(help="librosa | torch | auto (torch when installed, else librosa)")
+    ] = "librosa",
     device: Annotated[str | None, typer.Option(help="torch device (cuda, mps, cpu)")] = None,
     db_min: float = -96.0,
     db_max: float = 6.0,
@@ -96,6 +98,10 @@ def bundle(
         typer.echo(f"error: {e}", err=True)
         raise typer.Exit(2) from e
     target = resolve_output(out, s.name)
+    if backend == "auto":
+        import importlib.util
+
+        backend = "torch" if importlib.util.find_spec("torch") is not None else "librosa"
     opts = BundleOptions(
         k=k,
         hop=hop,

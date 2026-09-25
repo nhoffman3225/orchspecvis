@@ -128,6 +128,11 @@ impl Reply {
         Reply::new(status, "text/plain; charset=utf-8", msg.as_bytes().to_vec())
     }
 
+    /// JSON body with the security headers (app status endpoints).
+    pub fn json(body: Vec<u8>) -> Reply {
+        Reply::new(200, "application/json", body)
+    }
+
     pub fn header(&self, name: &str) -> Option<&str> {
         self.headers.iter().find(|(k, _)| k.eq_ignore_ascii_case(name)).map(|(_, v)| v.as_str())
     }
