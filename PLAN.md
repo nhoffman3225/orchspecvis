@@ -156,8 +156,11 @@ carry the `real` marker and never run in CI.
       order with repeats expanded ("-rend2"), aligned to score.measures by number (LCS);
       sounding notes from the timemap's on/off lists (getElementsAtTime only reports notes
       near onsets); SVG sanitized before insertion (strict CSP kept)
-- [ ] Verovio in a Web Worker (layout of Beethoven 5 i: ~2 s + 0.8 s timemap on the main
-      thread when the score view first opens); hide-empty-staves option
+- [x] Verovio in a Web Worker (verovio.worker.ts + testable verovioCore.ts): the main
+      thread stays responsive while a movement engraves; per-frame page/sounding lookups
+      are local. Hide-empty-staves option (Verovio condense); parts found via staff@n
+      (data-n) so colours stay right when staves are hidden. Click anywhere in a bar seeks
+      to it; Verovio's rounded-down element times are nudged +2 ms
   Acceptance: highlight stays within one beat — met on Beethoven 5 i (626 played bars map
   1:1; m. 48 beat 2.5 highlighted at 0:30); a 20-min fixture is still to do
 3. Register-distribution views
@@ -169,7 +172,10 @@ carry the `real` marker and never run in CI.
       ~460 MB of decoded audio
 - [ ] Compressed tiles (gzip + DecompressionStream) and/or stems from LOD 1 (schema v3)
 - [ ] Viewer page assembly, smoothing, stem sums in a Web Worker
-- [ ] Playwright E2E smoke + network check (@playwright/test approved 2026-09-24)
+- [x] Playwright E2E (@playwright/test 1.63): app load, score view (worker engraving,
+      highlight, click-to-seek), piano view; every test fails on any off-origin request or
+      page error; in CI (Chromium). Local runs: PW_CHANNEL=msedge; opt-in real-session spec
+      via E2E_URL (Beethoven 5 i: engraved + highlighted in 6.9 s)
 
 - [ ] Cubase + BBC SO Pro sessions (moved from 3A)
 

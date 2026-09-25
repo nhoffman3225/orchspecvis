@@ -40,6 +40,8 @@ npm run dev        # Vite dev server on 127.0.0.1 (tiny-bundle by default)
 npm run build      # -> viewer/dist (served by `orchspec serve`)
 npm run lint       # eslint + tsc --noEmit
 npm test           # vitest (includes schema cross-check + no-network check)
+npm run e2e        # Playwright (needs viewer/test-data from `uv run pytest`); PW_CHANNEL=msedge locally
+E2E_URL="<orchspec serve URL>" PW_CHANNEL=msedge npx playwright test real   # LOCAL real session
 ```
 
 `npm run dev` shows viewer/public/tiny-bundle; add `?bundle=/path/` for another bundle
@@ -77,7 +79,9 @@ viewer/             Vite + TS + three.js (WebGL2 only)
   src/tiles.ts      tile LRU cache, page assembly, stem power-sum
   src/surface.ts    heightmap shader surface; src/pane2d.ts 2D pane + LUFS strip
   src/notes.ts      note index, note/f0 rasterization (overlay + fundamentals mask), bar/beat
-  src/scoreview.ts  engraved score (Verovio, lazy); src/scoremap.ts measure sync, SVG sanitizer
+  src/scoreview.ts  engraved score view; Verovio runs in src/verovio.worker.ts (verovioCore.ts)
+  src/scoremap.ts   measure sync (score <-> audio), sounding tracker, SVG sanitizer
+  e2e/              Playwright specs (guard.ts fails tests on off-origin requests)
   src/piano.ts      full-screen piano view (keyboard, live spectrum, falling-notes roll)
   src/presets.ts    harmonics-slider preset stops
   src/heat.ts       keyboard heat map (decayed per-key activity from sound or notes)
