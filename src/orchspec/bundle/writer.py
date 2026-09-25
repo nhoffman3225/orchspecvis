@@ -221,11 +221,14 @@ def _retry(fn: Callable[[], object], tries: int = 20, wait: float = 0.1) -> None
 
 
 def _rmtree(path: Path) -> None:
-    """rmtree that also removes read-only entries (OneDrive marks its folders read-only,
-    which Windows refuses to delete) and waits out short-lived locks."""
+    """rmtree that also removes read-only entries and waits out short-lived locks.
+    Windows refuses to delete a read-only file or folder (OneDrive marks its folders so);
+    POSIX needs a writable parent folder to delete an entry: both are made writable."""
 
     def onexc(fn: Callable[[str], object], p: str, _e: BaseException) -> None:
-        Path(p).chmod(stat.S_IWRITE)
+        for q in (Path(p).parent, Path(p)):
+            with contextlib.suppress(OSError):
+                q.chmod(q.stat().st_mode | stat.S_IWRITE)
         _retry(lambda: fn(p))
 
     shutil.rmtree(path, onexc=onexc)
