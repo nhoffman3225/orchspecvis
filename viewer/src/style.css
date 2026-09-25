@@ -11,7 +11,8 @@ html, body { margin: 0; height: 100%; background: var(--bg); color: var(--fg); }
 #app {
   position: fixed; inset: 0;
   display: grid;
-  grid-template-rows: auto 1fr 32vh 64px auto;
+  /* toolbar · 3D · splitter · 2D pane (--pane-h, dragged) · loudness · status */
+  grid-template-rows: auto minmax(120px, 1fr) 5px var(--pane-h, 32vh) 64px auto;
 }
 #bar {
   display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px;
@@ -30,7 +31,7 @@ html, body { margin: 0; height: 100%; background: var(--bg); color: var(--fg); }
 #view3d { flex: 1; position: relative; min-width: 0; }
 #gl, #cqt2d, #lufs { width: 100%; height: 100%; display: block; }
 #stems {
-  width: 220px; overflow-y: auto; background: var(--panel); border-left: 1px solid var(--line);
+  flex: none; box-sizing: border-box; width: var(--stems-w, 220px); overflow-y: auto; background: var(--panel); border-left: 1px solid var(--line);
   font-size: 12px; padding: 6px 8px;
 }
 #stems[hidden] { display: none; }
@@ -61,7 +62,8 @@ html, body { margin: 0; height: 100%; background: var(--bg); color: var(--fg); }
 #part-list .rng { color: var(--muted); margin-left: auto; font-size: 11px; }
 .hint { color: var(--muted); font-size: 11px; margin: 6px 0 0; }
 #scoreview {
-  position: fixed; inset: 0; z-index: 10; background: #0b0c10;
+  position: fixed; left: 0; right: 0; bottom: 0; top: var(--dock-top, 0px); z-index: 10;
+  background: #0b0c10;
   display: grid; grid-template-rows: auto 1fr;
 }
 #scoreview[hidden] { display: none; }
@@ -94,7 +96,8 @@ html, body { margin: 0; height: 100%; background: var(--bg); color: var(--fg); }
 :is(#score-host, #tutti-score) g.note.playing, :is(#score-host, #tutti-score) g.chord.playing { stroke-width: 12; }
 :is(#score-host, #tutti-score) g.measure:hover { fill: #3a5a8c; color: #3a5a8c; }
 #tuttiview {
-  position: fixed; inset: 0; z-index: 10; background: #0b0c10;
+  position: fixed; left: 0; right: 0; bottom: 0; top: var(--dock-top, 0px); z-index: 10;
+  background: #0b0c10;
   display: grid; grid-template-rows: auto 1fr;
 }
 #tuttiview[hidden] { display: none; }
@@ -105,7 +108,7 @@ html, body { margin: 0; height: 100%; background: var(--bg); color: var(--fg); }
 #tutti-bar label { display: inline-flex; align-items: center; gap: 4px; color: var(--muted); }
 #tutti-bar .hint { margin-left: auto; }
 #tutti-time { color: #e6c07b; font-variant-numeric: tabular-nums; min-width: 190px; }
-#tutti-body { display: grid; grid-template-columns: 1fr 300px; min-height: 0; }
+#tutti-body { display: grid; grid-template-columns: minmax(200px, 1fr) 5px var(--tutti-side-w, 300px); min-height: 0; }
 #tutti-main { display: grid; grid-template-rows: 1fr auto; min-height: 0; position: relative; }
 #tutti-main > [hidden] { display: none; }
 #tutticanvas { width: 100%; height: 100%; display: block; cursor: crosshair; touch-action: none; }
@@ -152,7 +155,8 @@ html, body { margin: 0; height: 100%; background: var(--bg); color: var(--fg); }
 #about-text { white-space: pre-wrap; font-size: 11px; background: #11131a; padding: 12px;
   border: 1px solid var(--line); }
 #regview {
-  position: fixed; inset: 0; z-index: 10; background: #0b0c10;
+  position: fixed; left: 0; right: 0; bottom: 0; top: var(--dock-top, 0px); z-index: 10;
+  background: #0b0c10;
   display: grid; grid-template-rows: auto 1fr;
 }
 #regview[hidden] { display: none; }
@@ -165,7 +169,8 @@ html, body { margin: 0; height: 100%; background: var(--bg); color: var(--fg); }
 #reg-time { color: #e6c07b; font-variant-numeric: tabular-nums; min-width: 190px; }
 #regcanvas { width: 100%; height: 100%; min-height: 0; display: block; cursor: crosshair; }
 #pianoview {
-  position: fixed; inset: 0; z-index: 10; background: #0b0c10;
+  position: fixed; left: 0; right: 0; bottom: 0; top: var(--dock-top, 0px); z-index: 10;
+  background: #0b0c10;
   display: grid; grid-template-rows: auto 1fr;
 }
 #pianoview[hidden] { display: none; }
@@ -213,3 +218,17 @@ body:has(> #importview) { display: block; overflow: hidden; }
 #score-pdf .pdf-bar[hidden], #score-pdf .score-line[hidden] { display: none; }
 #score-pdf .score-line { position: absolute; left: 0; top: 0; width: 2px; margin-left: -1px;
   pointer-events: none; background: rgba(214, 60, 60, 0.85); }
+
+/* panel splitters (splitter.ts): a thin bar with a wider hit area */
+.splitter { background: var(--line); position: relative; z-index: 2; touch-action: none; }
+.splitter[hidden] { display: none; }
+.splitter.y { cursor: row-resize; }
+.splitter.x { cursor: col-resize; width: 5px; }
+.splitter::after { content: ""; position: absolute; inset: -3px; }
+.splitter:hover, .splitter.dragging, .splitter:focus-visible { background: #e6c07b; outline: none; }
+
+/* the score / tutti / registers / piano views dock below the main toolbar, which stays
+   usable; the handle on their top edge (#split-view) uncovers the spectrogram above */
+#app { --dock-top: calc(var(--bar-h, 0px) + var(--view-gap, 0px)); }
+#split-view { position: fixed; left: 0; right: 0; height: 5px; z-index: 12;
+  top: calc(var(--dock-top) - 2px); }

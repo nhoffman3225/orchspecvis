@@ -267,3 +267,43 @@ test("piano view renders", async ({ page, baseURL }) => {
   expect(g.offOrigin).toEqual([]);
   expect(g.errors, g.errors.join(" | ")).toEqual([]);
 });
+
+test("views dock below the toolbar; panels resize by dragging and remember it", async ({ page, baseURL }) => {
+  const g = guard(page, baseURL!);
+  await page.goto(`/?${Q}&view=registers`);
+  const view = page.locator("#regview");
+  await expect(view).toBeVisible();
+  // the toolbar stays reachable while a view is open
+  const bar = (await page.locator("#bar").boundingBox())!;
+  const top0 = (await view.boundingBox())!.y;
+  expect(top0).toBeGreaterThanOrEqual(bar.y + bar.height - 1);
+  await page.locator("#play").click();
+  await expect(page.locator("#play")).toHaveText("❚❚");
+  await page.locator("#play").click();
+  // drag the view's top edge down: the spectrogram above shows again
+  const h = (await page.locator("#split-view").boundingBox())!;
+  await page.mouse.move(400, h.y + 2);
+  await page.mouse.down();
+  await page.mouse.move(400, h.y + 150, { steps: 4 });
+  await page.mouse.up();
+  await expect.poll(async () => (await view.boundingBox())!.y).toBeGreaterThan(top0 + 100);
+  await page.keyboard.press("Escape");
+  await expect(page.locator("#split-view")).toBeHidden();
+  // the 2D pane splitter; the size survives a reload
+  const pane = page.locator("#pane");
+  const ph = (await pane.boundingBox())!.height;
+  const s = (await page.locator("#split-pane").boundingBox())!;
+  await page.mouse.move(400, s.y + 2);
+  await page.mouse.down();
+  await page.mouse.move(400, s.y - 60, { steps: 4 });
+  await page.mouse.up();
+  // (clamped so the 3D view keeps 120 px: in this small viewport the gain is limited)
+  await expect.poll(async () => (await pane.boundingBox())!.height).toBeGreaterThan(ph + 20);
+  const grown = (await pane.boundingBox())!.height;
+  await page.reload();
+  await expect.poll(async () => Math.round((await pane.boundingBox())!.height)).toBe(Math.round(grown));
+  await page.locator("#split-pane").dblclick(); // reset
+  await expect.poll(async () => Math.round((await pane.boundingBox())!.height)).toBe(Math.round(ph));
+  expect(g.offOrigin).toEqual([]);
+  expect(g.errors, g.errors.join(" | ")).toEqual([]);
+});

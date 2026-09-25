@@ -15,7 +15,7 @@
     <div id="app">
       <header id="bar">
         <button id="play" type="button" title="Play/pause (Space)">▶</button>
-        <button id="pianobtn" type="button" title="Full-screen piano view (P); Esc to close">🎹 piano</button>
+        <button id="pianobtn" type="button" title="Piano view (P); Esc to close">🎹 piano</button>
         <button id="regbtn" type="button" title="Register distribution by section (R); Esc to close">📊 registers</button>
         <button id="tuttibtn" type="button" title="Tutti reduction for proofreading (T); Esc to close" hidden>🎼 tutti</button>
         <button id="aboutbtn" type="button" title="About orchspec and open-source credits">ⓘ credits</button>
@@ -83,6 +83,7 @@
       </header>
       <main id="main">
         <div id="view3d"><canvas id="gl"></canvas></div>
+        <div id="split-stems" class="splitter x" hidden></div>
         <aside id="stems" hidden>
           <div id="sections" title="Select by section (from part and stem names). Click: only this section; Ctrl/Shift+click: add or remove it."></div>
           <div class="stems-head">
@@ -101,12 +102,14 @@
           </section>
         </aside>
       </main>
+      <div id="split-pane" class="splitter y"></div>
       <section id="pane" title="wheel: stretch pitch axis · shift+wheel: pan · double-click: reset">
         <canvas id="cqt2d"></canvas>
         <div id="tip" hidden></div>
       </section>
       <canvas id="lufs"></canvas>
       <div id="status">loading…</div>
+      <div id="split-view" class="splitter y" hidden></div>
       <div id="scoreview" hidden>
         <div id="score-bar">
           <strong>Score</strong>
@@ -161,6 +164,7 @@
             <canvas id="tutti-kb" hidden></canvas>
             <span id="tutti-info" class="hint"></span>
           </div>
+          <div id="split-tutti" class="splitter x"></div>
           <aside id="tutti-side">
             <div id="tutti-chord"></div>
             <div id="tutti-scale"></div>
