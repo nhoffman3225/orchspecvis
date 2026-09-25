@@ -9,9 +9,16 @@ name: release
 # The NVIDIA (CUDA torch) build is not published: ~1.8 GB even as .7z, next to GitHub's
 # 2 GiB per-file limit and over NSIS's 2 GB. Build it locally: `npm run dist:gpu` in
 # desktop/ (portable .7z; see desktop/README.md).
+# PRs that change the build itself run it too (artifacts only, no release).
 on:
   push:
     tags: ["v*"]
+  pull_request:
+    paths:
+      - ".github/workflows/release.yml"
+      - "scripts/build_runtime.py"
+      - "scripts/package_portable.py"
+      - "desktop/src-tauri/tauri.dist.conf.json"
   workflow_dispatch:
 
 permissions:
@@ -19,6 +26,7 @@ permissions:
 
 concurrency:
   group: release-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 env:
   CARGO_INCREMENTAL: 0
