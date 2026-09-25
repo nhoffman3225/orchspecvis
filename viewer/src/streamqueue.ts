@@ -17,12 +17,14 @@ export class StreamQueue {
   private playing = false;
   private srcAt = 0; // source frame ...
   private ctxAt = 0; // ... that plays at this context frame
+  private endAt = Infinity; // source length: silence after it is expected, not an underrun
   private chunks: Chunk[] = [];
   underruns = 0; // render quanta with missing data while playing
   received = 0; // chunks accepted (diagnostics)
 
-  cue(gen: number, srcFrame: number, ctxFrame: number): void {
+  cue(gen: number, srcFrame: number, ctxFrame: number, endFrame = Infinity): void {
     this.gen = gen;
+    this.endAt = endFrame;
     this.playing = true;
     this.srcAt = srcFrame;
     this.ctxAt = ctxFrame;
@@ -80,7 +82,7 @@ export class StreamQueue {
       filled += b - a;
     }
     // before the cue point (scheduled start) silence is expected, not an underrun
-    const expected = Math.max(0, Math.min(len, src0 + len - this.srcAt));
+    const expected = Math.max(0, Math.min(src0 + len, this.endAt) - Math.max(src0, this.srcAt));
     if (filled < expected) this.underruns++;
   }
 }
