@@ -1,7 +1,8 @@
 name: desktop
 
-# Builds the Tauri desktop shell on Windows. Only when the desktop, the Rust core or the
-# viewer changes (Windows minutes are costly); the core's tests run in ci.yml on Linux.
+# Checks the Tauri desktop shell on Windows, only when Rust/desktop code changes (Windows
+# minutes bill at 2x; viewer edits do not change the Rust build). PRs: clippy (type check
+# + lints, no link); pushes to main: a full build too. Core tests run in ci.yml on Linux.
 on:
   pull_request:
     paths:
@@ -9,8 +10,6 @@ on:
       - "rust/**"
       - "Cargo.toml"
       - "Cargo.lock"
-      - "viewer/src/**"
-      - "viewer/index.html"
       - ".github/workflows/desktop.yml"
   push:
     branches: [main]
@@ -22,6 +21,10 @@ on:
 
 permissions:
   contents: read
+
+env:
+  CARGO_INCREMENTAL: 0 # CI builds are one-shot: incremental data only bloats the cache
+  CARGO_PROFILE_DEV_DEBUG: 0 # no debug info: faster links, smaller cache
 
 concurrency:
   group: desktop-${{ github.ref }}
@@ -54,7 +57,9 @@ jobs:
           npm ci
           npm run build
 
-      - name: cargo build + clippy (desktop shell)
-        run: |
-          cargo build -p orchspec-desktop --locked
-          cargo clippy -p orchspec-desktop --locked -- -D warnings
+      - name: clippy (desktop shell)
+        run: cargo clippy -p orchspec-desktop --locked -- -D warnings
+
+      - name: full build (main only)
+        if: github.event_name == 'push'
+        run: cargo build -p orchspec-desktop --locked

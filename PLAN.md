@@ -198,7 +198,11 @@ carry the `real` marker and never run in CI.
       highlight, click-to-seek), piano view; every test fails on any off-origin request or
       page error; in CI (Chromium). Local runs: PW_CHANNEL=msedge; opt-in real-session spec
       via E2E_URL (Beethoven 5 i: engraved + highlighted in 6.9 s)
-- [x] CI minutes: E2E runs once on ubuntu-latest (own job); the Windows + macOS matrix runs
+- [x] CI minutes, round 2 (2026-09-25; private repo billing: Linux 1x, Windows 2x, macOS
+      10x, rounded up per job): macOS only on pushes to main (PRs: Windows + Linux);
+      desktop workflow only for Rust/desktop changes, clippy on PRs and a full build on
+      main, no incremental/debug info; Playwright browsers cached; E2E renders at `fps=15`
+- CI minutes: E2E runs once on ubuntu-latest (own job); the Windows + macOS matrix runs
       pytest and viewer lint/unit/build only; job timeouts; superseded PR runs cancelled.
       Open: on the windows-latest runner the Verovio wasm never finished starting inside the
       worker (passes locally with Edge and Playwright's Chromium, and on macOS CI)

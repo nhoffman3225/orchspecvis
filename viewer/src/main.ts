@@ -800,7 +800,14 @@ async function main(): Promise<void> {
   resize();
 
   let lastStatus = "";
-  renderer.setAnimationLoop(() => {
+  // `?fps=N` caps the frame rate (battery; software-GL E2E runs on CI). Default: display rate.
+  const maxFps = Number(params.get("fps")) || 0;
+  let lastFrame = 0;
+  renderer.setAnimationLoop((now: number) => {
+    if (maxFps > 0) {
+      if (now - lastFrame < 1000 / maxFps - 1) return;
+      lastFrame = now;
+    }
     const t = player.tick();
     updateView(t);
     gapReadout(t);
