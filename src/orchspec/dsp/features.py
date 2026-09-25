@@ -55,12 +55,42 @@ def short_term_lufs(
     return np.maximum(lufs, LUFS_FLOOR).astype(np.float32)
 
 
-def spectral_centroid(y: np.ndarray, sr: int, hop: int, n_fft: int = 4096) -> np.ndarray:
-    """Mono (n,) -> centroid in Hz per centered frame, shape (1 + n // hop,)."""
+def spectral_centroid(
+    y: np.ndarray, sr: int, hop: int, n_fft: int = 4096, device: str | None = None
+) -> np.ndarray:
+    """Mono (n,) -> centroid in Hz per centered frame, shape (1 + n // hop,).
+
+    `device`: compute with torch (same as librosa: |STFT| of a periodic Hann window,
+    constant padding, per-frame L1 normalization, silent frames -> 0).
+    """
+    if device is not None:
+        return _fit(_centroid_torch(y, sr, hop, n_fft, device), 1 + len(y) // hop)
     c = librosa.feature.spectral_centroid(
         y=y.astype(np.float32), sr=sr, n_fft=n_fft, hop_length=hop, center=True
     )[0]
     return _fit(c.astype(np.float32), 1 + len(y) // hop)
+
+
+def _centroid_torch(y: np.ndarray, sr: int, hop: int, n_fft: int, device: str) -> np.ndarray:
+    import torch  # pyright: ignore[reportMissingImports]  (optional gpu extra)
+
+    dev = torch.device(device)
+    with torch.inference_mode():
+        t = torch.from_numpy(np.ascontiguousarray(y, dtype=np.float32)).to(dev)
+        win = torch.hann_window(n_fft, periodic=True, device=dev)
+        mag = torch.stft(
+            t,
+            n_fft,
+            hop_length=hop,
+            window=win,
+            center=True,
+            pad_mode="constant",
+            return_complex=True,
+        ).abs()
+        freqs = torch.linspace(0, sr / 2, n_fft // 2 + 1, device=dev)
+        norm = mag.sum(dim=0)
+        norm = torch.where(norm < float(np.finfo(np.float32).tiny), torch.ones_like(norm), norm)
+        return ((freqs @ mag) / norm).float().cpu().numpy()
 
 
 def onset_envelope(y: np.ndarray, sr: int, hop: int) -> np.ndarray:

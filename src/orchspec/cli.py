@@ -76,6 +76,13 @@ def bundle(
     ] = "auto",
 ) -> None:
     """Analyse a session (mix + stems, optional score.musicxml / render.mid) or a WAV."""
+    if backend == "torch":
+        # torch takes ~2 s to import, mostly DLL loading (GIL released): overlap it with
+        # importing librosa/scipy for the writer below
+        import importlib
+        import threading
+
+        threading.Thread(target=importlib.import_module, args=("torch",), daemon=True).start()
     from orchspec.bundle.writer import (
         BundleOptions,
         build_bundle,

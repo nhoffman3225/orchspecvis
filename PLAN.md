@@ -192,6 +192,21 @@ carry the `real` marker and never run in CI.
 - [x] Compressed tiles (schema v4, `tile_encoding: gzip`, zlib level 3, mtime 0,
       threaded): Beethoven 5 i bundle 583 -> 302 MB; viewer gunzips via DecompressionStream
 - [ ] Stems stored from LOD 1 (further size cut; needs schema + viewer upsampling)
+- [x] Bundle build profile (2026-09-25, Beethoven 5 i): the "tiles" stage was mostly the
+      per-stem onset envelopes for alignment (librosa mel STFT at a 3 ms hop, ~10 s), not
+      tile writing (~1.4 s). Onset envelopes now run in torch on the CQT's device (same
+      steps; equal to librosa within 2.4e-6 relative, note onsets within 0.03 ms), frame
+      energy uses float32 exp, gzip tiles decode in a thread pool. Build 33 s -> 13.4 s
+      (tiles 13.9 -> 2.7 s, score 6.9 -> 5.0 s). A Rust tile writer would save ~1 s: not
+      pursued for now
+- [x] Build under 10 s (2026-09-25, Beethoven 5 i, 6:13, 23 stems, RTX GPU): global pitch
+      warp as an FFT cross-correlation (was 93M gathers), anchors on sorted slices;
+      vectorized note fundamentals (from in-memory level-0 tiles, no read-back); spectral
+      centroid in torch; stems read one ahead; tiles compress/write in the background;
+      torch imported in a thread during start-up; with torch, score preparation and mix
+      features run in background threads during the stem loop (identical bytes to the
+      in-order build, tested). Fresh import 33 s -> 9.6-9.8 s wall (3.2 s of it is Python
+      start-up: torch + librosa imports); every stage's output identical to before
 - [x] Page assembly, stem sums and smoothing in a Web Worker (pages.worker.ts; transferred
       buffers, generation-guarded): Beethoven 5 i ensemble page (23 stems) in ~1 s
 - [x] Playwright E2E (@playwright/test 1.63): app load, score view (worker engraving,
