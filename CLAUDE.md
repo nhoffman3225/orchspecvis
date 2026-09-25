@@ -44,6 +44,7 @@ npm run e2e        # Playwright (needs viewer/test-data from `uv run pytest`); P
 E2E_URL="<orchspec serve URL>" PW_CHANNEL=msedge npx playwright test real   # LOCAL real session
 cargo test -p orchspec-core   # Rust bundle core (Windows: VS 'Desktop development with C++')
 uv run python scripts/credits.py  # regenerate CREDITS.md + viewer licence texts after dependency changes
+cargo deny check              # Rust supply chain (advisories, licences, sources; deny.toml)
 npm --prefix desktop run build  # desktop app -> target/release/orchspec-desktop.exe (desktop/README.md)
 ```
 
