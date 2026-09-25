@@ -56,3 +56,11 @@ jobs:
         run: |
           npx playwright install chromium
           npx playwright test
+
+      - name: Upload E2E results on failure
+        if: failure()
+        uses: actions/upload-artifact@v7.0.1
+        with:
+          name: e2e-results-${{ matrix.os }}
+          path: viewer/test-results/
+          retention-days: 7
