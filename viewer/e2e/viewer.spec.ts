@@ -186,7 +186,7 @@ test("credits: shipped projects and full licence texts, same origin", async ({ p
 
 test("section buttons select stems and parts by family", async ({ page, baseURL }) => {
   const g = guard(page, baseURL!);
-  await page.goto(`/?bundle=${BUNDLE}`);
+  await page.goto(`/?${Q}`);
   const sec = page.locator("#sections button");
   await expect(sec).toHaveText(["woodwinds", "keyboards", "strings"]);
   await sec.filter({ hasText: "woodwinds" }).click(); // flute + clarinet
@@ -205,7 +205,7 @@ test("section buttons select stems and parts by family", async ({ page, baseURL 
 test("tutti: engraved chord-per-bar reduction; a bar condenses into a chord and its pitch set", async ({ page, baseURL }) => {
   test.setTimeout(120_000); // Verovio engraving on CI
   const g = guard(page, baseURL!);
-  await page.goto(`/?bundle=${BUNDLE}&view=tutti&t=3`);
+  await page.goto(`/?${Q}&view=tutti&t=3`);
   const host = page.locator("#tutti-score");
   await expect(host.locator("svg").first()).toBeVisible({ timeout: 90_000 });
   await expect(page.locator("#tutti-mode")).toHaveValue("chords");
