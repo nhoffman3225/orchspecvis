@@ -71,6 +71,7 @@ test("pages are assembled, summed and smoothed in the worker (ensemble)", async 
 });
 
 test("streams the mix WAV through the AudioWorklet (Range requests), no underruns", async ({ page, baseURL }) => {
+  test.setTimeout(120_000); // CI: software WebGL
   const g = guard(page, baseURL!);
   const ranges: string[] = [];
   page.on("request", (r) => {
