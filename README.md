@@ -1,33 +1,53 @@
 # orchspec
 
-Score-aware orchestral spectral visualizer. **Local-only**: no network at runtime
-(see [SECURITY.md](SECURITY.md)).
+**See how an orchestral render fills the pitch spectrum, next to the score that made it.**
 
-A Python analysis core turns a render session (mix + per-player stems + tempo MIDI +
-MusicXML) into a versioned **session bundle** ([docs/bundle-format.md](docs/bundle-format.md));
-a three.js viewer shows a 3D CQT surface (time × pitch × dB) with synced playback.
+orchspec analyses a render session (the mix, one audio file per player, the tempo MIDI
+and the MusicXML score) into a bundle. A viewer then plays it back:
 
-## Quick start
+- a **3D spectrogram** (time × pitch × loudness), with each stem selectable and the
+  score's notes outlined;
+- the **engraved score** or your **score PDF**, following playback;
+- a **tutti reduction** for proofreading: condense a selection into one chord and its
+  pitch-class set;
+- **register distribution** by section, a **piano** view and keyboard heat.
+
+It runs entirely on your machine, with **no network access at run time**
+([SECURITY.md](SECURITY.md)).
+
+## Get it
+
+- **Desktop app**: installers for Windows and macOS (Apple silicon) are on the
+  [Releases](https://github.com/nhoffman3225/orchspecvis/releases) page. Import a session
+  with *File › Import Session…*; no Python install is needed.
+- **From source**: the command line, the browser viewer, or your own desktop build,
+  including the NVIDIA GPU edition. See [docs/development.md](docs/development.md).
 
 ```
-uv sync --locked --extra dev            # add --extra gpu on Windows/Linux for CUDA torch
-uv run orchspec validate path/to/session
+uv sync --locked --extra dev
 uv run orchspec bundle path/to/session -o out/
 npm --prefix viewer ci && npm --prefix viewer run build
-uv run orchspec serve out/<name>.bundle   # prints a tokenized http://127.0.0.1:<port>/ URL
+uv run orchspec serve "out/<name>.bundle"    # prints a tokenized http://127.0.0.1:<port>/
 ```
 
-A session folder contains `mix.wav`, optional `stems/NN_<Player>.wav` (same sample rate and
-length as the mix), `render.mid`, `score.musicxml`, and `render.yaml`
-(`uv run orchspec session-template` prints one). A single WAV file also works.
+## Documentation
 
-See [CLAUDE.md](CLAUDE.md) for commands and invariants and [PLAN.md](PLAN.md) for the roadmap.
+| | |
+|---|---|
+| [User guide](docs/user-guide.md) | Sessions, importing, every view and control, keys, troubleshooting |
+| [Dorico sessions](docs/dorico-session.md) | Exporting stems, MIDI, MusicXML and the score PDF from Dorico |
+| [Architecture](docs/architecture.md) | How the Python analysis, the bundle, the viewer and the desktop app fit together |
+| [Development](docs/development.md) | Setup, checks, desktop builds, releases |
+| [Bundle format](docs/bundle-format.md) | The versioned bundle specification |
+| [Desktop app](desktop/README.md) | The Tauri shell, the bundled runtime, build variants |
+| [Security](SECURITY.md) | Local-only guarantees, untrusted inputs, supply chain |
+| [PLAN.md](PLAN.md) | Roadmap and decisions |
 
 ## Licence and credits
 
 orchspec is released under the [MIT licence](LICENSE). It is built on a lot of generous
-open-source work — see [CREDITS.md](CREDITS.md) (also shown in the viewer under
-**ⓘ credits**, together with the full licence texts of everything the viewer ships).
+open-source work; see [CREDITS.md](CREDITS.md). The credits are also shown in the viewer
+under **ⓘ credits**, together with the full licence texts of everything the viewer ships.
 The score view bundles [Verovio](https://www.verovio.org) (LGPL-3.0-or-later) unmodified,
 as a separate, replaceable file.
 
