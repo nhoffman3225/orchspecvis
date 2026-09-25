@@ -17,6 +17,7 @@
         <button id="play" type="button" title="Play/pause (Space)">▶</button>
         <button id="pianobtn" type="button" title="Full-screen piano view (P); Esc to close">🎹 piano</button>
         <button id="regbtn" type="button" title="Register distribution by section (R); Esc to close">📊 registers</button>
+        <button id="tuttibtn" type="button" title="Tutti reduction for proofreading (T); Esc to close" hidden>🎼 tutti</button>
         <button id="aboutbtn" type="button" title="About orchspec and open-source credits">ⓘ credits</button>
         <button id="scorebtn" type="button" title="Engraved score (S); Esc to close" hidden>📜 score</button>
         <span id="time">0:00.00 / 0:00.00</span>
@@ -123,6 +124,26 @@
           <button id="scoreclose" type="button">✕ close</button>
         </div>
         <div id="score-host"></div>
+      </div>
+      <div id="tuttiview" hidden>
+        <div id="tutti-bar">
+          <strong>Tutti</strong>
+          <span id="tutti-time"></span>
+          <label>staves <select id="tutti-mode">
+            <option value="grand">grand staff</option>
+            <option value="sections">by section (short score)</option>
+          </select></label>
+          <label title="Seconds in view (also: mouse wheel)">window
+            <input id="tutti-win" type="range" min="2" max="30" step="0.5" value="8" />
+            <span id="tutti-winval">8 s</span></label>
+          <label><input id="tutti-follow" type="checkbox" checked /> follow</label>
+          <span class="hint">click: chord · Alt+click: same beat position · drag: box · Shift: add · double-click: seek · Esc: clear / close</span>
+          <button id="tutticlose" type="button">✕ close</button>
+        </div>
+        <div id="tutti-body">
+          <canvas id="tutticanvas"></canvas>
+          <aside id="tutti-sel"><p class="hint">Select notes to see their pitches, doublings and parts.</p></aside>
+        </div>
       </div>
       <div id="aboutview" hidden>
         <div id="about-bar">

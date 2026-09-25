@@ -197,6 +197,27 @@ test("section buttons select stems and parts by family", async ({ page, baseURL 
   expect(g.errors, g.errors.join(" | ")).toEqual([]);
 });
 
+test("tutti view: box selection lists pitches and parts; Esc clears, then closes", async ({ page, baseURL }) => {
+  const g = guard(page, baseURL!);
+  await page.goto(`/?bundle=${BUNDLE}&view=tutti&t=3`);
+  await expect(page.locator("#tuttiview")).toBeVisible();
+  const c = (await page.locator("#tutticanvas").boundingBox())!;
+  const px = c.x + 64 + 0.25 * (c.width - 76); // playhead x (25 % of the window)
+  await page.mouse.move(px - 30, c.y + 5);
+  await page.mouse.down();
+  await page.mouse.move(px + 60, c.y + c.height - 100, { steps: 4 });
+  await page.mouse.up();
+  await expect(page.locator("#tutti-sel h3")).toContainText("notes");
+  expect(Number(await page.locator("html").getAttribute("data-tutti-sel"))).toBeGreaterThan(0);
+  await expect(page.locator("#tutti-sel td.pitch").first()).toHaveText(/^[A-G][♯♭]?\d/);
+  await page.keyboard.press("Escape"); // clears the selection
+  await expect(page.locator("#tutti-sel h3")).toHaveCount(0);
+  await page.keyboard.press("Escape"); // closes the view
+  await expect(page.locator("#tuttiview")).toBeHidden();
+  expect(g.offOrigin).toEqual([]);
+  expect(g.errors, g.errors.join(" | ")).toEqual([]);
+});
+
 test("piano view renders", async ({ page, baseURL }) => {
   const g = guard(page, baseURL!);
   await page.goto(`/?${Q}&view=piano&t=3`); // bar 2 starts at ~2.54 s (audio)
