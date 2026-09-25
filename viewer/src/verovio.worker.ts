@@ -13,11 +13,23 @@ export type ScoreRequest =
   | { id: number; op: "times"; element: string };
 
 let tk: VerovioToolkit | null = null;
+const progress = (text: string): void => self.postMessage({ progress: text });
+
+async function toolkit(): Promise<VerovioToolkit> {
+  if (!tk) {
+    const t0 = performance.now();
+    progress("starting the notation engine…");
+    const mod = await createVerovioModule();
+    tk = new VerovioToolkit(mod);
+    progress(`notation engine ready (${Math.round(performance.now() - t0)} ms); laying out…`);
+  }
+  return tk;
+}
 
 self.onmessage = async (ev: MessageEvent<ScoreRequest>) => {
   const req = ev.data;
   try {
-    tk ??= new VerovioToolkit(await createVerovioModule());
+    const tk = await toolkit();
     let result: unknown;
     if (req.op === "load") result = layout(tk, req.opts, req.data);
     else if (req.op === "relayout") result = layout(tk, req.opts);

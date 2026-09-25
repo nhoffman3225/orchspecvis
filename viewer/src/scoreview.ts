@@ -60,10 +60,15 @@ export class ScoreView {
 
   private startWorker(): Worker {
     const w = new Worker(new URL("./verovio.worker.ts", import.meta.url), { type: "module" });
-    w.onmessage = (ev: MessageEvent<{ id: number; ok: boolean; result?: unknown; error?: string }>) => {
-      const p = this.pending.get(ev.data.id);
+    w.onmessage = (ev: MessageEvent<{ id?: number; ok?: boolean; result?: unknown;
+      error?: string; progress?: string }>) => {
+      if (ev.data.progress !== undefined) {
+        this.info.textContent = ev.data.progress;
+        return;
+      }
+      const p = this.pending.get(ev.data.id ?? -1);
       if (!p) return;
-      this.pending.delete(ev.data.id);
+      this.pending.delete(ev.data.id!);
       if (ev.data.ok) p.resolve(ev.data.result);
       else p.reject(new Error(ev.data.error));
     };

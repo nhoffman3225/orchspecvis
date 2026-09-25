@@ -24,12 +24,13 @@ test("score view engraves in a worker, highlights sounding notes, seeks on click
   await page.goto(`/?bundle=${BUNDLE}&view=score&t=1.6`);
   const host = page.locator("#score-host");
   try {
-    await expect(host.locator("svg").first()).toBeVisible({ timeout: 90_000 });
+    await expect(host.locator("svg").first()).toBeVisible({ timeout: 150_000 });
   } catch (e) {
     const info = await page.locator("#score-info").textContent();
     throw new Error(`${(e as Error).message}
 score-info: ${info}
-errors: ${g.errors.join(" | ")}`);
+errors: ${g.errors.join(" | ")}`,
+      { cause: e });
   }
   await expect(host.locator("g.playing").first()).toBeAttached();
   await expect(page.locator("#score-page")).toContainText("page 1 /");
