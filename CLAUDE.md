@@ -64,7 +64,7 @@ src/orchspec/
   cli.py            typer app: bundle, serve, validate, session-template
   io/               audio + session folder loading (session.py, audio.py)
   dsp/              cqt.py (CQTSpec + backends), tiles.py, features.py
-  bundle/           schema.py (pydantic manifest v1)
+  bundle/           schema.py (pydantic manifest, v4)
   score/            musicxml.py (safe parser), repeats.py, match.py (part<->stem), ranges.py
   timeline/         midi.py (bounded SMF reader), align.py (tempo maps, pitch-aware warp,
                     per-stem onset snapping, detector self-calibration)

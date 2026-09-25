@@ -38,7 +38,9 @@ def _notes(root: Path, m: Manifest) -> dict[str, np.ndarray]:
 def test_manifest_v2_score_section(bundle) -> None:  # type: ignore[no-untyped-def]
     root, _ = bundle
     m2 = Manifest.model_validate_json((root / "manifest.json").read_text(encoding="utf-8"))
-    assert m2.schema_version == 3 and m2.score is not None
+    assert m2.schema_version == 4 and m2.score is not None
+    assert m2.tile_encoding == "gzip"
+    assert m2.lods[0].tiles[0].path.endswith(".u8.gz")
     s = m2.score
     assert s.kind == "musicxml" and s.source_files == ["score.musicxml", "render.mid"]
     assert [p.stem_match for p in s.parts] == ["name"] * 4

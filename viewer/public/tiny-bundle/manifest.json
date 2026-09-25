@@ -1,5 +1,5 @@
 {
-  "schema_version": 3,
+  "schema_version": 4,
   "created_by": "orchspec tests/fixtures/make_tiny_bundle.py",
   "created_at": "2026-09-24T00:00:00Z",
   "sr": 8000,
@@ -16,6 +16,7 @@
   "lod_reduce": "max",
   "tile_frames": 64,
   "tile_layout": "frame_major_u8",
+  "tile_encoding": "raw",
   "lods": [
     {
       "level": 0,

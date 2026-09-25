@@ -4,7 +4,7 @@
 
 import { fetchSameOrigin } from "./net";
 
-export const SUPPORTED_VERSIONS = [1, 2, 3] as const;
+export const SUPPORTED_VERSIONS = [1, 2, 3, 4] as const;
 export const NOTE_COLUMNS = [
   "part", "staff", "voice", "midi", "onset_s", "offset_s", "measure", "beat", "velocity",
   "f0_db", "f0_ok",
@@ -105,7 +105,7 @@ export interface ScoreInfo {
   score_file: string | null;
 }
 export interface Manifest {
-  schema_version: 1 | 2 | 3;
+  schema_version: 1 | 2 | 3 | 4;
   created_by: string;
   created_at: string;
   sr: number;
@@ -122,6 +122,7 @@ export interface Manifest {
   lod_reduce: "max";
   tile_frames: number;
   tile_layout: "frame_major_u8";
+  tile_encoding: "raw" | "gzip"; // v4: gzip = one gzip member per tile file
   lods: Lod[];
   audio_path: string;
   audio_sha256: string;
@@ -240,7 +241,7 @@ const REQUIRED = [
   "audio_path", "audio_sha256", "cqt", "source",
 ];
 const OPTIONAL = [
-  "fmin_midi", "db_reference", "lod_reduce", "tile_layout", "offsets", "stems", "dominant",
+  "fmin_midi", "db_reference", "lod_reduce", "tile_layout", "tile_encoding", "offsets", "stems", "dominant",
   "features", "tables", "score",
 ];
 
@@ -363,7 +364,7 @@ export function parseManifest(json: unknown): Manifest {
   const off = o.offsets === undefined ? {} : obj(o.offsets, "manifest.offsets", [], ["preroll_sec"]);
 
   const m: Manifest = {
-    schema_version: o.schema_version as 1 | 2 | 3,
+    schema_version: o.schema_version as 1 | 2 | 3 | 4,
     created_by: str(o.created_by, "manifest.created_by"),
     created_at: str(o.created_at, "manifest.created_at"),
     sr: int(o.sr, "manifest.sr", 1),
@@ -380,6 +381,8 @@ export function parseManifest(json: unknown): Manifest {
     lod_reduce: lit("lod_reduce", "max"),
     tile_frames: int(o.tile_frames, "manifest.tile_frames", 1),
     tile_layout: lit("tile_layout", "frame_major_u8"),
+    tile_encoding: o.tile_encoding === undefined ? "raw"
+      : oneOf(o.tile_encoding, "manifest.tile_encoding", ["raw", "gzip"] as const),
     lods: parseLods(o.lods, "manifest.lods"),
     audio_path: checkRelPath(o.audio_path, "manifest.audio_path"),
     audio_sha256: str(o.audio_sha256, "manifest.audio_sha256"),
@@ -432,6 +435,9 @@ export function parseManifest(json: unknown): Manifest {
     score: o.score == null ? null : parseScore(o.score),
   };
   if (m.score && m.schema_version < 2) fail("manifest.score", "requires schema_version 2");
+  if (m.tile_encoding !== "raw" && m.schema_version < 4) {
+    fail("manifest.tile_encoding", "requires schema_version 4");
+  }
   if (m.score) {
     const ids = new Set(m.stems.map((st) => st.id));
     for (const p of m.score.parts) {
@@ -495,10 +501,17 @@ export async function loadManifest(base: string): Promise<Manifest> {
   return parseManifest(await r.json());
 }
 
+/** Response body -> bytes through the browser's native gzip decoder (no JS inflate). */
+export async function gunzip(r: Response): Promise<Uint8Array> {
+  if (!r.body) return new Uint8Array(0);
+  const out = r.body.pipeThrough(new DecompressionStream("gzip"));
+  return new Uint8Array(await new Response(out).arrayBuffer());
+}
+
 export async function loadTile(base: string, m: Manifest, tile: Tile): Promise<Uint8Array> {
   const r = await fetchSameOrigin(bundleUrl(base, tile.path));
   if (!r.ok) throw new BundleError(`${tile.path}: HTTP ${r.status}`);
-  const buf = new Uint8Array(await r.arrayBuffer());
+  const buf = m.tile_encoding === "gzip" ? await gunzip(r) : new Uint8Array(await r.arrayBuffer());
   if (buf.length !== tile.n_frames * m.n_bins) {
     throw new BundleError(`${tile.path}: ${buf.length} bytes, expected ${tile.n_frames * m.n_bins}`);
   }

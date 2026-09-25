@@ -1,3 +1,4 @@
+import gzip
 from pathlib import Path
 
 import pytest
@@ -116,3 +117,24 @@ def test_cli_serve_missing_bundle_is_a_clear_error(tmp_path: Path) -> None:
     assert r.exit_code == 2
     assert "not a bundle directory" in r.output and "current directory" in r.output
     assert "Traceback" not in r.output
+
+
+def test_gzip_tiles_served_as_opaque_bytes(env) -> None:  # type: ignore[no-untyped-def]
+    # the viewer gunzips tiles itself: a Content-Encoding header would make the browser
+    # decode first and the viewer's DecompressionStream would then fail
+    c, tmp = env
+    body = gzip.compress(bytes(range(256)) * 4, mtime=0)
+    (tmp / "b.bundle" / "t.u8.gz").write_bytes(body)
+    r = c.get("/bundle/t.u8.gz", headers=_auth())
+    assert r.status_code == 200
+    assert "content-encoding" not in r.headers
+    assert r.content == body
+
+
+def test_range_requests(env) -> None:  # type: ignore[no-untyped-def]
+    # streaming playback reads the mix WAV in ranges
+    c, tmp = env
+    (tmp / "b.bundle" / "a.bin").write_bytes(bytes(range(200)))
+    r = c.get("/bundle/a.bin", headers={**_auth(), "Range": "bytes=10-19"})
+    assert r.status_code == 206
+    assert r.content == bytes(range(10, 20))

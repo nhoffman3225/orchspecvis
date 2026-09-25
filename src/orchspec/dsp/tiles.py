@@ -6,12 +6,15 @@ tile layout (byte = frame * n_bins + bin).
 
 from __future__ import annotations
 
+import gzip
 from dataclasses import dataclass
 from pathlib import Path
 
 import numpy as np
 
-from orchspec.bundle.schema import NONE_STEM, Lod, Tile
+from orchspec.bundle.schema import NONE_STEM, Lod, Tile, TileEncoding
+
+GZIP_LEVEL = 3  # ~0.30 of raw on orchestral tiles at ~180 MB/s; 6+ gains < 1 %
 
 
 def quantize(db: np.ndarray, db_min: float, db_max: float) -> np.ndarray:
@@ -54,30 +57,58 @@ def pyramid(level0: np.ndarray, tile_frames: int) -> list[np.ndarray]:
     return levels
 
 
-def write_level(root: Path, prefix: str, level: int, data: np.ndarray, tile_frames: int) -> Lod:
+def encode_tile(raw: bytes, encoding: TileEncoding) -> bytes:
+    # mtime=0: byte-identical output for identical input (reproducible bundles)
+    return gzip.compress(raw, GZIP_LEVEL, mtime=0) if encoding == "gzip" else raw
+
+
+def decode_tile(data: bytes, encoding: TileEncoding) -> bytes:
+    return gzip.decompress(data) if encoding == "gzip" else data
+
+
+def tile_suffix(encoding: TileEncoding) -> str:
+    return ".u8.gz" if encoding == "gzip" else ".u8"
+
+
+def write_level(
+    root: Path,
+    prefix: str,
+    level: int,
+    data: np.ndarray,
+    tile_frames: int,
+    encoding: TileEncoding = "gzip",
+) -> Lod:
     """Write one level of frame-major uint8 tiles under root/prefix/L<level>/."""
     d = root / prefix / f"L{level}"
     d.mkdir(parents=True, exist_ok=True)
     tiles: list[Tile] = []
     for i, start in enumerate(range(0, data.shape[0], tile_frames)):
         chunk = np.ascontiguousarray(data[start : start + tile_frames], dtype=np.uint8)
-        rel = f"{prefix}/L{level}/{i:05d}.u8"
-        (root / rel).write_bytes(chunk.tobytes())
+        rel = f"{prefix}/L{level}/{i:05d}{tile_suffix(encoding)}"
+        (root / rel).write_bytes(encode_tile(chunk.tobytes(), encoding))
         tiles.append(Tile(index=i, start_frame=start, n_frames=chunk.shape[0], path=rel))
     return Lod(level=level, hop_factor=2**level, n_frames=data.shape[0], tiles=tiles)
 
 
-def write_pyramid(root: Path, prefix: str, level0: np.ndarray, tile_frames: int) -> list[Lod]:
+def write_pyramid(
+    root: Path,
+    prefix: str,
+    level0: np.ndarray,
+    tile_frames: int,
+    encoding: TileEncoding = "gzip",
+) -> list[Lod]:
     return [
-        write_level(root, prefix, lv, arr, tile_frames)
+        write_level(root, prefix, lv, arr, tile_frames, encoding)
         for lv, arr in enumerate(pyramid(level0, tile_frames))
     ]
 
 
-def read_level(root: Path, lod: Lod, n_bins: int) -> np.ndarray:
+def read_level(root: Path, lod: Lod, n_bins: int, encoding: TileEncoding = "gzip") -> np.ndarray:
     """Reassemble one level from its tiles -> (n_frames, n_bins) uint8."""
     parts = [
-        np.frombuffer((root / t.path).read_bytes(), dtype=np.uint8).reshape(t.n_frames, n_bins)
+        np.frombuffer(decode_tile((root / t.path).read_bytes(), encoding), dtype=np.uint8).reshape(
+            t.n_frames, n_bins
+        )
         for t in lod.tiles
     ]
     return np.concatenate(parts, axis=0)
@@ -108,7 +139,10 @@ class DominantAccumulator:
             best[win] = lv[win]
             idx[win] = stem_index
 
-    def write(self, root: Path, prefix: str = "tiles/dominant") -> list[Lod]:
+    def write(
+        self, root: Path, prefix: str = "tiles/dominant", encoding: TileEncoding = "gzip"
+    ) -> list[Lod]:
         return [
-            write_level(root, prefix, lv, arr, self.tile_frames) for lv, arr in enumerate(self.idx)
+            write_level(root, prefix, lv, arr, self.tile_frames, encoding)
+            for lv, arr in enumerate(self.idx)
         ]

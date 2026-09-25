@@ -17,6 +17,7 @@ from orchspec.bundle.schema import (
     ScoreInfo,
     ScoreMeasure,
     ScorePart,
+    TileEncoding,
 )
 from orchspec.dsp.cqt import CQTSpec
 from orchspec.dsp.fundamentals import note_fundamental_levels
@@ -159,6 +160,7 @@ class ScorePlan:
         stem_lod0: dict[int, object],
         db_min: float,
         db_max: float,
+        encoding: TileEncoding = "gzip",
     ) -> None:
         """f0_db / f0_ok per note, from the part's stem tiles (mix tiles when unmatched)."""
         groups: dict[int | None, list[int]] = {}
@@ -170,7 +172,7 @@ class ScorePlan:
             if not sel.any():
                 continue
             lod = stem_lod0[s] if s is not None else mix_lod0
-            db = dequantize(read_level(root, lod, spec.n_bins), db_min, db_max).T  # type: ignore[arg-type]
+            db = dequantize(read_level(root, lod, spec.n_bins, encoding), db_min, db_max).T  # type: ignore[arg-type]
             lvl, ok = note_fundamental_levels(
                 db,
                 spec,
