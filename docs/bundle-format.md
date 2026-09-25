@@ -148,14 +148,21 @@ Schema v6 adds `score.pdf` (optional, when the session has `score.pdf`): `dpi` a
 (`page`, printed or continued bar `number` as in `score.measures[].number`, and the bar's
 box `x0 y0 x1 y1` in that page's pixels), found by `score/pdf.py`.
 
-Readers must accept schema_version 1 (no score) to 6; `tile_encoding` other than `raw`
-requires v4, `score.reductions` v5, `score.pdf` v6.
+Schema v7 adds the reduction modes `beat-chords` (one chord per beat: every pitch
+sounding during the beat, including notes held from earlier; the beat is the time
+signature's beat type, a dotted beat in compound time such as 6/8; a beat where nothing
+sounds is a rest) and `section-beat-chords` (the same per section). v7 writers emit
+`chords`, `beat-chords`, `section-chords`, `section-beat-chords` and no longer the
+full-rhythm `tutti` / `sections`, which readers still accept from v5–v6 bundles.
+
+Readers must accept schema_version 1 (no score) to 7; `tile_encoding` other than `raw`
+requires v4, `score.reductions` v5, `score.pdf` v6, the per-beat modes v7.
 
 ## manifest.json fields
 
 | field | type | notes |
 | --- | --- | --- |
-| `schema_version` | int | `6` (`1` to `5` still accepted) |
+| `schema_version` | int | `7` (`1` to `6` still accepted) |
 | `created_by` | string | e.g. `orchspec 0.1.0` |
 | `created_at` | string | ISO 8601 UTC |
 | `sr`, `hop`, `n_samples` | int | mix sample rate, CQT hop, mix length |

@@ -257,7 +257,9 @@ fn main() {
                     &PredefinedMenuItem::quit(app, None)?,
                 ],
             )?;
-            Menu::with_items(app, &[&file])
+            let fullscreen = MenuItem::with_id(app, "fullscreen", "Full Screen", true, Some("F11"))?;
+            let view = Submenu::with_items(app, "View", true, &[&fullscreen])?;
+            Menu::with_items(app, &[&file, &view])
         })
         .on_menu_event(|app, ev| match ev.id().as_ref() {
             "open" => pick_bundle(app),
@@ -265,6 +267,12 @@ fn main() {
             "reload" => {
                 if let Some(w) = app.get_webview_window("main") {
                     let _ = w.navigate(app_url("?bundle=bundle/"));
+                }
+            }
+            "fullscreen" => {
+                if let Some(w) = app.get_webview_window("main") {
+                    let on = w.is_fullscreen().unwrap_or(false);
+                    let _ = w.set_fullscreen(!on);
                 }
             }
             _ => {}

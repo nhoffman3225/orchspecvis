@@ -2,12 +2,19 @@
 the score's spelling, unisons merged, ids mapping back to parts, bars kept."""
 
 import json
+from fractions import Fraction
 from pathlib import Path
 
 import pytest
 from defusedxml import ElementTree as DET
 
-from orchspec.score.reduce import Spelled, reduce_score, transpose_spelled, write_reductions
+from orchspec.score.reduce import (
+    Spelled,
+    beat_length,
+    reduce_score,
+    transpose_spelled,
+    write_reductions,
+)
 from tests.fixtures import make_score_session as fx
 
 
@@ -53,8 +60,13 @@ def test_tutti_reduction(session: Path) -> None:
 
 def test_sections_and_files(session: Path, tmp_path: Path) -> None:
     out = write_reductions(session / "score.musicxml", tmp_path)
-    assert [m for m, _, _ in out] == ["chords", "section-chords", "tutti", "sections"]
-    side = json.loads((tmp_path / out[1][2]).read_text(encoding="utf-8"))
+    assert [m for m, _, _ in out] == [
+        "chords",
+        "beat-chords",
+        "section-chords",
+        "section-beat-chords",
+    ]
+    side = json.loads((tmp_path / out[2][2]).read_text(encoding="utf-8"))
     # fixture: flute + clarinet (woodwinds), piano (keyboards), bass (strings)
     assert side["groups"] == ["woodwinds", "keyboards", "strings"]
 
@@ -75,3 +87,39 @@ def test_chord_per_bar(session: Path) -> None:
     # every bar index in the map is a real bar
     n_bars = len(root.find("part").findall("measure"))  # type: ignore[union-attr]
     assert all(0 <= int(v["bar"]) < n_bars for v in notes.values())
+
+
+def test_beat_length() -> None:
+    assert beat_length(("4", "4")) == 1
+    assert beat_length(("2", "2")) == 2
+    assert beat_length(("3", "8")) == Fraction(1, 2)  # simple triple: eighth beats
+    assert beat_length(("6", "8")) == Fraction(3, 2)  # compound: dotted quarter
+    assert beat_length(("12", "8")) == Fraction(3, 2)
+    assert beat_length(None) == 1
+
+
+def test_chord_per_beat(session: Path) -> None:
+    """One chord (or rest) per beat on each staff, no ties, and every sounding pitch of
+    the score appears; a note held across beats is repeated in each beat it sounds."""
+    xml, side = reduce_score(session / "score.musicxml", "beat-chords")
+    root = DET.fromstring(xml)
+    assert "<tie" not in xml and "<tied" not in xml
+    part = root.find("part")
+    assert part is not None
+    divisions = int(root.findtext(".//divisions") or 1)
+    beats = None
+    for m in part.findall("measure"):
+        beats = int(m.findtext(".//time/beats") or beats or 4)
+        for staff in ("1", "2"):
+            on = [n for n in m.findall("note") if n.findtext("staff") == staff]
+            heads = [n for n in on if n.find("chord") is None]  # one per beat, or a bar rest
+            if len(heads) == 1 and heads[0].find("rest") is not None:
+                continue
+            assert all(int(n.findtext("duration") or 0) == divisions for n in heads)
+            assert len(heads) == beats
+    notes = side["notes"]
+    assert isinstance(notes, dict)
+    truth = {round(t["midi"]) for t in fx.truth_notes()}
+    assert {v["midi"] for v in notes.values()} == truth
+    per_bar, _ = reduce_score(session / "score.musicxml", "chords")
+    assert len(notes) >= per_bar.count("<pitch>")  # held notes repeat per beat

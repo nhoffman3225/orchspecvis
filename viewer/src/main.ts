@@ -24,6 +24,7 @@ import { PagesClient } from "./pagesclient";
 import { FAMILIES, FAMILY_COLORS, KEYS, combineGroups, familyOf, notesGrid, registerLevel, registerStats,
   type AxisMode, type Family } from "./registers";
 import { RegisterView, type RegisterGroup } from "./registerview";
+import { Splitter } from "./splitter";
 
 type Mode = "mix" | "ensemble" | "stems" | "dominant";
 
@@ -656,12 +657,17 @@ async function main(): Promise<void> {
   });
 
   // ---- tutti reduction (proofreading)
-  // Engraved (bundles with score reductions, schema v5): Verovio renders one chord per bar
-  // or the full-rhythm reduction; a selection condenses into one chord plus its pitch-class
-  // set. MIDI-only scores fall back to the canvas reduction (tuttiview.ts).
+  // Engraved (bundles with score reductions, schema v5+): Verovio renders one chord per bar
+  // or per beat (v7), for all parts or by section; a selection condenses into one chord plus
+  // its pitch-class set. Full-rhythm reductions (v5-v6 bundles) are not offered: ties and
+  // voices made them unreadable. MIDI-only scores fall back to the canvas reduction.
   let tuttiOpen = false;
   let tutti: TuttiView | null = null;
-  const reductions = m.score?.reductions ?? [];
+  const TUTTI_LABELS: Record<string, string> = {
+    "chords": "one chord per bar", "beat-chords": "one chord per beat",
+    "section-chords": "per bar, by section", "section-beat-chords": "per beat, by section",
+  };
+  const reductions = (m.score?.reductions ?? []).filter((r) => r.mode in TUTTI_LABELS);
   const engraved = reductions.length > 0;
   let tuttiColor: "section" | "part" = params.get("tcolor") === "part" ? "part" : "section";
   const uiColorOf = (p: number): string => tuttiColor === "part" ? toHex(partColor(p))
@@ -827,11 +833,7 @@ async function main(): Promise<void> {
   const tm = $<HTMLSelectElement>("tutti-mode");
   if (engraved && m.score) {
     $("tuttibtn").hidden = false;
-    const labels: Record<string, string> = {
-      "chords": "one chord per bar", "section-chords": "chords by section",
-      "tutti": "full rhythm", "sections": "full rhythm by section",
-    };
-    tm.replaceChildren(...reductions.map((r) => new Option(labels[r.mode] ?? r.mode, r.mode)));
+    tm.replaceChildren(...reductions.map((r) => new Option(TUTTI_LABELS[r.mode]!, r.mode)));
     tm.value = reductions.some((r) => r.mode === params.get("tutti")) ? params.get("tutti")! : reductions[0]!.mode;
     for (const el of document.querySelectorAll<HTMLElement>("#tuttiview .t-eng")) el.hidden = false;
     for (const el of document.querySelectorAll<HTMLElement>("#tuttiview .t-canvas")) el.hidden = true;
@@ -1190,6 +1192,53 @@ async function main(): Promise<void> {
   if (params.get("view") === "registers") setRegisters(true);
   if (params.get("view") === "tutti") setTutti(true);
   for (const f of afterSetup) f();
+
+  // ---- resizable panels (splitter.ts); the 3D view keeps at least 120 px (style.css)
+  const app = $("app");
+  new Splitter($("split-pane"), {
+    host: app, prop: "--pane-h", axis: "y", sign: -1, key: "orchspec.pane-h",
+    min: () => 80, max: () => innerHeight - $("bar").offsetHeight - 64 - 40 - 120,
+    measure: () => $("pane").getBoundingClientRect().height,
+  });
+  $("split-stems").hidden = $("stems").hidden;
+  new Splitter($("split-stems"), {
+    host: app, prop: "--stems-w", axis: "x", sign: -1, key: "orchspec.stems-w",
+    min: () => 150, max: () => Math.min(600, innerWidth - 300),
+    measure: () => $("stems").getBoundingClientRect().width,
+  });
+  let tuttiRelayout = 0;
+  new Splitter($("split-tutti"), {
+    host: app, prop: "--tutti-side-w", axis: "x", sign: -1, key: "orchspec.tutti-side-w",
+    min: () => 200, max: () => Math.min(900, innerWidth - 300),
+    measure: () => $("tutti-side").getBoundingClientRect().width,
+    onChange: () => {
+      clearTimeout(tuttiRelayout);
+      tuttiRelayout = window.setTimeout(() => void (tv && busy.while("tutti", tv.relayout())), 200);
+    },
+  });
+
+  // views dock below the toolbar (style.css --dock-top); their top edge is draggable
+  new ResizeObserver(() => app.style.setProperty("--bar-h", `${$("bar").offsetHeight}px`))
+    .observe($("bar"));
+  const docked = ["scoreview", "tuttiview", "regview", "pianoview"].map((id) => $(id));
+  const splitView = $("split-view");
+  const syncDock = (): void => void (splitView.hidden = docked.every((v) => v.hidden));
+  const dockObs = new MutationObserver(syncDock);
+  for (const v of docked) dockObs.observe(v, { attributes: true, attributeFilter: ["hidden"] });
+  syncDock();
+  let viewRelayout = 0;
+  new Splitter(splitView, {
+    host: app, prop: "--view-gap", axis: "y", sign: 1, key: "orchspec.view-gap",
+    min: () => 0, max: () => innerHeight - $("bar").offsetHeight - 220,
+    measure: () => 0,
+    onChange: () => {
+      clearTimeout(viewRelayout);
+      viewRelayout = window.setTimeout(() => {
+        if (scoreOpen) void scoreView?.relayout();
+        if (tuttiOpen && tv) void busy.while("tutti", tv.relayout());
+      }, 200);
+    },
+  });
 
   // ---- frame loop
   const view = $("view3d");

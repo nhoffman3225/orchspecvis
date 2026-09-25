@@ -283,7 +283,87 @@ _BAR_TYPE = {
     Fraction(9, 2): ("whole", 0),
 }
 
-MODES = ("chords", "section-chords", "tutti", "sections")
+# written into bundles: one chord per bar or per beat, all parts or per section.
+# "tutti" / "sections" (full rhythm with voices and ties) proved unreadable for
+# proofreading; reduce_score still builds them, bundles no longer carry them.
+BUNDLE_MODES = ("chords", "beat-chords", "section-chords", "section-beat-chords")
+MODES = (*BUNDLE_MODES, "tutti", "sections")
+_PER_BAR = ("chords", "section-chords")
+_PER_BEAT = ("beat-chords", "section-beat-chords")
+_BY_SECTION = ("section-chords", "section-beat-chords", "sections")
+
+# writable single durations in quarters -> (note type, dots)
+_DUR_TYPE = {
+    Fraction(8): ("breve", 0),
+    Fraction(6): ("whole", 1),
+    Fraction(4): ("whole", 0),
+    Fraction(3): ("half", 1),
+    Fraction(2): ("half", 0),
+    Fraction(3, 2): ("quarter", 1),
+    Fraction(1): ("quarter", 0),
+    Fraction(3, 4): ("eighth", 1),
+    Fraction(1, 2): ("eighth", 0),
+    Fraction(3, 8): ("16th", 1),
+    Fraction(1, 4): ("16th", 0),
+    Fraction(1, 8): ("32nd", 0),
+}
+
+
+def beat_length(time: tuple[str, str] | None) -> Fraction:
+    """One beat in quarters: the beat-type note, or a dotted beat in compound time
+    (6/8, 9/8, 12/8, 6/16 ...: beats divisible by 3, beat type 8 or shorter)."""
+    if time is None:
+        return Fraction(1)
+    try:
+        beats, beat_type = int(time[0].split("+")[0]), int(time[1])
+    except ValueError:
+        return Fraction(1)
+    unit = Fraction(4, beat_type) if beat_type > 0 else Fraction(1)
+    if beat_type >= 8 and beats % 3 == 0 and beats > 3:
+        return unit * 3
+    return unit
+
+
+def _pieces(length: Fraction) -> list[Fraction]:
+    """`length` as writable durations, longest first (greedy)."""
+    out: list[Fraction] = []
+    rest = length
+    for d in _DUR_TYPE:  # descending
+        while rest >= d:
+            out.append(d)
+            rest -= d
+    return out
+
+
+def _beat_chords(
+    streams: list[_Stream], staff: int, length: Fraction, beat: Fraction
+) -> list[list[_Event]]:
+    """One chord per beat: every pitch sounding during the beat on this staff (also notes
+    held over from earlier), no ties; a beat where nothing sounds is a rest."""
+    spans: list[tuple[Fraction, Fraction]] = []
+    pos = Fraction(0)
+    while pos < length:
+        pieces = _pieces(min(beat, length - pos))  # a short last beat (pickup) splits
+        if not pieces:  # remainder shorter than a 32nd: not writable
+            break
+        for d in pieces:
+            spans.append((pos, d))
+            pos += d
+    events = []
+    for start, dur in spans:
+        ev = _Event(start, dur, (*_DUR_TYPE[dur], None))
+        for s in streams:
+            for n in s.notes:
+                if (n.pitch.midi >= 60) != (staff == 1):
+                    continue
+                if n.onset < start + dur and n.onset + max(n.dur, Fraction(1, 64)) > start:
+                    key = n.pitch.midi
+                    if key in ev.pitches:
+                        ev.pitches[key][1].add(s.part)
+                    else:
+                        ev.pitches[key] = (n.pitch, {s.part}, set())
+        events.append(ev)
+    return [events] if any(e.pitches for e in events) else []
 
 
 def _bar_chord(streams: list[_Stream], staff: int, length: Fraction) -> list[list[_Event]]:
@@ -306,16 +386,16 @@ def reduce_score(path: str | Path, mode: str = "chords") -> tuple[str, dict[str,
     """MusicXML reduction (string) and its sidecar {"notes": {id: {"parts", "midi", "name",
     "group", "bar"}}, "groups", "parts"}.
 
-    mode: "chords" (one chord per bar, all parts on one grand staff), "section-chords"
-    (the same per section), "tutti" / "sections" (full rhythm, voices and ties).
+    mode: "chords" (one chord per bar, all parts on one grand staff), "beat-chords" (one
+    chord per beat), "section-chords" / "section-beat-chords" (the same per section),
+    "tutti" / "sections" (full rhythm, voices and ties; not written into bundles).
     """
     if mode not in MODES:
         raise ValueError(f"unknown reduction mode {mode!r}")
-    chords = mode in ("chords", "section-chords")
     root = load_musicxml_root(path)
     meta, bars = _parse(root)
     fams = [_family(m) for m in meta]
-    if mode in ("sections", "section-chords"):
+    if mode in _BY_SECTION:
         groups = [(f, {i for i, x in enumerate(fams) if x == f}) for f in FAMILY_ORDER]
         groups = [(f, g) for f, g in groups if g]
     else:
@@ -336,7 +416,10 @@ def reduce_score(path: str | Path, mode: str = "chords") -> tuple[str, dict[str,
     for gi, (_label, members) in enumerate(groups):
         part = SubElement(sp, "part", id=f"G{gi + 1}")
         fifths = 0
+        time: tuple[str, str] | None = None
         for bi, bar in enumerate(bars):
+            if "time" in bar.attrs:
+                time = bar.attrs["time"]  # type: ignore[assignment]
             mel = SubElement(part, "measure", number=bar.number)
             new_fifths = _fifths_for(bar, fifths)
             if bi == 0 or new_fifths != fifths or "time" in bar.attrs:
@@ -370,7 +453,12 @@ def reduce_score(path: str | Path, mode: str = "chords") -> tuple[str, dict[str,
             streams = [s for s in bar.streams if s.part in members]
             first = True
             for staff in (1, 2):
-                voices = _bar_chord(streams, staff, length) if chords else _voices(streams, staff)
+                if mode in _PER_BAR:
+                    voices = _bar_chord(streams, staff, length)
+                elif mode in _PER_BEAT:
+                    voices = _beat_chords(streams, staff, length, beat_length(time))
+                else:
+                    voices = _voices(streams, staff)
                 if not first:
                     back = SubElement(mel, "backup")
                     SubElement(back, "duration").text = str(int(length * divisions))
@@ -394,6 +482,15 @@ def reduce_score(path: str | Path, mode: str = "chords") -> tuple[str, dict[str,
                             SubElement(fw, "duration").text = str(int((e.onset - pos) * divisions))
                             SubElement(fw, "voice").text = voice
                             SubElement(fw, "staff").text = str(staff)
+                        if not e.pitches:  # an empty beat
+                            rn = SubElement(mel, "note")
+                            SubElement(rn, "rest")
+                            SubElement(rn, "duration").text = str(int(e.dur * divisions))
+                            SubElement(rn, "voice").text = voice
+                            SubElement(rn, "type").text = e.rhythm[0]
+                            for _ in range(e.rhythm[1]):
+                                SubElement(rn, "dot")
+                            SubElement(rn, "staff").text = str(staff)
                         for ci, (midi, (pitch, parts_, ties)) in enumerate(
                             sorted(e.pitches.items())
                         ):
@@ -450,8 +547,8 @@ def reduce_score(path: str | Path, mode: str = "chords") -> tuple[str, dict[str,
 def write_reductions(
     path: str | Path, root: Path, rel_dir: str = "score"
 ) -> list[tuple[str, str, str]]:
-    """Write the chord, short-score chord, tutti and short-score reductions (and their
-    sidecars) under root/rel_dir.
+    """Write the bundle reductions (BUNDLE_MODES: chords per bar and per beat, for all
+    parts and per section) and their sidecars under root/rel_dir.
 
     Returns [(mode, musicxml rel path, sidecar rel path)].
     """
@@ -459,9 +556,9 @@ def write_reductions(
     out = []
     for mode, stem in (
         ("chords", "chords"),
+        ("beat-chords", "beat-chords"),
         ("section-chords", "short-chords"),
-        ("tutti", "tutti"),
-        ("sections", "short"),
+        ("section-beat-chords", "short-beat-chords"),
     ):
         xml, side = reduce_score(path, mode)
         x, j = f"{rel_dir}/{stem}.musicxml", f"{rel_dir}/{stem}.json"

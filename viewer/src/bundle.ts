@@ -4,7 +4,7 @@
 
 import { fetchSameOrigin } from "./net";
 
-export const SUPPORTED_VERSIONS = [1, 2, 3, 4, 5, 6] as const;
+export const SUPPORTED_VERSIONS = [1, 2, 3, 4, 5, 6, 7] as const;
 export const NOTE_COLUMNS = [
   "part", "staff", "voice", "midi", "onset_s", "offset_s", "measure", "beat", "velocity",
   "f0_db", "f0_ok",
@@ -114,12 +114,13 @@ export interface PdfScore {
 }
 /** v5: engravable reduction of the score and its note map (JSON). */
 export interface Reduction {
-  mode: "chords" | "section-chords" | "tutti" | "sections";
+  // v7 beat-chords / section-beat-chords; tutti / sections (full rhythm) only in v5-v6
+  mode: "chords" | "section-chords" | "beat-chords" | "section-beat-chords" | "tutti" | "sections";
   musicxml: string;
   map: string;
 }
 export interface Manifest {
-  schema_version: 1 | 2 | 3 | 4 | 5 | 6;
+  schema_version: 1 | 2 | 3 | 4 | 5 | 6 | 7;
   created_by: string;
   created_at: string;
   sr: number;
@@ -364,7 +365,7 @@ function parseScore(v: unknown): ScoreInfo {
       const rw = `${w}.reductions[${i}]`;
       const r = obj(rv, rw, ["mode", "musicxml", "map"], []);
       return {
-        mode: oneOf(r.mode, `${rw}.mode`, ["chords", "section-chords", "tutti", "sections"] as const),
+        mode: oneOf(r.mode, `${rw}.mode`, ["chords", "section-chords", "beat-chords", "section-beat-chords", "tutti", "sections"] as const),
         musicxml: checkRelPath(r.musicxml, `${rw}.musicxml`),
         map: checkRelPath(r.map, `${rw}.map`),
       };
@@ -406,7 +407,7 @@ export function parseManifest(json: unknown): Manifest {
   const off = o.offsets === undefined ? {} : obj(o.offsets, "manifest.offsets", [], ["preroll_sec"]);
 
   const m: Manifest = {
-    schema_version: o.schema_version as 1 | 2 | 3 | 4 | 5 | 6,
+    schema_version: o.schema_version as 1 | 2 | 3 | 4 | 5 | 6 | 7,
     created_by: str(o.created_by, "manifest.created_by"),
     created_at: str(o.created_at, "manifest.created_at"),
     sr: int(o.sr, "manifest.sr", 1),
@@ -479,6 +480,9 @@ export function parseManifest(json: unknown): Manifest {
   if (m.score && m.schema_version < 2) fail("manifest.score", "requires schema_version 2");
   if (m.score?.reductions.length && m.schema_version < 5) fail("manifest.score.reductions", "requires schema_version 5");
   if (m.score?.pdf && m.schema_version < 6) fail("manifest.score.pdf", "requires schema_version 6");
+  if (m.score?.reductions.some((r) => r.mode.includes("beat")) && m.schema_version < 7) {
+    fail("manifest.score.reductions", "chord-per-beat reductions require schema_version 7");
+  }
   if (m.tile_encoding !== "raw" && m.schema_version < 4) {
     fail("manifest.tile_encoding", "requires schema_version 4");
   }
