@@ -77,6 +77,9 @@ async function main(): Promise<void> {
   const player = new Player(m.duration_seconds, m.sr);
   void player.load(base, m.audio_path).then(() => {
     document.documentElement.dataset.audio = player.mode; // stream | decoded | none (tests)
+    const syncState = (): void => void (document.documentElement.dataset.audioState = player.ctx.state);
+    player.ctx.addEventListener("statechange", syncState);
+    syncState();
     if (player.audioError) status.textContent = `audio unavailable (${player.audioError}); playhead runs silently`;
   });
 
