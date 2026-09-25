@@ -25,6 +25,9 @@ import { FAMILIES, FAMILY_COLORS, KEYS, combineGroups, familyOf, notesGrid, regi
   type AxisMode, type Family } from "./registers";
 import { RegisterView, type RegisterGroup } from "./registerview";
 import { Splitter } from "./splitter";
+import { initFolds } from "./toolbar";
+import { initHoverTips } from "./hovertip";
+import { renderHelp } from "./help";
 
 type Mode = "mix" | "ensemble" | "stems" | "dominant";
 
@@ -329,7 +332,7 @@ async function main(): Promise<void> {
   for (const p of HARM_PRESETS) {
     const v = harmSliderValue(p);
     ticks.append(new Option("", String(v)));
-    presetSel.add(new Option(p === null ? "off" : `${p} dB`, String(v)));
+    presetSel.add(new Option(p === null ? "Off" : `${p} dB`, String(v)));
   }
   presetSel.addEventListener("change", () => {
     if (presetSel.value === "") return;
@@ -664,8 +667,8 @@ async function main(): Promise<void> {
   let tuttiOpen = false;
   let tutti: TuttiView | null = null;
   const TUTTI_LABELS: Record<string, string> = {
-    "chords": "one chord per bar", "beat-chords": "one chord per beat",
-    "section-chords": "per bar, by section", "section-beat-chords": "per beat, by section",
+    "chords": "One Chord per Bar", "beat-chords": "One Chord per Beat",
+    "section-chords": "Per Bar, by Section", "section-beat-chords": "Per Beat, by Section",
   };
   const reductions = (m.score?.reductions ?? []).filter((r) => r.mode in TUTTI_LABELS);
   const engraved = reductions.length > 0;
@@ -1222,10 +1225,40 @@ async function main(): Promise<void> {
     .observe($("bar"));
   const docked = ["scoreview", "tuttiview", "regview", "pianoview"].map((id) => $(id));
   const splitView = $("split-view");
-  const syncDock = (): void => void (splitView.hidden = docked.every((v) => v.hidden));
+  const helpView = $("helpview");
+  const syncDock = (): void => {
+    // write only on change: every attribute write re-triggers this observer
+    if (!docked.every((v) => v.hidden) && !helpView.hidden) helpView.hidden = true; // replaced
+    const none = docked.every((v) => v.hidden) && helpView.hidden !== false;
+    if (splitView.hidden !== none) splitView.hidden = none;
+  };
   const dockObs = new MutationObserver(syncDock);
-  for (const v of docked) dockObs.observe(v, { attributes: true, attributeFilter: ["hidden"] });
+  for (const v of [...docked, helpView]) dockObs.observe(v, { attributes: true, attributeFilter: ["hidden"] });
   syncDock();
+
+  // ---- toolbar folds, hover help, help view
+  initFolds($("bar"), params.get("tools") === "open");
+  initHoverTips();
+  let helpBuilt = false;
+  const setHelp = (open: boolean): void => {
+    if (open) {
+      if (scoreOpen) setScore(false);
+      if (tuttiOpen) setTutti(false);
+      if (regOpen) setRegisters(false);
+      setPiano(false);
+      if (!helpBuilt) renderHelp($("help-ref"), $("bar"));
+      helpBuilt = true;
+    }
+    helpView.hidden = !open;
+  };
+  $("helpbtn").addEventListener("click", () => setHelp(helpView.hidden !== false));
+  $("helpclose").addEventListener("click", () => setHelp(false));
+  addEventListener("keydown", (e) => {
+    if (e.target instanceof HTMLInputElement || e.target instanceof HTMLSelectElement) return;
+    if (e.key === "?" || (e.code === "KeyH" && !e.ctrlKey && !e.metaKey)) setHelp(helpView.hidden !== false);
+    else if (e.code === "Escape" && !helpView.hidden) setHelp(false);
+  });
+  if (params.get("view") === "help") setHelp(true);
   let viewRelayout = 0;
   new Splitter(splitView, {
     host: app, prop: "--view-gap", axis: "y", sign: 1, key: "orchspec.view-gap",

@@ -229,7 +229,7 @@ test("tutti: chord per bar / per beat; a bar condenses into a chord and its pitc
   await expect(page.locator("#tutti-sel h3")).toHaveCount(0);
   // only chord-per-bar / chord-per-beat reductions are offered (no full rhythm)
   await expect(page.locator("#tutti-mode option")).toHaveText([
-    "one chord per bar", "one chord per beat", "per bar, by section", "per beat, by section",
+    "One Chord per Bar", "One Chord per Beat", "Per Bar, by Section", "Per Beat, by Section",
   ]);
   const heads = async (): Promise<number> => host.locator("g.note").count();
   const perBar = await heads();
@@ -306,6 +306,39 @@ test("views dock below the toolbar; panels resize by dragging and remember it", 
   const sp = (await page.locator("#split-pane").boundingBox())!;
   await page.mouse.dblclick(400, sp.y + sp.height / 2); // reset
   await expect.poll(async () => Math.round((await pane.boundingBox())!.height)).toBe(Math.round(ph));
+  expect(g.offOrigin).toEqual([]);
+  expect(g.errors, g.errors.join(" | ")).toEqual([]);
+});
+
+test("toolbar groups fold open; hover tips; the help view lists every control", async ({ page, baseURL }) => {
+  const g = guard(page, baseURL!);
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await page.goto(`/?${Q}`);
+  await page.evaluate(() => localStorage.clear());
+  await page.goto(`/?${Q}`);
+  const spectrum = page.locator('.grp[data-fold="spectrum"]');
+  const cap = spectrum.locator("button.cap");
+  await expect(cap).toHaveAttribute("aria-expanded", "false"); // condensed by default
+  await expect(page.locator("#mode")).not.toBeInViewport();
+  await cap.click();
+  await expect(cap).toHaveAttribute("aria-expanded", "true");
+  await expect(page.locator("#mode")).toBeInViewport();
+  await page.goto(`/?${Q}`); // remembered
+  await expect(cap).toHaveAttribute("aria-expanded", "true");
+  // hover help instead of the browser's title tooltip
+  await page.locator("#mode").hover();
+  await expect(page.locator("#hovertip")).toBeVisible();
+  await expect(page.locator("#hovertip")).toContainText("What the spectrum shows");
+  // help view: H opens it (docked below the toolbar), with a row for each control
+  await page.mouse.move(5, 790);
+  await page.keyboard.press("KeyH");
+  await expect(page.locator("#helpview")).toBeVisible();
+  await expect(page.locator("#help-ref")).toContainText("Fundamentals ±");
+  await expect(page.locator("#help-ref")).toContainText("Colour map for loudness");
+  expect(await page.locator("#help-ref td").count()).toBeGreaterThan(30);
+  await page.keyboard.press("KeyR"); // another view replaces help
+  await expect(page.locator("#helpview")).toBeHidden();
+  await expect(page.locator("#regview")).toBeVisible();
   expect(g.offOrigin).toEqual([]);
   expect(g.errors, g.errors.join(" | ")).toEqual([]);
 });

@@ -74,7 +74,12 @@ orchspec report "out/My Piece.bundle"   # checks the score alignment; writes rep
 | Loudness strip | Short-term loudness (LUFS). |
 | Stems list (right) | Show or hide stems and parts. The section chips select woodwinds, brass, percussion or strings in one click (Ctrl/Shift+click adds a section). |
 
-Toolbar controls, left to right:
+The toolbar is grouped. Playback and the view buttons are always visible. The
+**Spectrum**, **Surface**, **Score** and **Keys** groups start folded: click a group's
+coloured tag to slide it open (the choice is remembered). Hover any control to see what
+it does, or open **Help** (H) for a list of every control.
+
+The controls:
 
 - **window**: seconds of music in view.
 - **view**: *mix*; *full ensemble* (the sum of all stems); *selected stems*; or *colour by
@@ -94,15 +99,18 @@ Toolbar controls, left to right:
 
 ## 5. Other views
 
-Open each with its toolbar button or key. Esc closes it.
+Open each with its toolbar button or key. Each view opens below the toolbar, which
+stays usable. Drag the view's top edge to see the spectrum above it, and drag the bars
+between panels to resize them (double-click resets). Esc closes the view.
 
 - **Score (S).** The engraved score (Verovio) follows playback; click a note to jump there.
   Zoom with +/− or Ctrl+wheel, turn pages with PgUp/PgDn, and use *hide empty staves* to
   hide staves that only rest in a system. If the session had a `score.pdf`, switch the
   source to **PDF** to follow the engraved layout (for example Dorico's condensed score),
   with the current bar highlighted.
-- **Tutti (T).** A reduction of the whole orchestra at concert pitch for proofreading,
-  coloured by section or by part. Click a chord or bar, Alt+click every note on the same
+- **Tutti (T).** A reduction of the whole orchestra at concert pitch for proofreading:
+  one chord per bar or per beat, for all parts or by section, coloured by section or by
+  part. Click a chord or bar, Alt+click every note on the same
   beat, or drag a box (Shift/Ctrl adds). The selection condenses into one chord plus its
   pitch-class set, shown as a scale, and appears on the piano below.
 - **Registers (R).** How each section (or stem) spreads over the pitch range. It uses
@@ -121,6 +129,8 @@ Open each with its toolbar button or key. Esc closes it.
 | ← / → | back / forward 5 s (Shift: 1 s) |
 | Home | back to the start |
 | S, T, R, P | score, tutti, registers, piano |
+| H or ? | help: every control and the keys |
+| F11 | full screen (desktop app) |
 | PgUp / PgDn | score pages |
 | + / − | score zoom |
 | Esc | clear the tutti selection, or close the open view |

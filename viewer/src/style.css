@@ -249,16 +249,16 @@ body:has(> #importview) { display: block; overflow: hidden; }
 /* ===================== design language (brutal + Memphis) ===================== */
 
 /* one control style everywhere: flat, square, hard edge, hard shadow that presses */
-:is(#bar, #score-bar, #tutti-bar, #reg-bar, #piano-bar, #about-bar, #stems, #importview, #about-body)
+:is(#bar, #score-bar, #tutti-bar, #reg-bar, #piano-bar, #about-bar, #help-bar, #stems, #importview, #about-body)
   :is(button, select) {
   background: var(--raise); color: var(--fg); font: inherit; font-weight: 600;
   border: 2px solid var(--edge); border-radius: 0; padding: 2px 8px;
   box-shadow: var(--shadow); cursor: pointer;
   transition: transform 60ms, box-shadow 60ms, border-color 60ms;
 }
-:is(#bar, #score-bar, #tutti-bar, #reg-bar, #piano-bar, #about-bar, #stems, #importview, #about-body)
+:is(#bar, #score-bar, #tutti-bar, #reg-bar, #piano-bar, #about-bar, #help-bar, #stems, #importview, #about-body)
   :is(button, select):hover { border-color: var(--fg); }
-:is(#bar, #score-bar, #tutti-bar, #reg-bar, #piano-bar, #about-bar, #stems, #importview, #about-body)
+:is(#bar, #score-bar, #tutti-bar, #reg-bar, #piano-bar, #about-bar, #help-bar, #stems, #importview, #about-body)
   button:active { transform: translate(2px, 2px); box-shadow: none; }
 :is(button, select, input, [role="separator"]):focus-visible {
   outline: 2px solid var(--yellow); outline-offset: 2px;
@@ -303,23 +303,25 @@ input[type="range"], input[type="checkbox"] { accent-color: var(--yellow); }
 
 /* the open view's button is "pressed" in its colour */
 #scorebtn, #scoreview { --vc: var(--yellow); }
+#helpbtn, #helpview { --vc: var(--orange); }
 #tuttibtn, #tuttiview { --vc: var(--pink); }
 #regbtn, #regview { --vc: var(--teal); }
 #pianobtn, #pianoview { --vc: var(--cobalt); }
 #app:has(#scoreview:not([hidden])) #bar #scorebtn,
 #app:has(#tuttiview:not([hidden])) #bar #tuttibtn,
 #app:has(#regview:not([hidden])) #bar #regbtn,
-#app:has(#pianoview:not([hidden])) #bar #pianobtn {
+#app:has(#pianoview:not([hidden])) #bar #pianobtn,
+#app:has(#helpview:not([hidden])) #bar #helpbtn {
   background: var(--vc); color: var(--ink); border-color: var(--ink);
   transform: translate(2px, 2px); box-shadow: none;
 }
 
 /* docked view headers: a thick colour rule and a heavy uppercase title tag */
-:is(#score-bar, #tutti-bar, #reg-bar, #piano-bar, #about-bar) {
+:is(#score-bar, #tutti-bar, #reg-bar, #piano-bar, #about-bar, #help-bar) {
   border-top: 4px solid var(--vc, var(--orange)); border-bottom: 2px solid var(--ink);
   background: var(--panel);
 }
-:is(#score-bar, #tutti-bar, #reg-bar, #piano-bar, #about-bar) > strong {
+:is(#score-bar, #tutti-bar, #reg-bar, #piano-bar, #about-bar, #help-bar) > strong {
   font-weight: 900; text-transform: uppercase; letter-spacing: 0.06em; font-size: 12px;
   background: var(--vc, var(--orange)); color: var(--ink); padding: 2px 8px;
   box-shadow: var(--shadow);
@@ -368,3 +370,54 @@ input[type="range"], input[type="checkbox"] { accent-color: var(--yellow); }
   :is(button, select) { transition: none; }
   #bar .cap { transform: none; }
 }
+
+/* foldable toolbar groups (toolbar.ts): the caption tag is a button; the body slides open */
+#bar .grp.fold > button.cap {
+  border: 0; cursor: pointer; font: 800 9.5px/1 system-ui, sans-serif; padding: 4px 6px 3px;
+}
+#bar .grp.fold > button.cap::after { content: " ▸"; }
+#bar .grp.fold.open > button.cap::after { content: " ◂"; }
+#bar .grp.fold > button.cap:hover { transform: rotate(0deg) translate(-1px, -1px); box-shadow: 3px 3px 0 var(--ink); }
+#bar .grp-body {
+  display: inline-flex; flex-wrap: wrap; align-items: center; gap: 5px 10px;
+  max-width: 0; opacity: 0; overflow: hidden; padding: 0 0 3px;
+  transition: max-width 260ms ease, opacity 180ms ease;
+}
+#bar .grp.fold:not(.open) > .grp-body { flex-wrap: nowrap; max-height: 0; padding: 0; }
+#bar .grp.fold.open > .grp-body { max-width: 1400px; opacity: 1; padding-right: 3px; }
+/* a folded group still shows when one of its controls is busy */
+#bar .grp.fold:not(.open):has(.spin:not([hidden])) > button.cap::after {
+  content: ""; display: inline-block; width: 7px; height: 7px; margin-left: 5px;
+  border: 2px solid var(--ink); border-top-color: transparent; animation: spin 0.7s linear infinite;
+}
+#bar .grp.fold:not(.open) { padding-right: 8px; }
+#stems #sections button { text-transform: capitalize; }
+
+/* hover help (hovertip.ts) */
+#hovertip {
+  position: fixed; z-index: 50; max-width: 340px; pointer-events: none;
+  background: var(--fg); color: var(--ink); border: 2px solid var(--ink);
+  box-shadow: 3px 3px 0 var(--pink); padding: 5px 8px; font-size: 12px; line-height: 1.35;
+}
+#hovertip[hidden] { display: none; }
+
+/* help view */
+#helpview {
+  position: fixed; left: 0; right: 0; bottom: 0; top: var(--dock-top, 0px); z-index: 10;
+  background: var(--bg); display: grid; grid-template-rows: auto 1fr;
+}
+#helpview[hidden] { display: none; }
+#help-bar { display: flex; align-items: center; gap: 12px; padding: 6px 12px; font-size: 12px; }
+#help-bar .hint { margin: 0 0 0 auto; }
+#help-body { overflow: auto; padding: 14px 24px 32px; min-height: 0; font-size: 13px; line-height: 1.5; }
+#help-body h2 { font-size: 13px; font-weight: 900; text-transform: uppercase; letter-spacing: 0.05em;
+  border-bottom: 3px solid var(--orange); display: inline-block; margin: 10px 0 8px; }
+.help-cols { display: grid; grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); gap: 28px; max-width: 1100px; }
+#help-body p { margin: 0 0 10px; color: var(--fg); }
+#help-body table { border-collapse: collapse; width: 100%; max-width: 1100px; }
+#help-body td { padding: 4px 12px 4px 0; vertical-align: top; border-bottom: 1px solid var(--line); }
+#help-body td:first-child { white-space: nowrap; font-weight: 700; width: 1%; }
+#help-ref th { text-align: left; padding: 14px 0 4px; font-weight: 900; text-transform: uppercase;
+  letter-spacing: 0.05em; font-size: 11px; color: var(--orange); }
+kbd { font-family: var(--mono); font-size: 11px; background: var(--raise); border: 2px solid var(--edge);
+  box-shadow: 2px 2px 0 var(--ink); padding: 0 5px; }
