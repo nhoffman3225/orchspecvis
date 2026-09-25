@@ -634,29 +634,39 @@ async function main(): Promise<void> {
   };
   $("scorebtn").addEventListener("click", () => setScore(true));
   $("scoreclose").addEventListener("click", () => setScore(false));
-  $("score-prev").addEventListener("click", () => scoreView?.step(-1));
-  $("score-next").addEventListener("click", () => scoreView?.step(1));
+  const followBox = $<HTMLInputElement>("score-follow");
+  const stepPage = (d: number): void => {
+    scoreView?.step(d); // manual paging turns follow off
+    followBox.checked = false;
+  };
+  $("score-prev").addEventListener("click", () => stepPage(-1));
+  $("score-next").addEventListener("click", () => stepPage(1));
+  $<HTMLInputElement>("score-condense").addEventListener("change", (e) => {
+    if (!scoreView) return;
+    scoreView.condense = (e.target as HTMLInputElement).checked;
+    void scoreView.relayout();
+  });
   const zoom = (f: number): void => {
     if (!scoreView) return;
     scoreView.scale = Math.min(80, Math.max(15, Math.round(scoreView.scale * f)));
-    scoreView.relayout();
+    void scoreView.relayout();
   };
   $("score-zoomin").addEventListener("click", () => zoom(1.15));
   $("score-zoomout").addEventListener("click", () => zoom(1 / 1.15));
-  $<HTMLInputElement>("score-follow").addEventListener("change", (e) => {
-    if (scoreView) scoreView.follow = (e.target as HTMLInputElement).checked;
+  followBox.addEventListener("change", () => {
+    if (scoreView) scoreView.follow = followBox.checked;
   });
   let relayoutTimer = 0;
   addEventListener("resize", () => {
     clearTimeout(relayoutTimer);
-    relayoutTimer = window.setTimeout(() => scoreView?.relayout(), 250);
+    relayoutTimer = window.setTimeout(() => void scoreView?.relayout(), 250);
   });
   addEventListener("keydown", (e) => {
     if (e.target instanceof HTMLInputElement || e.target instanceof HTMLSelectElement) return;
     if (e.code === "KeyS") setScore(!scoreOpen);
     else if (e.code === "Escape" && scoreOpen) setScore(false);
-    else if (scoreOpen && e.code === "PageDown") scoreView?.step(1);
-    else if (scoreOpen && e.code === "PageUp") scoreView?.step(-1);
+    else if (scoreOpen && e.code === "PageDown") stepPage(1);
+    else if (scoreOpen && e.code === "PageUp") stepPage(-1);
   });
   if (params.get("view") === "score") setScore(true);
 
