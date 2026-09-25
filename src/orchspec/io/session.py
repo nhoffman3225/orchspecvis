@@ -7,6 +7,7 @@ Layout::
       stems/NN_<Player>.wav    optional, dry, same sr and length as mix
       render.mid               optional (tempo track; Phase 2)
       score.musicxml | .mxl    optional (Phase 2)
+      score.pdf                optional: the engraved (e.g. condensed) score to follow
       render.yaml              optional; see RenderConfig
 
 A bare WAV file is also accepted (``load_input``) and becomes a session with no stems.
@@ -81,6 +82,7 @@ class Session:
     config: RenderConfig = field(default_factory=RenderConfig)
     midi_path: Path | None = None
     score_path: Path | None = None
+    pdf_path: Path | None = None
 
     @property
     def name(self) -> str:
@@ -187,6 +189,7 @@ def load_session(path: str | Path) -> Session:
         config=config,
         midi_path=midi if midi.is_file() else None,
         score_path=score,
+        pdf_path=(root / "score.pdf") if (root / "score.pdf").is_file() else None,
     )
 
 

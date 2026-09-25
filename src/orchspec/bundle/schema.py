@@ -16,7 +16,7 @@ from typing import Annotated, Literal
 
 from pydantic import AfterValidator, BaseModel, ConfigDict, Field, model_validator
 
-SCHEMA_VERSION = 5  # v2: `score`; v3: warp + part latency; v4: gzip tiles; v5: reductions
+SCHEMA_VERSION = 6  # v2 score; v3 warp; v4 gzip tiles; v5 reductions; v6 score pdf
 TileEncoding = Literal["raw", "gzip"]
 MANIFEST_NAME = "manifest.json"
 NONE_STEM = 255  # value in dominant-stem tiles meaning "no stem above the floor"
@@ -206,6 +206,43 @@ class Reduction(_Model):
     map: RelPath  # JSON: {"notes": {note id: {"parts", "midi", "name", "group"}}, ...}
 
 
+class PdfPageInfo(_Model):
+    path: RelPath  # grayscale PNG of the page
+    width: int = Field(gt=0)
+    height: int = Field(gt=0)
+
+
+class PdfBarInfo(_Model):
+    """A bar found on a page (pixels of that page's image)."""
+
+    page: int = Field(ge=0)
+    number: str  # printed / continued bar number, as in score.measures[].number
+    x0: int
+    y0: int
+    x1: int
+    y1: int
+
+
+class PdfScoreInfo(_Model):
+    """v6: the score as a PDF (e.g. Dorico's condensed layout), rendered to images."""
+
+    dpi: int = Field(gt=0)
+    pages: list[PdfPageInfo]
+    bars: list[PdfBarInfo]
+
+
+def pdf_info(s: object) -> PdfScoreInfo:
+    """From score.pdf.PdfScore (kept duck-typed so schema.py has no rendering deps)."""
+    return PdfScoreInfo(
+        dpi=s.dpi,  # type: ignore[attr-defined]
+        pages=[PdfPageInfo(path=p.path, width=p.width, height=p.height) for p in s.pages],  # type: ignore[attr-defined]
+        bars=[
+            PdfBarInfo(page=b.page, number=b.number, x0=b.x0, y0=b.y0, x1=b.x1, y1=b.y1)
+            for b in s.bars  # type: ignore[attr-defined]
+        ],
+    )
+
+
 class ScoreInfo(_Model):
     kind: Literal["musicxml", "midi"]
     source_files: list[str]
@@ -215,6 +252,7 @@ class ScoreInfo(_Model):
     alignment: Alignment
     score_file: RelPath | None = None  # v3: copy of the MusicXML/.mxl for engraving
     reductions: list[Reduction] = []  # v5
+    pdf: PdfScoreInfo | None = None  # v6
 
     @model_validator(mode="after")
     def _consistent(self) -> ScoreInfo:
@@ -228,7 +266,7 @@ class ScoreInfo(_Model):
 
 
 class Manifest(_Model):
-    schema_version: Literal[1, 2, 3, 4, 5] = SCHEMA_VERSION
+    schema_version: Literal[1, 2, 3, 4, 5, 6] = SCHEMA_VERSION
     created_by: str
     created_at: str  # ISO 8601 UTC
 
@@ -294,6 +332,12 @@ class Manifest(_Model):
                 raise ValueError("a score section requires schema_version 2")
             if self.score.reductions and self.schema_version < 5:
                 raise ValueError("score reductions require schema_version 5")
+            if self.score.pdf is not None:
+                if self.schema_version < 6:
+                    raise ValueError("a score pdf requires schema_version 6")
+                n = len(self.score.pdf.pages)
+                if any(b.page >= n for b in self.score.pdf.bars):
+                    raise ValueError("score pdf bar refers to a missing page")
             known = set(ids)
             for p in self.score.parts:
                 if p.stem_id is not None and p.stem_id not in known:

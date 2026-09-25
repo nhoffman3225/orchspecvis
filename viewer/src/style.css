@@ -202,3 +202,14 @@ body:has(> #importview) { display: block; overflow: hidden; }
 .spin[hidden] { display: none; }
 @keyframes spin { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) { .spin { animation-duration: 2s; } }
+
+/* score PDF (schema v6): page image with the current bar and a playhead */
+#score-pdf { overflow: auto; background: #f3efe6; min-height: 0; padding: 12px; }
+#score-pdf[hidden] { display: none; }
+#score-pdf .pdf-sheet { position: relative; width: 100%; margin: 0 auto; }
+#score-pdf img { display: block; width: 100%; height: auto; cursor: pointer; user-select: none; }
+#score-pdf .pdf-bar { position: absolute; left: 0; top: 0; pointer-events: none;
+  background: rgba(230, 192, 123, 0.18); outline: 1px solid rgba(214, 60, 60, 0.35); }
+#score-pdf .pdf-bar[hidden], #score-pdf .score-line[hidden] { display: none; }
+#score-pdf .score-line { position: absolute; left: 0; top: 0; width: 2px; margin-left: -1px;
+  pointer-events: none; background: rgba(214, 60, 60, 0.85); }
