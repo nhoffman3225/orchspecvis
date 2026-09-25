@@ -27,10 +27,12 @@ test("score view engraves in a worker, highlights sounding notes, seeks on click
     await expect(host.locator("svg").first()).toBeVisible({ timeout: 150_000 });
   } catch (e) {
     const info = await page.locator("#score-info").textContent();
+    const d = await host.evaluate((el) => ({ ...(el as HTMLElement).dataset }));
     throw new Error(`${(e as Error).message}
 score-info: ${info}
-errors: ${g.errors.join(" | ")}`,
-      { cause: e });
+state: ${JSON.stringify(d)}
+` +
+      `errors: ${g.errors.join(" | ")}`, { cause: e });
   }
   await expect(host.locator("g.playing").first()).toBeAttached();
   await expect(page.locator("#score-page")).toContainText("page 1 /");

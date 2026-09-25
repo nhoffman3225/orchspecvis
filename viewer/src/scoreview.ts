@@ -115,6 +115,11 @@ export class ScoreView {
     this.sounding = new SoundingTracker(lay.events);
     this.page = 0;
     this.litKey = "";
+    // sync diagnostics (read by the E2E tests and handy in devtools)
+    const d = this.host.dataset;
+    d.vrvMeasures = String(lay.measures.length);
+    d.anchors = String(this.clock.anchors);
+    d.pages = String(lay.pageCount);
   }
 
   /** Re-layout after a size, zoom or condense change (in the worker). */
@@ -172,7 +177,11 @@ export class ScoreView {
   update(t: number): void {
     if (!this.lay || !this.clock) return;
     const ms = this.clock.audioToVrv(t);
-    if (!Number.isFinite(ms)) return;
+    if (!Number.isFinite(ms)) {
+      this.host.dataset.state = "no-sync"; // no measure anchors: score and bundle disagree
+      return;
+    }
+    if (this.host.dataset.state !== "sync") this.host.dataset.state = "sync";
     const target = this.follow ? this.pageAt(ms) : this.page || 1;
     if (target !== this.page) void this.show(target);
     if (this.rendering) return;
