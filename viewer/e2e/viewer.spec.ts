@@ -209,7 +209,6 @@ test("tutti: chord per bar / per beat; a bar condenses into a chord and its pitc
   const host = page.locator("#tutti-score");
   await expect(host.locator("svg").first()).toBeVisible({ timeout: 90_000 });
   await expect(page.locator("#tutti-mode")).toHaveValue("chords");
-  await expect(page.locator("#tutti-win")).toBeHidden(); // canvas-only control stays hidden
   await expect(host.locator("g.note[fill]").first()).toBeAttached(); // coloured by section
   const bars = host.locator("g.measure");
   const box = (await bars.nth(1).boundingBox())!;
