@@ -16,7 +16,8 @@ from typing import Annotated, Literal
 
 from pydantic import AfterValidator, BaseModel, ConfigDict, Field, model_validator
 
-SCHEMA_VERSION = 3  # v2: `score` section; v3 (2026-09-25): alignment warp + part latency
+SCHEMA_VERSION = 4  # v2: `score`; v3: alignment warp + part latency; v4: gzip tiles
+TileEncoding = Literal["raw", "gzip"]
 MANIFEST_NAME = "manifest.json"
 NONE_STEM = 255  # value in dominant-stem tiles meaning "no stem above the floor"
 
@@ -216,7 +217,7 @@ class ScoreInfo(_Model):
 
 
 class Manifest(_Model):
-    schema_version: Literal[1, 2, 3] = SCHEMA_VERSION
+    schema_version: Literal[1, 2, 3, 4] = SCHEMA_VERSION
     created_by: str
     created_at: str  # ISO 8601 UTC
 
@@ -237,6 +238,8 @@ class Manifest(_Model):
     lod_reduce: Literal["max"] = "max"
     tile_frames: int = Field(gt=0)
     tile_layout: Literal["frame_major_u8"] = "frame_major_u8"
+    # v4: "gzip" = each tile file is a gzip member (RFC 1952) of the raw tile bytes, *.u8.gz
+    tile_encoding: TileEncoding = "raw"
 
     lods: list[Lod]  # the mix
     audio_path: RelPath
@@ -259,6 +262,8 @@ class Manifest(_Model):
             raise ValueError("db_max must exceed db_min")
         if self.n_frames != 1 + self.n_samples // self.hop:
             raise ValueError("n_frames must equal 1 + n_samples // hop (centered frames)")
+        if self.tile_encoding != "raw" and self.schema_version < 4:
+            raise ValueError("tile_encoding other than raw requires schema_version 4")
         for name, lods in self._all_lods():
             if not lods or lods[0].level != 0 or lods[0].n_frames != self.n_frames:
                 raise ValueError(f"{name}: level 0 must exist and span n_frames")

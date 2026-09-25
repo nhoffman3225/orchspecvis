@@ -7,13 +7,17 @@ import { heatFromNotes, heatFromPage, keyLevelsAt, normalizeHeat } from "./heat"
 import { PianoView, notesFromF0 } from "./piano";
 import { ScoreView } from "./scoreview";
 import { HARM_PRESETS, harmSliderValue, snapHarm } from "./presets";
-import { frameGaps, frameSpans, smoothPage } from "./gaps";
+import { frameGaps, frameSpans } from "./gaps";
 import { COLORMAPS, colormapLut, cssColor, stemPalette } from "./colormap";
 import { initToken } from "./net";
 import { LufsStrip, Pane2D } from "./pane2d";
 import { Player } from "./player";
 import { GRID_COLS, SURFACE_STYLES, Surface, colsPerBin, type SurfaceStyle } from "./surface";
-import { TileCache, assemblePage, bundleTileLoader, chooseLevel, lodsFor, sumPages, type TrackId } from "./tiles";
+import { chooseLevel, lodsFor, type TrackId } from "./tiles";
+import { PagesClient } from "./pagesclient";
+import { FAMILIES, FAMILY_COLORS, KEYS, combineGroups, familyOf, notesGrid, registerLevel, registerStats,
+  type Family } from "./registers";
+import { RegisterView, type RegisterGroup } from "./registerview";
 
 type Mode = "mix" | "ensemble" | "stems" | "dominant";
 
@@ -31,7 +35,7 @@ async function main(): Promise<void> {
   let base = params.get("bundle") ?? (import.meta.env.DEV ? "./tiny-bundle/" : "./bundle/");
   if (!base.endsWith("/")) base += "/";
   const m = await loadManifest(base);
-  const cache = new TileCache(bundleTileLoader(base, m));
+  const pagesWorker = new PagesClient(base, m); // tile fetch/assembly, stem sums, smoothing
   $("title").textContent = `${m.source.name} · ${m.stems.length} stems · k=${m.cqt.k} · ${m.cqt.backend}`;
 
   // ---- renderer (the one and only WebGL context)
@@ -70,8 +74,16 @@ async function main(): Promise<void> {
   const f0Data = f0Series ? await loadSeries(base, f0Series) : null;
   const parts = m.score?.parts ?? [];
 
-  const player = new Player(m.duration_seconds);
+  const player = new Player(m.duration_seconds, m.sr);
   void player.load(base, m.audio_path).then(() => {
+    document.documentElement.dataset.audio = player.mode; // stream | decoded | none (tests)
+    const syncState = (): void => void (document.documentElement.dataset.audioState = player.ctx.state);
+    // read-only probe for tests: the audio clock, live (datasets update only per frame)
+    (globalThis as { orchspecAudioTime?: () => number }).orchspecAudioTime = () => player.ctx.currentTime;
+    (globalThis as { orchspecStream?: () => string }).orchspecStream = () =>
+      `${player.streamState}; ctx ${player.ctx.sampleRate} Hz ${player.ctx.state}; ${player.audioError ?? ""}`;
+    player.ctx.addEventListener("statechange", syncState);
+    syncState();
     if (player.audioError) status.textContent = `audio unavailable (${player.audioError}); playhead runs silently`;
   });
 
@@ -192,7 +204,7 @@ async function main(): Promise<void> {
       cb.addEventListener("change", () => {
         if (cb.checked) partsVisible.add(p.index);
         else partsVisible.delete(p.index);
-        rebuildDisplay();
+        void rebuildDisplay();
       });
       const sw = document.createElement("span");
       sw.className = "sw";
@@ -218,7 +230,7 @@ async function main(): Promise<void> {
       plist.querySelectorAll<HTMLInputElement>("input").forEach((cb) => (cb.checked = on));
       partsVisible.clear();
       if (on) parts.forEach((p) => partsVisible.add(p.index));
-      rebuildDisplay();
+      void rebuildDisplay();
     };
     $("parts-all").addEventListener("click", () => setAllParts(true));
     $("parts-none").addEventListener("click", () => setAllParts(false));
@@ -234,10 +246,10 @@ async function main(): Promise<void> {
   }
   notesBox.addEventListener("change", () => {
     if (pane.score) pane.score.showNotes = notesBox.checked;
-    rebuildDisplay();
+    void rebuildDisplay();
   });
-  fundBox.addEventListener("change", () => rebuildDisplay());
-  fundW.addEventListener("change", () => rebuildDisplay());
+  fundBox.addEventListener("change", () => void rebuildDisplay());
+  fundW.addEventListener("change", () => void rebuildDisplay());
   // overtones back in when loud enough (only meaningful with fundamentals on)
   // slider: 0 = off, 1 = 0 dB, 2 = -1 dB, ... 97 = -96 dB (right lets quieter harmonics in)
   const MAX_HARMONIC = 16;
@@ -259,7 +271,7 @@ async function main(): Promise<void> {
     harm.value = presetSel.value;
     presetSel.value = "";
     syncHarm();
-    rebuildDisplay();
+    void rebuildDisplay();
   });
   const syncHarm = (): void => {
     harm.disabled = !fundBox.checked || fundBox.disabled;
@@ -269,7 +281,7 @@ async function main(): Promise<void> {
   harm.addEventListener("input", () => {
     harm.value = String(snapHarm(Number(harm.value)));
     syncHarm();
-    rebuildDisplay();
+    void rebuildDisplay();
   });
   fundBox.addEventListener("change", syncHarm);
   syncHarm();
@@ -303,20 +315,21 @@ async function main(): Promise<void> {
   async function loadPage(level: number, start: number): Promise<void> {
     const gen = ++pageGen;
     const tracks = heightTracks();
-    const pages = await Promise.all(
-      tracks.map((t) => assemblePage(cache, lodsFor(m, t)[level]!, m.n_bins, start, pageFrames)),
+    const { height, dom } = await pagesWorker.page(
+      tracks.map((t) => lodsFor(m, t)[level]!),
+      ui.mode === "dominant" && m.dominant ? m.dominant.lods[level]! : null,
+      start,
+      pageFrames,
     );
-    const height = pages.length ? sumPages(pages, m.db_min, m.db_max) : new Uint8Array(pageFrames * m.n_bins);
-    const dom = ui.mode === "dominant" && m.dominant
-      ? await assemblePage(cache, m.dominant.lods[level]!, m.n_bins, start, pageFrames, m.dominant.none_value)
-      : null;
     if (gen !== pageGen) return; // superseded
     raw = { height, dom, start, level, winFrames: secToF0(ui.winSeconds) / 2 ** level };
-    rebuildDisplay();
+    await rebuildDisplay();
+    if (gen !== pageGen) return;
     surface.setMode(ui.mode === "dominant" ? "dominant" : "db");
     const pal = palette();
     surface.setPalette(pal);
     page = { level, start, key: pageKey(), ready: true };
+    document.documentElement.dataset.page = `${ui.mode}:${level}:${start}`; // tests
   }
 
   // ---- spectral gaps of whatever is displayed (mix, full ensemble, or selected stems)
@@ -327,8 +340,11 @@ async function main(): Promise<void> {
   const smooth = $<HTMLInputElement>("smooth");
   const pSmooth = params.get("smooth");
   if (pSmooth !== null && Number.isFinite(Number(pSmooth))) smooth.value = pSmooth;
-  function rebuildDisplay(): void {
+  let displayGen = 0;
+  async function rebuildDisplay(): Promise<void> {
     if (!raw) return;
+    const gen = ++displayGen;
+    const r = raw;
     const semis = Number(smooth.value);
     $("smoothval").textContent = semis > 0 ? `${semis} st` : "off";
     // sigma = half the chosen width; time sigma covers the same world distance as pitch
@@ -368,12 +384,14 @@ async function main(): Promise<void> {
       }
     }
     heatSrc = { data: src, level: raw.level, start: raw.start };
-    const height = smoothPage(src, m.n_bins, pageFrames, sigmaB, sigmaF, m.db_min, m.db_max);
-    surface.setPage(height, raw.dom, raw.start);
+    const height = await pagesWorker.smooth(src, pageFrames, sigmaB, sigmaF);
+    if (gen !== displayGen) return; // a newer rebuild (slider, page) superseded this one
+    surface.setPage(height, r.dom, r.start);
     surface.setNotes(notes && nix && notesBox.checked
-      ? rasterizeNotes(notes, inPage, m, raw.level, raw.start, pageFrames, k / 2, visiblePart)
+      ? rasterizeNotes(notes, inPage, m, r.level, r.start, pageFrames, k / 2, visiblePart)
       : null);
-    last = { height, dom: raw.dom, start: raw.start, level: raw.level };
+    last = { height, dom: r.dom, start: r.start, level: r.level };
+    document.documentElement.dataset.smoothed = String(height !== src); // tests
     applyGaps();
   }
   // the filtered (fundamentals/harmonics) but unsmoothed page drives the "sound" heat map
@@ -397,7 +415,7 @@ async function main(): Promise<void> {
     smoothPending = true;
     requestAnimationFrame(() => {
       smoothPending = false;
-      rebuildDisplay();
+      void rebuildDisplay();
     });
   });
   const gapsBox = $<HTMLInputElement>("gaps");
@@ -527,7 +545,7 @@ async function main(): Promise<void> {
     // terrain/fabric read best smoothed; nudge the slider up if it is still at 0
     if (styleSel.value !== "surface" && Number(smooth.value) === 0) {
       smooth.value = "3";
-      rebuildDisplay();
+      void rebuildDisplay();
     }
     applyStyle();
   });
@@ -545,6 +563,84 @@ async function main(): Promise<void> {
     } else if (e.code === "ArrowLeft") seek(player.transport.position() - (e.shiftKey ? 1 : 5));
     else if (e.code === "ArrowRight") seek(player.transport.position() + (e.shiftKey ? 1 : 5));
     else if (e.code === "Home") seek(0);
+  });
+
+  // ---- register distribution view (per section / stem: whole piece + now)
+  const regView = new RegisterView($<HTMLCanvasElement>("regcanvas"), (s) => seek(s));
+  let regOpen = false;
+  const regSrc = $<HTMLSelectElement>("reg-src");
+  const regBy = $<HTMLSelectElement>("reg-by");
+  const regThr = $<HTMLInputElement>("reg-thr");
+  if (!notes) regSrc.querySelector<HTMLOptionElement>('option[value="notes"]')!.disabled = true;
+  if (params.get("regsrc") === "notes" && notes) regSrc.value = "notes";
+  if (params.get("regby") === "each") regBy.value = "each";
+  let regStems: Promise<Uint8Array> | null = null; // per-stem folded grids, fetched once
+  const regLevel = registerLevel(m.hop, m.sr, nLevels);
+  let regGen = 0;
+  const famGroups = (names: string[]): { groupOf: number[]; groups: RegisterGroup[] } => {
+    const fams = names.map(familyOf);
+    const present = FAMILIES.filter((f) => fams.includes(f));
+    return { groupOf: fams.map((f) => present.indexOf(f)),
+      groups: present.map((f: Family) => ({ label: f, color: FAMILY_COLORS[f] })) };
+  };
+  async function buildRegisters(): Promise<void> {
+    const gen = ++regGen;
+    const thrDb = Number(regThr.value);
+    $("reg-thrval").textContent = `${thrDb} dB`;
+    const byFamily = regBy.value === "family";
+    let grid: Uint8Array, frames: number, frameSec: number, groups: RegisterGroup[], thrU8: number;
+    if (regSrc.value === "notes" && notes) {
+      frameSec = 0.25;
+      frames = Math.ceil(m.duration_seconds / frameSec);
+      const fg = famGroups(parts.map((p) => p.instrument || p.name));
+      groups = byFamily ? fg.groups : parts.map((p) => ({ label: p.name, color: partColor(p.index) }));
+      const groupOfPart = (p: number): number => (!partsVisible.has(p) ? -1 : byFamily ? fg.groupOf[p] ?? -1 : p);
+      grid = notesGrid(notes, groupOfPart, groups.length, frames, frameSec);
+      thrU8 = 0;
+    } else {
+      const tracks = m.stems.length ? m.stems.map((s) => s.lods) : [m.lods];
+      const names = m.stems.length ? m.stems.map((s) => s.name) : ["mix"];
+      regStems ??= pagesWorker.registers(tracks.map((l) => l[regLevel]!));
+      const all = await regStems;
+      if (gen !== regGen) return;
+      frames = tracks[0]![regLevel]!.n_frames;
+      frameSec = frameSeconds(m, regLevel);
+      const per = names.map((_, i) => all.subarray(i * frames * KEYS, (i + 1) * frames * KEYS));
+      const fg = famGroups(names);
+      const pal = stemPalette(names.length);
+      groups = byFamily ? fg.groups
+        : names.map((n, i) => ({ label: n.replace(/^\d+_/, ""), color: cssColor(pal, i) }));
+      grid = combineGroups(per, byFamily ? fg.groupOf : names.map((_, i) => i), groups.length, frames);
+      thrU8 = Math.max(0, Math.min(254, Math.round(((thrDb - m.db_min) * 255) / (m.db_max - m.db_min))));
+    }
+    const dbPerStep = regSrc.value === "notes" ? 0 : (m.db_max - m.db_min) / 255;
+    const stats = registerStats(grid, groups.length, frames, thrU8, dbPerStep);
+    regView.set({ groups, grid, frames, frameSec, stats, thrU8, smoothSec: 2, duration: m.duration_seconds });
+    $("reg-info").textContent = `${groups.length} groups · ${frameSec.toFixed(2)} s windows`;
+    regThr.disabled = regSrc.value === "notes";
+    document.documentElement.dataset.registers = `${regSrc.value}:${groups.length}`; // tests
+  }
+  const rebuildRegisters = (): void => {
+    void buildRegisters().catch((e: unknown) => ($("reg-info").textContent = `error: ${String(e)}`));
+  };
+  regSrc.addEventListener("change", rebuildRegisters);
+  regBy.addEventListener("change", rebuildRegisters);
+  regThr.addEventListener("input", rebuildRegisters);
+  function setRegisters(open: boolean): void {
+    regOpen = open;
+    $("regview").hidden = !open;
+    if (open) {
+      setPiano(false);
+      setScore(false);
+      rebuildRegisters();
+    }
+  }
+  $("regbtn").addEventListener("click", () => setRegisters(true));
+  $("regclose").addEventListener("click", () => setRegisters(false));
+  addEventListener("keydown", (e) => {
+    if (e.target instanceof HTMLInputElement || e.target instanceof HTMLSelectElement) return;
+    if (e.code === "KeyR") setRegisters(!regOpen);
+    else if (e.code === "Escape" && regOpen) setRegisters(false);
   });
 
   // ---- full-screen piano view (in-moment roll + keyboard + live spectrum)
@@ -579,6 +675,7 @@ async function main(): Promise<void> {
   const setPiano = (open: boolean): void => {
     pianoOpen = open;
     pianoEl.hidden = !open;
+    if (open && regOpen) setRegisters(false);
   };
   setPiano(pianoOpen);
   const syncLook = (): void => {
@@ -626,6 +723,7 @@ async function main(): Promise<void> {
     scoreOpen = open;
     $("scoreview").hidden = !open;
     if (open) {
+      if (regOpen) setRegisters(false);
       setPiano(false);
       void scoreView!.load().catch((e: unknown) => {
         $("score-info").textContent = `score error: ${e instanceof Error ? e.message : String(e)}`;
@@ -669,6 +767,7 @@ async function main(): Promise<void> {
     else if (scoreOpen && e.code === "PageUp") stepPage(-1);
   });
   if (params.get("view") === "score") setScore(true);
+  if (params.get("view") === "registers") setRegisters(true);
 
   // ---- frame loop
   const view = $("view3d");
@@ -688,13 +787,19 @@ async function main(): Promise<void> {
     gapReadout(t);
     pane.heat = keyHeat(t);
     playBtn.textContent = player.transport.isPlaying ? "❚❚" : "▶";
+    const ur = String(player.underruns);
+    if (document.documentElement.dataset.underruns !== ur) document.documentElement.dataset.underruns = ur;
     $("time").textContent = `${fmt(t)} / ${fmt(m.duration_seconds)}`;
     if (m.score) {
       const bb = measureAt(m.score.measures, t);
       const txt = bb ? `m. ${bb.number}${bb.pass > 1 ? ` (pass ${bb.pass})` : ""} · beat ${bb.beat.toFixed(1)}` : "";
       if ($("barbeat").textContent !== txt) $("barbeat").textContent = txt;
     }
-    if (scoreOpen) {
+    if (regOpen) {
+      regView.draw(t);
+      const rt = `${fmt(t)} / ${fmt(m.duration_seconds)}`;
+      if ($("reg-time").textContent !== rt) $("reg-time").textContent = rt;
+    } else if (scoreOpen) {
       scoreView?.update(t);
       const bbs = m.score ? measureAt(m.score.measures, t) : null;
       const st = `${fmt(t)}${bbs ? ` · m. ${bbs.number}${bbs.pass > 1 ? ` (pass ${bbs.pass})` : ""} · beat ${bbs.beat.toFixed(1)}` : ""}`;
@@ -711,7 +816,7 @@ async function main(): Promise<void> {
     strip.draw();
     const s = player.audioError
       ? status.textContent ?? ""
-      : `${scoreStatus}${m.n_frames} frames × ${m.n_bins} bins · level ${page.level} · ${cache.size} tiles cached${player.hasAudio ? "" : " · loading audio…"}`;
+      : `${scoreStatus}${m.n_frames} frames × ${m.n_bins} bins · level ${page.level}${player.hasAudio ? "" : " · loading audio…"}`;
     if (s !== lastStatus) status.textContent = lastStatus = s;
   });
 }

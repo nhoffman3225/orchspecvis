@@ -12,12 +12,16 @@ export default defineConfig({
   workers: 1,
   reporter: [["list"]],
   use: {
+    // small viewport: WebGL runs in software (SwiftShader) and renders every frame; on a
+    // 4-core CI runner a full-HD canvas starves the page
+    viewport: { width: 960, height: 600 },
     baseURL: `http://127.0.0.1:${PORT}`,
     channel: process.env.PW_CHANNEL || undefined,
-    viewport: { width: 1400, height: 900 },
     screenshot: "only-on-failure",
     trace: "retain-on-failure",
-    launchOptions: { args: ["--use-angle=swiftshader", "--enable-unsafe-swiftshader"] },
+    // --disable-audio-output: a fake audio sink whose clock still runs, so playback tests
+    // work on CI runners without a sound device (and stay silent locally)
+    launchOptions: { args: ["--use-angle=swiftshader", "--enable-unsafe-swiftshader", "--disable-audio-output"] },
   },
   // the production build (what users run), served statically with the test bundles
   webServer: {

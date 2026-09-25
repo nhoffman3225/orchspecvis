@@ -80,6 +80,19 @@ html, body { margin: 0; height: 100%; background: var(--bg); color: var(--fg); }
 #score-host rect { stroke: currentColor; }
 #score-host g.note.playing, #score-host g.chord.playing { stroke-width: 12; }
 #score-host g.measure:hover { fill: #3a5a8c; color: #3a5a8c; }
+#regview {
+  position: fixed; inset: 0; z-index: 10; background: #0b0c10;
+  display: grid; grid-template-rows: auto 1fr;
+}
+#regview[hidden] { display: none; }
+#reg-bar {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px; padding: 6px 12px;
+  background: var(--panel); border-bottom: 1px solid var(--line); font-size: 12px;
+}
+#reg-bar label { display: inline-flex; align-items: center; gap: 4px; color: var(--muted); }
+#reg-bar .hint:last-of-type { margin-left: auto; }
+#reg-time { color: #e6c07b; font-variant-numeric: tabular-nums; min-width: 190px; }
+#regcanvas { width: 100%; height: 100%; min-height: 0; display: block; cursor: crosshair; }
 #pianoview {
   position: fixed; inset: 0; z-index: 10; background: #0b0c10;
   display: grid; grid-template-rows: auto 1fr;

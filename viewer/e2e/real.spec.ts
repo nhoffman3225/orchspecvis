@@ -19,3 +19,23 @@ test("real session: score view follows and highlights", async ({ page }) => {
   expect(g.offOrigin).toEqual([]);
   expect(g.errors).toEqual([]);
 });
+
+test("real session: streamed playback and ensemble pages", async ({ page }) => {
+  const g = guard(page, URL_!);
+  const t0 = Date.now();
+  await page.goto(`${URL_}&mode=ensemble&smooth=3&t=60`);
+  await expect(page.locator("html")).toHaveAttribute("data-page", /^ensemble:/, { timeout: 60_000 });
+  const pageMs = Date.now() - t0;
+  await expect(page.locator("html")).toHaveAttribute("data-audio", "stream");
+  await page.locator("#play").click();
+  await page.waitForTimeout(4000);
+  await page.locator("#play").click();
+  const heapMb = await page.evaluate(() =>
+    Math.round(((performance as unknown as { memory?: { usedJSHeapSize: number } }).memory?.usedJSHeapSize ?? 0) / 1e6));
+  const underruns = Number(await page.locator("html").getAttribute("data-underruns"));
+  console.log(`ensemble page (23 stems, smoothed) in ${pageMs} ms; ${underruns} underruns; JS heap ${heapMb} MB; ` +
+    `${await page.locator("#time").textContent()}`);
+  expect(underruns).toBe(0);
+  expect(g.offOrigin).toEqual([]);
+  expect(g.errors).toEqual([]);
+});

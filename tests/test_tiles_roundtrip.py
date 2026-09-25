@@ -1,3 +1,5 @@
+import gzip
+import json
 from pathlib import Path
 
 import numpy as np
@@ -5,8 +7,9 @@ import pytest
 from hypothesis import given, settings
 from hypothesis import strategies as st
 from hypothesis.extra.numpy import arrays
+from pydantic import ValidationError
 
-from orchspec.bundle.schema import NONE_STEM
+from orchspec.bundle.schema import NONE_STEM, Manifest
 from orchspec.dsp.tiles import (
     DominantAccumulator,
     dequantize,
@@ -18,6 +21,7 @@ from orchspec.dsp.tiles import (
     read_level,
     write_pyramid,
 )
+from tests.fixtures.make_tiny_bundle import DEFAULT_OUT
 
 DB_MIN, DB_MAX = -96.0, 6.0
 
@@ -68,9 +72,28 @@ def test_pyramid_roundtrip_on_disk(tmp_path: Path) -> None:
         assert all(t.n_frames <= 64 for t in lod.tiles)
     # the top level fits in one tile
     assert len(lods[-1].tiles) == 1
-    # byte layout: frame-major
-    raw = (tmp_path / lods[0].tiles[0].path).read_bytes()
+    # byte layout: frame-major, one gzip member per tile (reproducible: no mtime)
+    raw = gzip.decompress((tmp_path / lods[0].tiles[0].path).read_bytes())
     assert raw[3 * 12 + 5] == level0[3, 5]
+    again = write_pyramid(tmp_path / "again", "tiles/mix", level0, tile_frames=64)
+    p = again[0].tiles[0].path
+    assert (tmp_path / "again" / p).read_bytes() == (tmp_path / p).read_bytes()
+
+
+def test_raw_encoding_roundtrip(tmp_path: Path) -> None:
+    level0 = np.arange(100 * 3, dtype=np.uint8).reshape(100, 3)
+    lods = write_pyramid(tmp_path, "t", level0, tile_frames=32, encoding="raw")
+    assert lods[0].tiles[0].path.endswith("00000.u8")
+    assert (tmp_path / lods[0].tiles[0].path).read_bytes()[:6] == bytes(range(6))
+    assert np.array_equal(read_level(tmp_path, lods[0], 3, "raw"), level0)
+
+
+def test_gzip_tiles_need_v4() -> None:
+    raw = (DEFAULT_OUT / "manifest.json").read_text(encoding="utf-8")
+    d = json.loads(raw)
+    d.update(schema_version=3, tile_encoding="gzip")
+    with pytest.raises(ValidationError, match="schema_version 4"):
+        Manifest.model_validate(d)
 
 
 def test_dominant_accumulator() -> None:

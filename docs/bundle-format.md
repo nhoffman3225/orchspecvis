@@ -11,9 +11,9 @@ implementations are `src/orchspec/bundle/schema.py` (pydantic) and
 <name>.bundle/
   manifest.json
   audio/mix.<ext>                     copy of the source mix, byte-identical
-  tiles/mix/L<level>/<index>.u8       spectrogram tiles, mix
-  tiles/stem-<id>/L<level>/<index>.u8 one pyramid per stem
-  tiles/dominant/L<level>/<index>.u8  dominant-stem index tiles
+  tiles/mix/L<level>/<index>.u8[.gz]       spectrogram tiles, mix
+  tiles/stem-<id>/L<level>/<index>.u8[.gz] one pyramid per stem
+  tiles/dominant/L<level>/<index>.u8[.gz]  dominant-stem index tiles
   features/<name>.f32                 1-D time series
   tables/<name>.f32                   2-D tables (rows x time)
   score/notes.f32                     note table (v2, when a score or MIDI was given)
@@ -24,7 +24,8 @@ paths in the manifest, not reconstruct them.
 
 ## Conventions
 
-- **Encoding**: `manifest.json` is UTF-8 JSON. Binary files have no header.
+- **Encoding**: `manifest.json` is UTF-8 JSON. Binary files have no header (gzip tiles:
+  see `tile_encoding`).
 - **Paths** in the manifest are relative POSIX paths inside the bundle; readers must reject
   absolute paths, backslashes, `:` and any `..` component.
 - **Time**: all times are audio seconds from sample 0 of the mix. Frame `f` at LOD level
@@ -55,6 +56,13 @@ paths in the manifest, not reconstruct them.
   `ceil(n_frames_L / 2)` frames; frame `f` is the elementwise **max** of level-`L` frames
   `2f` and `2f+1` (the last frame alone if the count is odd), applied directly on the
   uint8 values (`lod_reduce = "max"`). Levels are generated until a level fits in one tile.
+
+- **Compression** (v4, `tile_encoding = "gzip"`, the writer's default): every tile file
+  (mix, stems, dominant) is one gzip member (RFC 1952) whose payload is exactly the raw
+  tile bytes above; files end in `.u8.gz`. Writers use `mtime = 0` so identical input gives
+  identical bytes. Orchestral tiles compress to ~30 %. Servers must serve these files as
+  opaque bytes (no `Content-Encoding`); the reader decompresses them itself. `raw` (the
+  default when the field is absent, and the only value before v4) means uncompressed `.u8`.
 
 ## Dominant-stem tiles
 
@@ -124,13 +132,14 @@ Schema v3 adds, all optional:
   a played measure comes from (repeats undone).
 Note times in the notes table are final audio times either way.
 
-Readers must accept schema_version 1 (no score), 2 and 3.
+Schema v4 adds `tile_encoding` (see Spectrogram tiles). Readers must accept
+schema_version 1 (no score), 2, 3 and 4; `tile_encoding` other than `raw` requires v4.
 
 ## manifest.json fields
 
 | field | type | notes |
 | --- | --- | --- |
-| `schema_version` | int | `3` (`1`, `2` still accepted) |
+| `schema_version` | int | `4` (`1`, `2`, `3` still accepted) |
 | `created_by` | string | e.g. `orchspec 0.1.0` |
 | `created_at` | string | ISO 8601 UTC |
 | `sr`, `hop`, `n_samples` | int | mix sample rate, CQT hop, mix length |
@@ -142,6 +151,7 @@ Readers must accept schema_version 1 (no score), 2 and 3.
 | `lod_reduce` | string | `max` |
 | `tile_frames` | int | frames per full tile |
 | `tile_layout` | string | `frame_major_u8` |
+| `tile_encoding` | string | `raw` (default) or `gzip` (v4) |
 | `lods` | Lod[] | the mix pyramid |
 | `audio_path`, `audio_sha256` | string | copied mix audio and SHA-256 of its bytes |
 | `cqt` | object | `{backend, k, filter_scale, window, tuning, frame_convention}` |

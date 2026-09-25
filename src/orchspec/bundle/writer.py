@@ -26,6 +26,7 @@ from orchspec.bundle.schema import (
     Series,
     SourceInfo,
     Stem,
+    TileEncoding,
 )
 from orchspec.bundle.score_stage import ScorePlan, prepare_score
 from orchspec.dsp.cqt import CQTBackend, CQTSpec, TorchBackend, calibrated_db, get_backend
@@ -54,6 +55,7 @@ class BundleOptions:
     db_min: float = -96.0
     db_max: float = 6.0
     tile_frames: int = 1024
+    tile_encoding: TileEncoding = "gzip"
     dominant_floor_db: float = -60.0
     energy_min_seconds: float = 0.05  # stem energy table at the first level >= this hop
     lufs_hop_seconds: float = 0.1
@@ -212,7 +214,7 @@ def _build(
     log(f"mix: {n_samples / spec.sr:.1f} s, {mix.shape[0]} ch")
     mix_db, mix_u8 = analyse(mono)
     t0 = time.perf_counter()
-    lods = write_pyramid(root, "tiles/mix", mix_u8, opts.tile_frames)
+    lods = write_pyramid(root, "tiles/mix", mix_u8, opts.tile_frames, opts.tile_encoding)
     tm.add("tiles", t0)
 
     t0 = time.perf_counter()
@@ -297,7 +299,10 @@ def _build(
         t0 = time.perf_counter()
         levels = pyramid(u8, opts.tile_frames)
         prefix = f"tiles/stem-{st.id}"
-        slods = [write_level(root, prefix, lv, a, opts.tile_frames) for lv, a in enumerate(levels)]
+        slods = [
+            write_level(root, prefix, lv, a, opts.tile_frames, opts.tile_encoding)
+            for lv, a in enumerate(levels)
+        ]
         assert acc is not None
         acc.add(i, levels)
         energy[i] = _frame_energy_db(db, e_level)
@@ -313,7 +318,9 @@ def _build(
     dominant = None
     if acc is not None:
         t0 = time.perf_counter()
-        dominant = DominantStem(floor_db=opts.dominant_floor_db, lods=acc.write(root))
+        dominant = DominantStem(
+            floor_db=opts.dominant_floor_db, lods=acc.write(root, encoding=opts.tile_encoding)
+        )
         _write_f32(root, "tables/stem_energy_db.f32", energy)
         tables.append(
             Series(
@@ -346,7 +353,13 @@ def _build(
         t0 = time.perf_counter()
         plan.finalize()
         plan.measure_fundamentals_from_tiles(
-            root, spec, lods[0], {i: st.lods[0] for i, st in enumerate(stems)}, db_min, db_max
+            root,
+            spec,
+            lods[0],
+            {i: st.lods[0] for i, st in enumerate(stems)},
+            db_min,
+            db_max,
+            opts.tile_encoding,
         )
         score_info = plan.write(root)
         tm.add("score", t0)
@@ -373,6 +386,7 @@ def _build(
         db_min=db_min,
         db_max=db_max,
         tile_frames=opts.tile_frames,
+        tile_encoding=opts.tile_encoding,
         lods=lods,
         audio_path=audio_rel,
         audio_sha256=sha,

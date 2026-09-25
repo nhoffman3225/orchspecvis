@@ -59,6 +59,9 @@ def bundle(
     db_min: float = -96.0,
     db_max: float = 6.0,
     tile_frames: int = 1024,
+    compress: Annotated[
+        bool, typer.Option(help="gzip tiles (~30 % of the raw size; schema v4)")
+    ] = True,
     overwrite: Annotated[bool, typer.Option(help="replace an existing bundle")] = False,
     offset: Annotated[
         float | None,
@@ -94,6 +97,7 @@ def bundle(
         db_min=db_min,
         db_max=db_max,
         tile_frames=tile_frames,
+        tile_encoding="gzip" if compress else "raw",
         offset=offset,
         align=align,
         f0=f0,

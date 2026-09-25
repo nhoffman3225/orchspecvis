@@ -59,6 +59,97 @@ workers: ${workers.length}; ${alive}
   expect(g.errors, g.errors.join(" | ")).toEqual([]);
 });
 
+test("pages are assembled, summed and smoothed in the worker (ensemble)", async ({ page, baseURL }) => {
+  const g = guard(page, baseURL!);
+  await page.goto(`/?bundle=${BUNDLE}&mode=ensemble&smooth=4`);
+  // slow on CI (software WebGL renders every frame while the worker assembles pages)
+  test.setTimeout(120_000);
+  await expect(page.locator("html")).toHaveAttribute("data-page", /^ensemble:\d+:\d+$/, { timeout: 90_000 });
+  await expect(page.locator("html")).toHaveAttribute("data-smoothed", "true");
+  expect(g.offOrigin).toEqual([]);
+  expect(g.errors, g.errors.join(" | ")).toEqual([]);
+});
+
+test("streams the mix WAV through the AudioWorklet (Range requests), no underruns", async ({ page, baseURL }) => {
+  test.setTimeout(120_000); // CI: software WebGL
+  const g = guard(page, baseURL!);
+  const ranges: string[] = [];
+  page.on("request", (r) => {
+    if (r.url().endsWith("/audio/mix.wav")) ranges.push(r.headers()["range"] ?? "(none)");
+  });
+  await page.goto(`/?bundle=${BUNDLE}&t=2`);
+  await expect(page.locator("html")).toHaveAttribute("data-audio", "stream");
+  const audioTime = (): Promise<number> =>
+    page.evaluate(() => (globalThis as { orchspecAudioTime?: () => number }).orchspecAudioTime?.() ?? 0);
+  const wall0 = Date.now();
+  await page.locator("#play").click();
+  const audio0 = await audioTime();
+  // a busy main thread must not starve the audio (the feeder worker talks to the worklet
+  // directly): block it in 300 ms bursts for ~2.4 s while playing
+  await page.evaluate(async () => {
+    for (let k = 0; k < 6; k++) {
+      const end = performance.now() + 300;
+      while (performance.now() < end) { /* busy */ }
+      await new Promise((r) => setTimeout(r, 100));
+    }
+  });
+  const secs = async (): Promise<number> => {
+    const [mm, ss] = ((await page.locator("#time").textContent()) ?? "0:0").split(" / ")[0]!.split(":");
+    return Number(mm) * 60 + Number(ss);
+  };
+  // Some CI runners have no audio device and Chromium's audio clock never starts there;
+  // then only the transport-independent checks below apply (verified locally otherwise).
+  const clockRuns = await expect.poll(secs, { timeout: 8_000 }).toBeGreaterThan(2.2).then(() => true, () => false);
+  if (clockRuns) {
+    await expect.poll(secs, { timeout: 15_000 }).toBeGreaterThanOrEqual(5); // playhead advanced 3 s
+  } else {
+    test.info().annotations.push({ type: "audio-clock", description:
+      `audio clock did not start (AudioContext ${await page.locator("html").getAttribute("data-audio-state")})` });
+  }
+  // Underruns only mean something with a real-time audio clock. CI's fake sink renders in
+  // catch-up bursts (clock rate far from 1x); there the count is reported, not asserted.
+  const rate = (await audioTime() - audio0) / ((Date.now() - wall0) / 1000);
+  await page.locator("#play").click();
+  expect(ranges.length).toBeGreaterThan(3);
+  expect(ranges.every((r) => r.startsWith("bytes="))).toBe(true); // never the whole file
+  const underruns = Number(await page.locator("html").getAttribute("data-underruns"));
+  const stream = await page.evaluate(() => (globalThis as { orchspecStream?: () => string }).orchspecStream?.() ?? "");
+  console.log(`audio clock rate ${rate.toFixed(2)}x, ${underruns} underruns; ${stream}; ${ranges.length} ranges`);
+  if (clockRuns && rate > 0.7 && rate < 1.4) {
+    expect(underruns).toBe(0);
+  } else {
+    test.info().annotations.push({ type: "audio-clock",
+      description: `audio clock rate ${rate.toFixed(2)}x of wall time; ${underruns} underrun quanta (not asserted)` });
+  }
+  expect(g.offOrigin).toEqual([]);
+  expect(g.errors, g.errors.join(" | ")).toEqual([]);
+});
+
+test("register view: sections from stem spectra and from the score", async ({ page, baseURL }) => {
+  const g = guard(page, baseURL!);
+  await page.goto(`/?bundle=${BUNDLE}&view=registers&t=4`);
+  await expect(page.locator("#regview")).toBeVisible();
+  await expect(page.locator("html")).toHaveAttribute("data-registers", /^sound:[1-9]/);
+  await page.locator("#reg-src").selectOption("notes");
+  await expect(page.locator("html")).toHaveAttribute("data-registers", /^notes:[1-9]/);
+  await page.locator("#reg-by").selectOption("each");
+  await expect(page.locator("html")).toHaveAttribute("data-registers", "notes:4"); // 4 parts
+  // the timeline is drawn (not blank): some pixels differ from the background
+  const painted = await page.locator("#regcanvas").evaluate((c: HTMLCanvasElement) => {
+    const d = c.getContext("2d")!.getImageData(0, 0, c.width, c.height).data;
+    let n = 0;
+    for (let i = 0; i < d.length; i += 4) if (d[i]! > 60 || d[i + 1]! > 60) n++;
+    return n;
+  });
+  expect(painted).toBeGreaterThan(500);
+  // click the left edge of the timeline -> seek near 0
+  const box = (await page.locator("#regcanvas").boundingBox())!;
+  await page.mouse.click(box.x + 42, box.y + box.height / 2);
+  await expect(page.locator("#reg-time")).toContainText("0:00.");
+  expect(g.offOrigin).toEqual([]);
+  expect(g.errors, g.errors.join(" | ")).toEqual([]);
+});
+
 test("piano view renders", async ({ page, baseURL }) => {
   const g = guard(page, baseURL!);
   await page.goto(`/?bundle=${BUNDLE}&view=piano&t=3`); // bar 2 starts at ~2.54 s (audio)

@@ -29,7 +29,22 @@ createServer((req, res) => {
   } catch {
     return void res.writeHead(404).end();
   }
-  res.writeHead(200, { "Content-Type": types[extname(file)] || "application/octet-stream" });
+  const type = types[extname(file)] || "application/octet-stream";
+  const size = statSync(file).size;
+  // single byte ranges (streaming playback reads the mix WAV in chunks)
+  const m = /^bytes=(\d*)-(\d*)$/.exec(req.headers.range ?? "");
+  if (m && (m[1] || m[2])) {
+    const start = m[1] ? Number(m[1]) : Math.max(0, size - Number(m[2]));
+    const end = m[1] && m[2] ? Math.min(Number(m[2]), size - 1) : size - 1;
+    if (start > end || start >= size) {
+      return void res.writeHead(416, { "Content-Range": `bytes */${size}` }).end();
+    }
+    res.writeHead(206, { "Content-Type": type, "Content-Range": `bytes ${start}-${end}/${size}`,
+      "Content-Length": end - start + 1, "Accept-Ranges": "bytes" });
+    if (req.method === "HEAD") return void res.end();
+    return void createReadStream(file, { start, end }).pipe(res);
+  }
+  res.writeHead(200, { "Content-Type": type, "Content-Length": size, "Accept-Ranges": "bytes" });
   if (req.method === "HEAD") return void res.end();
   createReadStream(file).pipe(res);
 }).listen(port, "127.0.0.1", () => console.log(`e2e static server on 127.0.0.1:${port}`));

@@ -3,7 +3,7 @@
 import { readFileSync, existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
-import { BundleError, binToMidi, midiName, midiToBin, notesFromBuffer, parseManifest } from "./bundle";
+import { BundleError, binToMidi, gunzip, midiName, midiToBin, notesFromBuffer, parseManifest } from "./bundle";
 
 const read = (rel: string): unknown =>
   JSON.parse(readFileSync(fileURLToPath(new URL(rel, import.meta.url)), "utf-8"));
@@ -13,7 +13,8 @@ const TINY = "../public/tiny-bundle/manifest.json";
 describe("manifest v1/v2", () => {
   it("parses the Python-written tiny bundle", () => {
     const m = parseManifest(read(TINY));
-    expect(m.schema_version).toBe(3);
+    expect(m.schema_version).toBe(4);
+    expect(m.tile_encoding).toBe("raw");
     expect(m.lods[0]!.n_frames).toBe(m.n_frames);
     expect(midiToBin(m, 69)).toBe(48);
     expect(binToMidi(m, 48)).toBe(69);
@@ -34,7 +35,8 @@ describe("manifest v1/v2", () => {
   const score = fileURLToPath(new URL("../test-data/py-score-bundle/manifest.json", import.meta.url));
   it.skipIf(!existsSync(score))("parses a Python-written v2 bundle with a score", () => {
     const m = parseManifest(JSON.parse(readFileSync(score, "utf-8")));
-    expect(m.schema_version).toBe(3);
+    expect(m.schema_version).toBe(4);
+    expect(m.tile_encoding).toBe("gzip");
     expect(m.score?.alignment.method).toBe("warp");
     expect(m.score?.alignment.warp.length).toBeGreaterThan(5);
     expect(m.score?.parts.every((p) => p.latency_sec !== null)).toBe(true);
@@ -54,7 +56,8 @@ describe("manifest v1/v2", () => {
     ["absolute", (d) => (d.audio_path = "/etc/passwd"), /inside the bundle/],
     ["drive", (d) => (d.audio_path = "C:/x.wav"), /inside the bundle/],
     ["unknown key", (d) => (d.surprise = 1), /unknown field 'surprise'/],
-    ["version", (d) => (d.schema_version = 4), /unsupported version/],
+    ["version", (d) => (d.schema_version = 5), /unsupported version/],
+    ["gzip before v4", (d) => ((d.schema_version = 3), (d.tile_encoding = "gzip")), /requires schema_version 4/],
     ["frames", (d) => (d.n_frames = (d.n_frames as number) + 1), /n_frames/],
   ];
   for (const [name, mutate, re] of bad) {
@@ -65,4 +68,12 @@ describe("manifest v1/v2", () => {
       expect(() => parseManifest(d)).toThrow(re);
     });
   }
+});
+
+describe("gzip tiles", () => {
+  it("gunzips a tile body with the native DecompressionStream", async () => {
+    const raw = Uint8Array.from({ length: 3000 }, (_, i) => (i * 7) % 256);
+    const gz = new Response(new Blob([raw]).stream().pipeThrough(new CompressionStream("gzip")));
+    expect(await gunzip(gz)).toEqual(raw);
+  });
 });
