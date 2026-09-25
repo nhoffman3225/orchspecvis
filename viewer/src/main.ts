@@ -14,13 +14,14 @@ import { frameGaps, frameSpans } from "./gaps";
 import { COLORMAPS, colormapLut, cssColor, stemPalette } from "./colormap";
 import { fetchSameOrigin, initToken } from "./net";
 import { runImportScreen } from "./importview";
+import { busy } from "./busy";
 import { LufsStrip, Pane2D } from "./pane2d";
 import { Player } from "./player";
 import { GRID_COLS, SURFACE_STYLES, Surface, colsPerBin, type SurfaceStyle } from "./surface";
 import { chooseLevel, lodsFor, type TrackId } from "./tiles";
 import { PagesClient } from "./pagesclient";
 import { FAMILIES, FAMILY_COLORS, KEYS, combineGroups, familyOf, notesGrid, registerLevel, registerStats,
-  type Family } from "./registers";
+  type AxisMode, type Family } from "./registers";
 import { RegisterView, type RegisterGroup } from "./registerview";
 
 type Mode = "mix" | "ensemble" | "stems" | "dominant";
@@ -374,7 +375,10 @@ async function main(): Promise<void> {
     return ["mix"];
   }
 
-  async function loadPage(level: number, start: number): Promise<void> {
+  function loadPage(level: number, start: number): Promise<void> {
+    return busy.while("page", loadPageNow(level, start));
+  }
+  async function loadPageNow(level: number, start: number): Promise<void> {
     const gen = ++pageGen;
     const tracks = heightTracks();
     const { height, dom } = await pagesWorker.page(
@@ -403,7 +407,11 @@ async function main(): Promise<void> {
   const pSmooth = params.get("smooth");
   if (pSmooth !== null && Number.isFinite(Number(pSmooth))) smooth.value = pSmooth;
   let displayGen = 0;
-  async function rebuildDisplay(): Promise<void> {
+  // slow controls show a spinner while their work is pending (busy.ts)
+  function rebuildDisplay(): Promise<void> {
+    return busy.while("display", rebuildDisplayNow());
+  }
+  async function rebuildDisplayNow(): Promise<void> {
     if (!raw) return;
     const gen = ++displayGen;
     const r = raw;
@@ -836,13 +844,13 @@ async function main(): Promise<void> {
       for (const v of views.values()) v.recolor();
       if (tv) void showCondensed(tv.selection);
     });
-    tm.addEventListener("change", () => void activate(tm.value).catch((e: unknown) => {
+    tm.addEventListener("change", () => void busy.while("tutti", activate(tm.value)).catch((e: unknown) => {
       $("tutti-info").textContent = `tutti error: ${e instanceof Error ? e.message : String(e)}`;
     }));
     const tzoom = (f: number): void => {
       if (!tv) return;
       tv.scale = Math.min(120, Math.max(10, Math.round(tv.scale * f)));
-      void tv.relayout();
+      void busy.while("tutti", tv.relayout());
     };
     $("tutti-zoomin").addEventListener("click", () => tzoom(1.15));
     $("tutti-zoomout").addEventListener("click", () => tzoom(1 / 1.15));
@@ -883,7 +891,7 @@ async function main(): Promise<void> {
       setScore(false);
       setRegisters(false);
       if (engraved && !tv) {
-        void activate(tm.value).catch((e: unknown) => {
+        void busy.while("tutti", activate(tm.value)).catch((e: unknown) => {
           $("tutti-info").textContent = `tutti error: ${e instanceof Error ? e.message : String(e)}`;
         });
       }
@@ -903,6 +911,10 @@ async function main(): Promise<void> {
   const regView = new RegisterView($<HTMLCanvasElement>("regcanvas"), (s) => seek(s));
   let regOpen = false;
   const regSrc = $<HTMLSelectElement>("reg-src");
+  const regPartials = $<HTMLSelectElement>("reg-partials");
+  const regAxis = $<HTMLSelectElement>("reg-axis");
+  if (["stripes", "dots", "solid"].includes(params.get("regpart") ?? "")) regPartials.value = params.get("regpart")!;
+  if (["notes", "hz", "both"].includes(params.get("regaxis") ?? "")) regAxis.value = params.get("regaxis")!;
   const regBy = $<HTMLSelectElement>("reg-by");
   const regThr = $<HTMLInputElement>("reg-thr");
   if (!notes) regSrc.querySelector<HTMLOptionElement>('option[value="notes"]')!.disabled = true;
@@ -917,12 +929,16 @@ async function main(): Promise<void> {
     return { groupOf: fams.map((f) => present.indexOf(f)),
       groups: present.map((f: Family) => ({ label: f, color: FAMILY_COLORS[f] })) };
   };
-  async function buildRegisters(): Promise<void> {
+  function buildRegisters(): Promise<void> {
+    return busy.while("registers", buildRegistersNow());
+  }
+  async function buildRegistersNow(): Promise<void> {
     const gen = ++regGen;
     const thrDb = Number(regThr.value);
     $("reg-thrval").textContent = `${thrDb} dB`;
     const byFamily = regBy.value === "family";
     let grid: Uint8Array, frames: number, frameSec: number, groups: RegisterGroup[], thrU8: number;
+    let fund: Uint8Array | undefined;
     if (regSrc.value === "notes" && notes) {
       frameSec = 0.25;
       frames = Math.ceil(m.duration_seconds / frameSec);
@@ -946,10 +962,24 @@ async function main(): Promise<void> {
         : names.map((n, i) => ({ label: n.replace(/^\d+_/, ""), color: cssColor(pal, i) }));
       grid = combineGroups(per, byFamily ? fg.groupOf : names.map((_, i) => i), groups.length, frames);
       thrU8 = Math.max(0, Math.min(254, Math.round(((thrDb - m.db_min) * 255) / (m.db_max - m.db_min))));
+      // where each group's score notes have their fundamentals: the rest are partials
+      if (notes && m.stems.length) {
+        const stemOf = parts.map((p) => m.stems.findIndex((s) => s.id === p.stem_id));
+        const groupOfPart = (p: number): number => {
+          if (!partsVisible.has(p)) return -1;
+          if (!byFamily) return stemOf[p] ?? -1;
+          const f = familyOf(parts[p]?.instrument || parts[p]?.name || "");
+          return fg.groups.findIndex((g2) => g2.label === f);
+        };
+        fund = notesGrid(notes, groupOfPart, groups.length, frames, frameSec);
+      }
     }
     const dbPerStep = regSrc.value === "notes" ? 0 : (m.db_max - m.db_min) / 255;
     const stats = registerStats(grid, groups.length, frames, thrU8, dbPerStep);
-    regView.set({ groups, grid, frames, frameSec, stats, thrU8, smoothSec: 2, duration: m.duration_seconds });
+    regView.set({
+      groups, grid, frames, frameSec, stats, thrU8, smoothSec: 2, duration: m.duration_seconds, fund,
+      partials: regPartials.value as "stripes" | "dots" | "solid", axis: regAxis.value as AxisMode,
+    });
     $("reg-info").textContent = `${groups.length} groups · ${frameSec.toFixed(2)} s windows`;
     regThr.disabled = regSrc.value === "notes";
     document.documentElement.dataset.registers = `${regSrc.value}:${groups.length}`; // tests
@@ -960,6 +990,8 @@ async function main(): Promise<void> {
   regSrc.addEventListener("change", rebuildRegisters);
   regBy.addEventListener("change", rebuildRegisters);
   regThr.addEventListener("input", rebuildRegisters);
+  regPartials.addEventListener("change", rebuildRegisters);
+  regAxis.addEventListener("change", rebuildRegisters);
   function setRegisters(open: boolean): void {
     regOpen = open;
     $("regview").hidden = !open;
@@ -1062,7 +1094,7 @@ async function main(): Promise<void> {
       if (tuttiOpen) setTutti(false);
       if (regOpen) setRegisters(false);
       setPiano(false);
-      void scoreView!.load().catch((e: unknown) => {
+      void busy.while("score", scoreView!.load()).catch((e: unknown) => {
         $("score-info").textContent = `score error: ${e instanceof Error ? e.message : String(e)}`;
       });
     }
@@ -1079,7 +1111,7 @@ async function main(): Promise<void> {
   $<HTMLInputElement>("score-condense").addEventListener("change", (e) => {
     if (!scoreView) return;
     scoreView.condense = (e.target as HTMLInputElement).checked;
-    void scoreView.relayout();
+    void busy.while("score", scoreView.relayout());
   });
   // zoom = Verovio scale (re-engraves in the worker); wheel steps are coalesced so a fast
   // scroll re-engraves once
@@ -1089,7 +1121,7 @@ async function main(): Promise<void> {
     scoreView.scale = Math.min(150, Math.max(10, Math.round(scoreView.scale * f)));
     $("score-zoom").textContent = `${scoreView.scale} %`;
     clearTimeout(zoomTimer);
-    zoomTimer = window.setTimeout(() => void scoreView?.relayout(), 180);
+    zoomTimer = window.setTimeout(() => void (scoreView && busy.while("score", scoreView.relayout())), 180);
   };
   $("score-zoomin").addEventListener("click", () => zoom(1.15));
   $("score-zoomout").addEventListener("click", () => zoom(1 / 1.15));

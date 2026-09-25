@@ -157,3 +157,16 @@ export function smoothStats(st: RegisterStats, radius: number): RegisterStats {
   };
   return { centroid: sm(st.centroid), lo: sm(st.lo), hi: sm(st.hi) };
 }
+
+/** Equal-tempered frequency of a MIDI pitch (A4 = 440 Hz). */
+export const hzOf = (midi: number): number => 440 * 2 ** ((midi - 69) / 12);
+
+export type AxisMode = "notes" | "hz" | "both";
+
+/** Pitch-axis label: "C4", "262 Hz" or "C4 · 262". */
+export function axisLabel(midi: number, mode: AxisMode): string {
+  const name = `${["C", "C♯", "D", "E♭", "E", "F", "F♯", "G", "A♭", "A", "B♭", "B"][((midi % 12) + 12) % 12]}${Math.floor(midi / 12) - 1}`;
+  const f = hzOf(midi);
+  const hz = f >= 1000 ? `${(f / 1000).toFixed(f >= 10000 ? 0 : 1)}k` : f.toFixed(0);
+  return mode === "notes" ? name : mode === "hz" ? `${hz} Hz` : `${name} · ${hz}`;
+}

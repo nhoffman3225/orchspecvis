@@ -147,6 +147,11 @@ test("register view: sections from stem spectra and from the score", async ({ pa
   await expect(page.locator("html")).toHaveAttribute("data-registers", /^sound:[1-9]/);
   await page.locator("#reg-src").selectOption("notes");
   await expect(page.locator("html")).toHaveAttribute("data-registers", /^notes:[1-9]/);
+  await page.locator("#reg-src").selectOption("sound");
+  await page.locator("#reg-partials").selectOption("dots"); // partials patterned, fundamentals solid
+  await page.locator("#reg-axis").selectOption("both");
+  await expect(page.locator("html")).toHaveAttribute("data-registers", /^sound:[1-9]/);
+  await page.locator("#reg-src").selectOption("notes");
   await page.locator("#reg-by").selectOption("each");
   await expect(page.locator("html")).toHaveAttribute("data-registers", "notes:4"); // 4 parts
   // the timeline is drawn (not blank): some pixels differ from the background
@@ -159,7 +164,7 @@ test("register view: sections from stem spectra and from the score", async ({ pa
   expect(painted).toBeGreaterThan(500);
   // click the left edge of the timeline -> seek near 0
   const box = (await page.locator("#regcanvas").boundingBox())!;
-  await page.mouse.click(box.x + 42, box.y + box.height / 2);
+  await page.mouse.click(box.x + 60, box.y + box.height / 2); // just right of the pitch axis
   await expect(page.locator("#reg-time")).toContainText("0:00.");
   expect(g.offOrigin).toEqual([]);
   expect(g.errors, g.errors.join(" | ")).toEqual([]);

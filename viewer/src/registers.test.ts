@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { NotesTable } from "./bundle";
-import { KEYS, combineGroups, familyOf, foldSemitones, notesGrid, registerLevel, registerStats, smoothStats } from "./registers";
+import { KEYS, axisLabel, combineGroups, familyOf, foldSemitones, hzOf, notesGrid, registerLevel, registerStats, smoothStats } from "./registers";
 
 describe("familyOf", () => {
   it.each([
@@ -62,5 +62,15 @@ describe("register grids", () => {
     const g = notesGrid(notes, (p) => p, 2, 4, 0.25);
     expect([0, 1, 2, 3].map((f) => g[f * KEYS + 39])).toEqual([255, 255, 255, 0]);
     expect([0, 1, 2, 3].map((f) => g[(4 + f) * KEYS + 51])).toEqual([0, 0, 255, 255]);
+  });
+});
+
+describe("pitch axis", () => {
+  it("labels notes, frequencies or both", () => {
+    expect(hzOf(69)).toBe(440);
+    expect(axisLabel(60, "notes")).toBe("C4");
+    expect(axisLabel(60, "hz")).toBe("262 Hz");
+    expect(axisLabel(96, "both")).toBe("C7 · 2.1k");
+    expect(axisLabel(24, "hz")).toBe("33 Hz");
   });
 });
