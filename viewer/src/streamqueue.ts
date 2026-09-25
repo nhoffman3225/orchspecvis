@@ -34,6 +34,12 @@ export class StreamQueue {
     this.chunks = [];
   }
 
+  /** The source frame playing at `ctxFrame` while playing (for the feeder's read-ahead). */
+  position(ctxFrame: number): { gen: number; srcFrame: number } | null {
+    if (!this.playing) return null;
+    return { gen: this.gen, srcFrame: Math.max(this.srcAt, this.srcAt + (ctxFrame - this.ctxAt)) };
+  }
+
   push(c: Chunk): void {
     if (c.gen !== this.gen) return; // stale (sent before a seek)
     this.chunks.push(c);

@@ -33,7 +33,10 @@ describe("StreamQueue", () => {
     q.push({ gen: 1, start: 50, data: [ramp(999, 8)] }); // sent before the seek
     q.render(out, 8);
     expect(Array.from(out[0]!)).toEqual([0, 0, 0, 0]);
+    expect(q.position(10)).toEqual({ gen: 2, srcFrame: 52 });
+    expect(q.position(0)).toEqual({ gen: 2, srcFrame: 50 }); // before the cue: the cue frame
     q.stop(3);
+    expect(q.position(20)).toBeNull();
     q.push({ gen: 3, start: 0, data: [ramp(1, 8)] });
     q.render(out, 12);
     expect(Array.from(out[0]!)).toEqual([0, 0, 0, 0]); // stopped
