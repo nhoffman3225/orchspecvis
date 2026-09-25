@@ -95,8 +95,7 @@ export class Splitter {
   }
 
   private drag(e: PointerEvent): void {
-    if (e.button !== 0) return;
-    e.preventDefault();
+    if (e.button !== 0) return; // (no preventDefault: it would suppress dblclick = reset)
     const start = this.o.axis === "y" ? e.clientY : e.clientX;
     const from = this.panelSize();
     this.handle.setPointerCapture(e.pointerId);

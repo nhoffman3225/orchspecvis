@@ -1,11 +1,25 @@
 :root {
   color-scheme: dark;
   font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
-  --bg: #0e0f13;
-  --panel: #15171d;
-  --line: #262a33;
-  --fg: #dfe3ea;
-  --muted: #8a93a3;
+  /* design language: brutalist structure (flat panels, hard 2px edges, square corners,
+     hard offset shadows, mono numerals) with Memphis-revival accents (a punchy palette,
+     tilted caption tags, a confetti strip), used sparingly so the spectrum and the
+     score stay the focus. Rules: end of this file. */
+  --bg: #0c0c0e;
+  --panel: #151518;
+  --raise: #1d1d22;
+  --line: #2c2c34;
+  --edge: #3b3b46;
+  --ink: #000;
+  --fg: #f1ede4;
+  --muted: #9b9aa6;
+  --pink: #ff5fa2;
+  --yellow: #ffd23f;
+  --teal: #2ec4b6;
+  --cobalt: #5a74ff;
+  --orange: #ff8c42;
+  --mono: ui-monospace, "Cascadia Mono", "SF Mono", Consolas, monospace;
+  --shadow: 2px 2px 0 var(--ink);
 }
 html, body { margin: 0; height: 100%; background: var(--bg); color: var(--fg); }
 #app {
@@ -25,22 +39,8 @@ html, body { margin: 0; height: 100%; background: var(--bg); color: var(--fg); }
   padding: 2px 12px; border-left: 1px solid var(--line);
 }
 #bar .grp:first-child { border-left: 0; padding-left: 4px; }
-#bar .cap {
-  font-size: 10px; letter-spacing: 0.06em; text-transform: uppercase; color: #5f6878;
-  user-select: none;
-}
-#bar input[type="range"] { width: 88px; accent-color: #8fb3e6; }
 #bar .ico { font-size: 12px; }
-#bar button:hover, #bar select:hover { border-color: #3a4150; }
-#bar button:focus-visible, #bar select:focus-visible, #bar input:focus-visible {
-  outline: 1px solid #e6c07b; outline-offset: 1px;
-}
-#aboutbtn { margin-left: 8px; }
 #bar label { display: inline-flex; align-items: center; gap: 4px; color: var(--muted); }
-#bar select, #bar button, #stems button {
-  background: #1d2028; color: var(--fg); border: 1px solid var(--line); border-radius: 4px;
-  font: inherit; padding: 2px 6px;
-}
 #play { width: 34px; font-size: 14px; }
 #time { font-variant-numeric: tabular-nums; min-width: 150px; }
 #title { margin-left: auto; color: var(--muted); }
@@ -72,7 +72,7 @@ html, body { margin: 0; height: 100%; background: var(--bg); color: var(--fg); }
 #lufs { border-top: 1px solid var(--line); cursor: pointer; }
 #cqt2d { cursor: crosshair; }
 #status { font-size: 11px; color: var(--muted); padding: 3px 10px; border-top: 1px solid var(--line); }
-#barbeat { color: #e6c07b; font-variant-numeric: tabular-nums; min-width: 120px; }
+#barbeat { color: #ffd23f; font-variant-numeric: tabular-nums; min-width: 120px; }
 #parts-sec { margin-top: 10px; border-top: 1px solid var(--line); padding-top: 6px; }
 #part-list li .pname { cursor: pointer; text-decoration: underline dotted; }
 #part-list li.focus .pname { font-weight: 600; color: #fff; }
@@ -89,10 +89,8 @@ html, body { margin: 0; height: 100%; background: var(--bg); color: var(--fg); }
   background: var(--panel); border-bottom: 1px solid var(--line); font-size: 12px;
 }
 #score-bar label { display: inline-flex; align-items: center; gap: 4px; color: var(--muted); }
-#score-bar button { background: #1d2028; color: var(--fg); border: 1px solid var(--line);
-  border-radius: 4px; font: inherit; padding: 2px 8px; }
 #score-bar .hint:last-of-type { margin-left: auto; }
-#score-time { color: #e6c07b; font-variant-numeric: tabular-nums; min-width: 220px; }
+#score-time { color: #ffd23f; font-variant-numeric: tabular-nums; min-width: 220px; }
 :is(#score-host, #tutti-score) {
   position: relative;
   overflow: auto; background: #f3efe6; color: #1b1b1b; padding: 12px; min-height: 0;
@@ -124,7 +122,7 @@ html, body { margin: 0; height: 100%; background: var(--bg); color: var(--fg); }
 }
 #tutti-bar label { display: inline-flex; align-items: center; gap: 4px; color: var(--muted); }
 #tutti-bar .hint { margin-left: auto; }
-#tutti-time { color: #e6c07b; font-variant-numeric: tabular-nums; min-width: 190px; }
+#tutti-time { color: #ffd23f; font-variant-numeric: tabular-nums; min-width: 190px; }
 #tutti-body { display: grid; grid-template-columns: minmax(200px, 1fr) 5px var(--tutti-side-w, 300px); min-height: 0; }
 #tutti-main { display: grid; grid-template-rows: 1fr auto; min-height: 0; position: relative; }
 #tutti-main > [hidden] { display: none; }
@@ -183,7 +181,7 @@ html, body { margin: 0; height: 100%; background: var(--bg); color: var(--fg); }
 }
 #reg-bar label { display: inline-flex; align-items: center; gap: 4px; color: var(--muted); }
 #reg-bar .hint:last-of-type { margin-left: auto; }
-#reg-time { color: #e6c07b; font-variant-numeric: tabular-nums; min-width: 190px; }
+#reg-time { color: #ffd23f; font-variant-numeric: tabular-nums; min-width: 190px; }
 #regcanvas { width: 100%; height: 100%; min-height: 0; display: block; cursor: crosshair; }
 #pianoview {
   position: fixed; left: 0; right: 0; bottom: 0; top: var(--dock-top, 0px); z-index: 10;
@@ -197,9 +195,7 @@ html, body { margin: 0; height: 100%; background: var(--bg); color: var(--fg); }
 }
 #piano-bar label { display: inline-flex; align-items: center; gap: 4px; color: var(--muted); }
 #piano-bar .hint { margin: 0 0 0 auto; }
-#piano-bar button { background: #1d2028; color: var(--fg); border: 1px solid var(--line);
-  border-radius: 4px; font: inherit; padding: 2px 8px; }
-#piano-time { color: #e6c07b; font-variant-numeric: tabular-nums; min-width: 220px; }
+#piano-time { color: #ffd23f; font-variant-numeric: tabular-nums; min-width: 220px; }
 #piano { width: 100%; height: 100%; display: block; }
 #gapinfo { color: #7fb6ff; font-variant-numeric: tabular-nums; }
 #gapval { min-width: 44px; font-variant-numeric: tabular-nums; }
@@ -208,7 +204,7 @@ html, body { margin: 0; height: 100%; background: var(--bg); color: var(--fg); }
 #importview { max-width: 760px; margin: 12vh auto 0; padding: 0 24px; font-size: 13px; }
 #importview h2 { font-size: 18px; font-weight: 600; margin: 0 0 14px; }
 #importview .import-bar { height: 8px; border-radius: 4px; background: var(--line); overflow: hidden; }
-#importview .import-bar > div { height: 100%; width: 2%; background: #e6c07b; transition: width 0.3s; }
+#importview .import-bar > div { height: 100%; width: 2%; background: #ffd23f; transition: width 0.3s; }
 #importview.failed .import-bar > div { background: #d63c3c; }
 #importview .import-phase { margin: 10px 0; color: var(--fg); }
 #importview pre { background: var(--panel); border: 1px solid var(--line); border-radius: 4px;
@@ -218,7 +214,7 @@ body:has(> #importview) { display: block; overflow: hidden; }
 /* loading indicator next to slow controls (busy.ts) */
 .spin {
   display: inline-block; width: 10px; height: 10px; vertical-align: -1px; margin-left: 2px;
-  border: 2px solid var(--line); border-top-color: #e6c07b; border-radius: 50%;
+  border: 2px solid var(--line); border-top-color: #ffd23f; border-radius: 50%;
   animation: spin 0.7s linear infinite;
 }
 .spin[hidden] { display: none; }
@@ -231,21 +227,144 @@ body:has(> #importview) { display: block; overflow: hidden; }
 #score-pdf .pdf-sheet { position: relative; width: 100%; margin: 0 auto; }
 #score-pdf img { display: block; width: 100%; height: auto; cursor: pointer; user-select: none; }
 #score-pdf .pdf-bar { position: absolute; left: 0; top: 0; pointer-events: none;
-  background: rgba(230, 192, 123, 0.18); outline: 1px solid rgba(214, 60, 60, 0.35); }
+  background: rgba(255, 210, 63, 0.2); outline: 1px solid rgba(214, 60, 60, 0.35); }
 #score-pdf .pdf-bar[hidden], #score-pdf .score-line[hidden] { display: none; }
 #score-pdf .score-line { position: absolute; left: 0; top: 0; width: 2px; margin-left: -1px;
   pointer-events: none; background: rgba(214, 60, 60, 0.85); }
 
 /* panel splitters (splitter.ts): a thin bar with a wider hit area */
-.splitter { background: var(--line); position: relative; z-index: 2; touch-action: none; }
+.splitter { background: var(--line); position: relative; z-index: 2; touch-action: none; user-select: none; }
 .splitter[hidden] { display: none; }
 .splitter.y { cursor: row-resize; }
 .splitter.x { cursor: col-resize; width: 5px; }
 .splitter::after { content: ""; position: absolute; inset: -3px; }
-.splitter:hover, .splitter.dragging, .splitter:focus-visible { background: #e6c07b; outline: none; }
+.splitter:hover, .splitter.dragging, .splitter:focus-visible { background: #ffd23f; outline: none; }
 
 /* the score / tutti / registers / piano views dock below the main toolbar, which stays
    usable; the handle on their top edge (#split-view) uncovers the spectrogram above */
 #app { --dock-top: calc(var(--bar-h, 0px) + var(--view-gap, 0px)); }
 #split-view { position: fixed; left: 0; right: 0; height: 5px; z-index: 12;
   top: calc(var(--dock-top) - 2px); }
+
+/* ===================== design language (brutal + Memphis) ===================== */
+
+/* one control style everywhere: flat, square, hard edge, hard shadow that presses */
+:is(#bar, #score-bar, #tutti-bar, #reg-bar, #piano-bar, #about-bar, #stems, #importview, #about-body)
+  :is(button, select) {
+  background: var(--raise); color: var(--fg); font: inherit; font-weight: 600;
+  border: 2px solid var(--edge); border-radius: 0; padding: 2px 8px;
+  box-shadow: var(--shadow); cursor: pointer;
+  transition: transform 60ms, box-shadow 60ms, border-color 60ms;
+}
+:is(#bar, #score-bar, #tutti-bar, #reg-bar, #piano-bar, #about-bar, #stems, #importview, #about-body)
+  :is(button, select):hover { border-color: var(--fg); }
+:is(#bar, #score-bar, #tutti-bar, #reg-bar, #piano-bar, #about-bar, #stems, #importview, #about-body)
+  button:active { transform: translate(2px, 2px); box-shadow: none; }
+:is(button, select, input, [role="separator"]):focus-visible {
+  outline: 2px solid var(--yellow); outline-offset: 2px;
+}
+input[type="range"], input[type="checkbox"] { accent-color: var(--yellow); }
+#bar input[type="range"] { width: 88px; }
+
+/* play: the one loud control */
+#bar #play {
+  width: 38px; background: var(--yellow); color: var(--ink); border-color: var(--ink);
+  box-shadow: 3px 3px 0 var(--pink);
+}
+#bar #play:active { box-shadow: none; }
+
+/* numerals and readouts in mono */
+:is(#time, #barbeat, #score-time, #tutti-time, #reg-time, #piano-time, #gapval, #gapinfo,
+  #status, #tip, #smoothval, #harmval, #tauval, #score-zoom, #score-page) {
+  font-family: var(--mono); font-size: 11.5px;
+}
+:is(#barbeat, #score-time, #tutti-time, #reg-time, #piano-time) { color: var(--yellow); }
+
+/* toolbar: groups as captioned blocks; captions are Memphis tags */
+#bar { background: var(--panel); border-bottom: 0; padding: 6px 6px 12px; position: relative; }
+#bar::after {  /* confetti strip: zigzag, dots, dash; inline SVG (CSP img-src allows data:) */
+  content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 6px;
+  border-top: 2px solid var(--ink);
+  background: var(--bg) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='96' height='6'%3E%3Cpath d='M0 5 L6 1 L12 5 L18 1 L24 5' fill='none' stroke='%23ff5fa2' stroke-width='1.6'/%3E%3Ccircle cx='33' cy='3' r='1.6' fill='%23ffd23f'/%3E%3Ccircle cx='41' cy='3' r='1.6' fill='%23ffd23f'/%3E%3Cpath d='M50 3 H62' stroke='%232ec4b6' stroke-width='2'/%3E%3Cpath d='M68 5 L74 1 L80 5 L86 1 L92 5' fill='none' stroke='%235a74ff' stroke-width='1.6'/%3E%3C/svg%3E") repeat-x 0 0 / 96px 6px;
+}
+#bar .grp { border-left: 2px solid var(--line); gap: 5px 10px; }
+#bar .cap {
+  font: 800 9.5px/1 system-ui, sans-serif; letter-spacing: 0.08em; text-transform: uppercase;
+  color: var(--ink); background: var(--c, var(--teal)); padding: 3px 5px 2px;
+  box-shadow: 2px 2px 0 var(--ink); transform: rotate(-2deg);
+}
+#bar .grp:nth-of-type(2) .cap { --c: var(--pink); }
+#bar .grp:nth-of-type(3) .cap { --c: var(--yellow); }
+#bar .grp:nth-of-type(4) .cap { --c: var(--teal); }
+#bar .grp:nth-of-type(5) .cap { --c: var(--orange); }
+#bar .grp:nth-of-type(6) .cap { --c: var(--cobalt); }
+#bar label { color: var(--muted); }
+#title { font-family: var(--mono); font-size: 11px; }
+
+/* the open view's button is "pressed" in its colour */
+#scorebtn, #scoreview { --vc: var(--yellow); }
+#tuttibtn, #tuttiview { --vc: var(--pink); }
+#regbtn, #regview { --vc: var(--teal); }
+#pianobtn, #pianoview { --vc: var(--cobalt); }
+#app:has(#scoreview:not([hidden])) #bar #scorebtn,
+#app:has(#tuttiview:not([hidden])) #bar #tuttibtn,
+#app:has(#regview:not([hidden])) #bar #regbtn,
+#app:has(#pianoview:not([hidden])) #bar #pianobtn {
+  background: var(--vc); color: var(--ink); border-color: var(--ink);
+  transform: translate(2px, 2px); box-shadow: none;
+}
+
+/* docked view headers: a thick colour rule and a heavy uppercase title tag */
+:is(#score-bar, #tutti-bar, #reg-bar, #piano-bar, #about-bar) {
+  border-top: 4px solid var(--vc, var(--orange)); border-bottom: 2px solid var(--ink);
+  background: var(--panel);
+}
+:is(#score-bar, #tutti-bar, #reg-bar, #piano-bar, #about-bar) > strong {
+  font-weight: 900; text-transform: uppercase; letter-spacing: 0.06em; font-size: 12px;
+  background: var(--vc, var(--orange)); color: var(--ink); padding: 2px 8px;
+  box-shadow: var(--shadow);
+}
+
+/* panels: flat with hard edges */
+#stems, #tutti-side { border-left: 2px solid var(--ink); background: var(--panel); }
+#pane, #lufs { border-top: 2px solid var(--ink); }
+#status { border-top: 2px solid var(--ink); background: var(--panel); }
+.stems-head strong {
+  text-transform: uppercase; letter-spacing: 0.06em; font-size: 11px; font-weight: 900;
+}
+#stem-list .sw, #part-list .sw, #tutti-sel .chip i { border-radius: 0; outline: 1px solid var(--ink); }
+#stems #sections button { border-radius: 0; border: 2px solid var(--fam, var(--edge));
+  font-weight: 700; box-shadow: none; padding: 1px 7px; }
+#stems #sections button.on { background: var(--fam); color: var(--ink); box-shadow: 2px 2px 0 var(--ink); }
+
+/* paper areas (chord, scale) sit on a hard shadow */
+#tutti-chord, #tutti-scale { border-radius: 0; border: 2px solid var(--ink);
+  box-shadow: 3px 3px 0 var(--teal); }
+#tip { background: var(--ink); border: 2px solid var(--yellow); border-radius: 0; }
+
+/* splitters: yellow on hover, pink while dragging */
+.splitter { background: var(--ink); }
+.splitter:hover, .splitter:focus-visible { background: var(--yellow); }
+.splitter.dragging { background: var(--pink); }
+
+/* busy spinner: a spinning square in the palette */
+.spin { border-radius: 0; border-color: var(--pink); border-top-color: var(--yellow); }
+
+/* desktop import: a chunky striped progress bar */
+#importview h2 { font-weight: 900; text-transform: uppercase; letter-spacing: 0.04em; }
+#importview .import-bar { height: 14px; border-radius: 0; border: 2px solid var(--ink);
+  box-shadow: 3px 3px 0 var(--pink); background: var(--raise); }
+#importview .import-bar > div {
+  background: repeating-linear-gradient(-45deg, var(--yellow) 0 8px, var(--orange) 8px 16px);
+}
+#importview pre { border-radius: 0; border: 2px solid var(--ink); font-family: var(--mono); }
+
+/* credits page */
+#about-body h2 { text-transform: uppercase; font-weight: 900; letter-spacing: 0.04em;
+  border-bottom: 3px solid var(--pink); display: inline-block; padding-bottom: 2px; }
+#about-text { border-radius: 0; border: 2px solid var(--ink); font-family: var(--mono); }
+
+@media (prefers-reduced-motion: reduce) {
+  :is(button, select) { transition: none; }
+  #bar .cap { transform: none; }
+}

@@ -40,7 +40,9 @@ describe("network guard", () => {
       const p = join(dir, f);
       if (statSync(p).isDirectory() || f.endsWith(".test.ts")) continue;
       const text = readFileSync(p, "utf-8");
-      const hits = text.match(/(https?|wss?):\/\/(?!127\.0\.0\.1|localhost)[^\s"'`)]+/g) ?? [];
+      // the SVG namespace (inline data: patterns in style.css) is an identifier, never fetched
+      const hits = (text.match(/(https?|wss?):\/\/(?!127\.0\.0\.1|localhost)[^\s"'`)]+/g) ?? [])
+        .filter((u) => u !== "http://www.w3.org/2000/svg");
       expect(hits, `${f} contains external URLs`).toEqual([]);
     }
   });

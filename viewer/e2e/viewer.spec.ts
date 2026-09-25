@@ -270,6 +270,7 @@ test("piano view renders", async ({ page, baseURL }) => {
 
 test("views dock below the toolbar; panels resize by dragging and remember it", async ({ page, baseURL }) => {
   const g = guard(page, baseURL!);
+  await page.setViewportSize({ width: 1280, height: 800 }); // room for the splitter limits
   await page.goto(`/?${Q}&view=registers`);
   const view = page.locator("#regview");
   await expect(view).toBeVisible();
@@ -300,9 +301,10 @@ test("views dock below the toolbar; panels resize by dragging and remember it", 
   // (clamped so the 3D view keeps 120 px: in this small viewport the gain is limited)
   await expect.poll(async () => (await pane.boundingBox())!.height).toBeGreaterThan(ph + 20);
   const grown = (await pane.boundingBox())!.height;
-  await page.reload();
+  await page.goto(`/?${Q}`); // reload (without view=registers, which would cover the pane)
   await expect.poll(async () => Math.round((await pane.boundingBox())!.height)).toBe(Math.round(grown));
-  await page.locator("#split-pane").dblclick(); // reset
+  const sp = (await page.locator("#split-pane").boundingBox())!;
+  await page.mouse.dblclick(400, sp.y + sp.height / 2); // reset
   await expect.poll(async () => Math.round((await pane.boundingBox())!.height)).toBe(Math.round(ph));
   expect(g.offOrigin).toEqual([]);
   expect(g.errors, g.errors.join(" | ")).toEqual([]);

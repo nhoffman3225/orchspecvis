@@ -820,7 +820,7 @@ async function main(): Promise<void> {
       for (const k of keyLayout(w)) {
         if (k.black !== black) continue;
         const kh = black ? hh * 0.6 : hh;
-        g.fillStyle = selMidis.has(k.midi) ? "#e6c07b" : now.get(k.midi) ?? (black ? "#15171c" : "#d8d9dd");
+        g.fillStyle = selMidis.has(k.midi) ? "#ffd23f" : now.get(k.midi) ?? (black ? "#15171c" : "#d8d9dd");
         g.fillRect(k.x + 0.5, 0, k.w - 1, kh);
         if (!black) {
           g.strokeStyle = "#0b0c10";
