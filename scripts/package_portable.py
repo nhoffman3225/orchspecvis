@@ -53,6 +53,9 @@ def main() -> None:
     for need in (exe, runtime / "python.exe"):
         if not need.is_file():
             sys.exit(f"missing {need}: build the runtime and the app first")
+    viewer = ROOT / "viewer" / "dist" / "index.html"
+    if viewer.is_file() and exe.stat().st_mtime < viewer.stat().st_mtime:
+        sys.exit(f"{exe.name} is older than the viewer build: the app build failed or is stale")
 
     name = f"orchspec-{a.version}-Windows-{a.variant}"
     stage = a.out / name
