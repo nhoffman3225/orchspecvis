@@ -186,7 +186,7 @@ test("credits: shipped projects and full licence texts, same origin", async ({ p
 
 test("section buttons select stems and parts by family", async ({ page, baseURL }) => {
   const g = guard(page, baseURL!);
-  await page.goto(`/?bundle=${BUNDLE}`);
+  await page.goto(`/?${Q}`);
   const sec = page.locator("#sections button");
   await expect(sec).toHaveText(["woodwinds", "keyboards", "strings"]);
   await sec.filter({ hasText: "woodwinds" }).click(); // flute + clarinet
