@@ -1,6 +1,6 @@
 // Minimal typings for the parts of the verovio package (LGPL-3.0) that orchspec uses.
 declare module "verovio/wasm" {
-  const createVerovioModule: () => Promise<unknown>;
+  const createVerovioModule: (moduleArg?: Record<string, unknown>) => Promise<unknown>;
   export default createVerovioModule;
 }
 

@@ -28,9 +28,16 @@ test("score view engraves in a worker, highlights sounding notes, seeks on click
   } catch (e) {
     const info = await page.locator("#score-info").textContent();
     const d = await host.evaluate((el) => ({ ...(el as HTMLElement).dataset }));
+    // is the worker alive and idle (answers quickly) or stuck in synchronous work?
+    const workers = page.workers();
+    const alive = await Promise.race([
+      workers[0]?.evaluate(() => `worker idle at ${Math.round(performance.now())} ms`) ?? "no worker",
+      new Promise<string>((r) => setTimeout(() => r("worker busy (no answer in 5 s)"), 5000)),
+    ]);
     throw new Error(`${(e as Error).message}
 score-info: ${info}
 state: ${JSON.stringify(d)}
+workers: ${workers.length}; ${alive}
 ` +
       `errors: ${g.errors.join(" | ")}`, { cause: e });
   }

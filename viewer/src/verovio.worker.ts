@@ -19,8 +19,19 @@ async function toolkit(): Promise<VerovioToolkit> {
   if (!tk) {
     const t0 = performance.now();
     progress("starting the notation engine…");
-    const mod = await createVerovioModule();
-    tk = new VerovioToolkit(mod);
+    // elapsed-time ticks: if they stop, the worker is busy; if they continue, it is waiting
+    const tick = setInterval(() => {
+      progress(`starting the notation engine… ${Math.round((performance.now() - t0) / 1000)} s`);
+    }, 1000);
+    try {
+      const mod = await createVerovioModule({
+        printErr: (text: string) => progress(`notation engine: ${text}`),
+        onAbort: (what: unknown) => progress(`notation engine aborted: ${String(what)}`),
+      });
+      tk = new VerovioToolkit(mod);
+    } finally {
+      clearInterval(tick);
+    }
     progress(`notation engine ready (${Math.round(performance.now() - t0)} ms); laying out…`);
   }
   return tk;
