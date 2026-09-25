@@ -427,11 +427,11 @@ Checked on the first real session (Dorico 5 + NotePerformer 5, Beethoven 5 i, 6:
   (`__vqt_filter_fft`, `__cqt_response`, `__early_downsample`) unchanged in structure from 0.10.
 - 2026-09-24: typescript-eslint 8.70 supports TypeScript `<6.1`, so the viewer pins
   TypeScript 6.0.3 (TS 7 native compiler is out but lacks the JS API typescript-eslint needs).
-- 2026-09-25: TypeScript 7 adopted for type-checking: `npm run typecheck` runs the native
-  TS 7.0.2 `tsc` (installed as the alias `typescript-7`, ~0.2 s), while `typescript` stays
-  6.0.3 only for typescript-eslint's JS API. Drop the alias when typescript-eslint supports
-  TS 7. Dependabot ignores `typescript` majors (would break eslint) and `@types/node`
-  majors (types track the Node runtime, 24 in CI; move both to Node 26 together later).
+- 2026-09-25: TypeScript 7 deferred: typescript-eslint 8.70 needs TS `<6.1` (TS 7's native
+  `tsc` has no JS API), so the viewer stays on 6.0.3 until typescript-eslint supports 7
+  (a TS 7 alias for type-checking only worked, ~0.2 s, but was dropped to keep one
+  compiler). Dependabot ignores `typescript` majors and `@types/node` majors (types track
+  the Node 24 runtime in CI; move both to Node 26 together later).
 - 2026-09-24: Starlette warns that using `httpx` with `TestClient` is deprecated in favour
   of `httpx2`; still works. Revisit when httpx2 is stable (dependency change needs approval).
 - 2026-09-24: pytest-socket raises `SocketConnectBlockedError` (not `SocketBlockedError`)

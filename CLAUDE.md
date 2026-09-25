@@ -38,7 +38,7 @@ Viewer (`viewer/`, npm with committed package-lock.json):
 npm ci
 npm run dev        # Vite dev server on 127.0.0.1 (tiny-bundle by default)
 npm run build      # -> viewer/dist (served by `orchspec serve`)
-npm run lint       # eslint (TS 6 API) + typecheck (TS 7 native tsc)
+npm run lint       # eslint + tsc --noEmit
 npm test           # vitest (includes schema cross-check + no-network check)
 npm run e2e        # Playwright (needs viewer/test-data from `uv run pytest`); PW_CHANNEL=msedge locally
 E2E_URL="<orchspec serve URL>" PW_CHANNEL=msedge npx playwright test real   # LOCAL real session

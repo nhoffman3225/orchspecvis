@@ -6,10 +6,9 @@
   "type": "module",
   "scripts": {
     "dev": "vite --host 127.0.0.1",
-    "build": "npm run typecheck && vite build",
+    "build": "tsc --noEmit && vite build",
     "preview": "vite preview --host 127.0.0.1",
-    "lint": "eslint . && npm run typecheck",
-    "typecheck": "node node_modules/typescript-7/bin/tsc --noEmit",
+    "lint": "eslint . && tsc --noEmit",
     "test": "vitest run",
     "e2e": "playwright test"
   },
@@ -27,7 +26,6 @@
     "@types/three": "0.186.0",
     "eslint": "10.11.0",
     "typescript": "6.0.3",
-    "typescript-7": "npm:typescript@7.0.2",
     "typescript-eslint": "8.70.1",
     "vite": "8.3.1",
     "vitest": "5.0.1"
