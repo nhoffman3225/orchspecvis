@@ -525,10 +525,6 @@ export function parseManifest(json: unknown): Manifest {
 export const k = (m: Manifest): number => m.bins_per_octave / 12;
 export const binToMidi = (m: Manifest, b: number): number => m.fmin_midi + b / k(m);
 export const midiToBin = (m: Manifest, midi: number): number => (midi - m.fmin_midi) * k(m);
-export const frameToSeconds = (m: Manifest, f: number, level = 0): number =>
-  (f * m.hop * 2 ** level) / m.sr;
-export const secondsToFrame = (m: Manifest, t: number, level = 0): number =>
-  (t * m.sr) / (m.hop * 2 ** level);
 export const u8ToDb = (m: Manifest, v: number): number =>
   m.db_min + (v * (m.db_max - m.db_min)) / 255;
 

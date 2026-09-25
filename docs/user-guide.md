@@ -108,7 +108,8 @@ between panels to resize them (double-click resets). Esc closes the view.
   hide staves that only rest in a system. If the session had a `score.pdf`, switch the
   source to **PDF** to follow the engraved layout (for example Dorico's condensed score),
   with the current bar highlighted.
-- **Tutti (T).** A reduction of the whole orchestra at concert pitch for proofreading:
+- **Tutti (T).** Needs the session's MusicXML score. A reduction of the whole orchestra
+  at concert pitch for proofreading:
   one chord per bar or per beat, for all parts or by section, coloured by section or by
   part. Click a chord or bar, Alt+click every note on the same
   beat, or drag a box (Shift/Ctrl adds). The selection condenses into one chord plus its

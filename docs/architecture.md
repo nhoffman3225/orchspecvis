@@ -59,6 +59,9 @@ CLAUDE.md              commands and invariants for contributors (and coding agen
    - engravable reductions for the tutti view (`score/reduce.py`);
    - the score PDF rendered to page images, with bar boxes found by staff and barline
      detection plus the PDF's text layer (`score/pdf.py`).
+   On the CPU backend, worker threads analyse several stems at once (CQT, onset
+   envelopes); results are taken in stem order, so the output is identical
+   (`test_cpu_workers_build_equals_single_thread`).
 7. **Write** the manifest, then move the finished bundle into place. An existing bundle is
    renamed aside first, so a failure never leaves a half-written one.
 
@@ -83,11 +86,12 @@ random port and token (for development; the desktop app replaces it).
 | `player.ts`, `stream.feeder.ts`, `stream.worklet.ts`, `streamqueue.ts`, `clock.ts`, `wav.ts` | Streaming playback. A worker fetches 1 s audio chunks with HTTP range requests and feeds an AudioWorklet over a MessageChannel. The worklet's position is the clock. |
 | `scoreview.ts`, `verovio.worker.ts`, `verovioCore.ts`, `scoremap.ts` | The engraved score (Verovio in a worker) and the score↔audio time map. |
 | `pdfview.ts` | Following a score PDF (page images and bar boxes). |
-| `tutti.ts`, `tuttiview.ts`, `condense.ts` | The tutti reduction, selection, condensing and pitch-class sets. |
+| `tuttipanel.ts`, `condense.ts` | The tutti view (the score's engraved chord reductions), selection, condensing and pitch-class sets. |
 | `registers.ts`, `registerview.ts` | Register distribution. |
 | `piano.ts`, `heat.ts` | Piano view and keyboard heat. |
 | `importview.ts` | The desktop import progress screen. |
 | `busy.ts` | Spinners next to slow controls. |
+| `toolbar.ts`, `splitter.ts`, `hovertip.ts`, `help.ts` | Folding toolbar groups, resizable panels, hover help and the Help view. |
 | `net.ts` | The same-origin fetch guard (no network beyond the page's own origin). |
 
 Unit tests are `*.test.ts` (vitest), and `e2e/viewer.spec.ts` runs Playwright against a

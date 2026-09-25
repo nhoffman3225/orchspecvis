@@ -36,8 +36,8 @@ def session(tmp_path_factory: pytest.TempPathFactory) -> Path:
     return fx.make(tmp_path_factory.mktemp("sess") / "score-session")
 
 
-def test_tutti_reduction(session: Path) -> None:
-    xml, side = reduce_score(session / "score.musicxml", "tutti")
+def test_reduction_keeps_bars_and_maps_every_pitch(session: Path) -> None:
+    xml, side = reduce_score(session / "score.musicxml", "beat-chords")
     root = DET.fromstring(xml)
     parts = root.findall("part")
     assert len(parts) == 1
@@ -123,3 +123,8 @@ def test_chord_per_beat(session: Path) -> None:
     assert {v["midi"] for v in notes.values()} == truth
     per_bar, _ = reduce_score(session / "score.musicxml", "chords")
     assert len(notes) >= per_bar.count("<pitch>")  # held notes repeat per beat
+
+
+def test_unknown_mode_rejected(session: Path) -> None:
+    with pytest.raises(ValueError, match="unknown reduction mode"):
+        reduce_score(session / "score.musicxml", "tutti")  # full rhythm: removed in v7

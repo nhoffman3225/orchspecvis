@@ -204,7 +204,16 @@ carry the `real` marker and never run in CI.
       "disappearing UI"), top edge draggable; splitters for the 2D pane, stems list and
       tutti side panel (min sizes, double-click reset, remembered per browser); toolbar in
       labelled groups; desktop View > Full Screen (F11)
-- [ ] Canvas tutti for MIDI-only bundles is still full rhythm (no engraving path there)
+- [x] Tutti needs MusicXML (decision 2026-09-25): the canvas full-rhythm fallback for
+      MIDI-only bundles is removed (tutti.ts, tuttiview.ts); the view is tuttipanel.ts
+- [x] Audit (2026-09-25):
+      - CPU backend analyses stems in parallel threads (identical output, tested):
+        Beethoven 5 i 51 s -> 25 s (4 workers; 6: 22 s, 8: 20.5 s). Torch on the CPU is
+        slower than librosa (CQT 74 s vs 32 s), so the CPU runtime stays numpy/librosa
+      - no source maps in production viewer builds: dist 29 -> 8.7 MB
+      - full-rhythm reduction code removed from score/reduce.py (568 -> 478 lines)
+      - unused helpers removed (cqt_magnitude, _band_level, bundleTileLoader,
+        frameToSeconds/secondsToFrame in the viewer); main.ts 1349 -> 1116 lines
 - [x] Score PDF (2026-09-25, schema v6 `score.pdf`): session `score.pdf` rendered once at
       import (pypdfium2 / PDFium, 150 dpi grayscale PNG); bars found on the image (staff
       lines, barlines through every staff of a system) and numbered from the PDF's text

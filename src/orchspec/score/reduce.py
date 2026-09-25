@@ -1,20 +1,18 @@
-"""Tutti / short-score reduction of a MusicXML score, for proofreading.
+"""Chord reductions of a MusicXML score, for proofreading harmony and doublings.
 
 All pitched notes of a group of parts are merged at CONCERT pitch onto one grand staff
 (treble above middle C, bass below), keeping the score's own spelling (each part's
 <transpose> diatonic/chromatic/octave-change applied), its bars, time and key
-signatures, repeat barlines and endings. Groups: "tutti" (every part on one grand
-staff) or one grand staff per section (short score).
-
-Voices: per bar, each source voice is a rhythm stream; streams with identical rhythm
-merge into chords (homophonic writing collapses to one voice), different rhythms stay
-separate voices on the staff. Exact unisons merge into one notehead. Gaps are invisible
-<forward>s; an empty staff gets a whole-bar rest.
+signatures, repeat barlines and endings. Groups: every part on one grand staff, or one
+grand staff per section (short score). Each staff holds one chord per bar, or one per
+beat (every pitch sounding during the beat), with no ties; exact unisons merge into one
+notehead, and a bar or beat with nothing sounding is a rest. (Full-rhythm reductions,
+with voices and ties, proved unreadable and were removed in schema v7.)
 
 Every output note has id "t-<n>"; the sidecar maps it to its source parts and sounding
 MIDI (Verovio keeps MusicXML note ids on the SVG elements), so the viewer can say which
 parts play a selected note. Grace and cue notes, unpitched notes, lyrics, dynamics and
-articulations are dropped: this is a pitch/rhythm proofreading aid, not an edition.
+articulations are dropped: this is a proofreading aid, not an edition.
 """
 
 from __future__ import annotations
@@ -32,7 +30,6 @@ from orchspec.score.ranges import find_range
 STEPS = "CDEFGAB"
 STEP_PC = {"C": 0, "D": 2, "E": 4, "F": 5, "G": 7, "A": 9, "B": 11}
 FAMILY_ORDER = ["woodwinds", "brass", "percussion", "keyboards", "strings", "voices", "other"]
-MAX_VOICES = 4  # per staff; further rhythm streams merge into the last voice
 
 
 def _local(tag: str) -> str:
@@ -82,17 +79,12 @@ class _Note:
     onset: Fraction  # quarters from bar start
     dur: Fraction
     pitch: Spelled
-    ties: tuple[str, ...]
-    rhythm: tuple[str, int, tuple[int, int] | None]  # (type, dots, time-modification)
 
 
 @dataclass
 class _Stream:  # one source voice in one bar
     part: int
     notes: list[_Note] = field(default_factory=list)
-
-    def signature(self) -> tuple[tuple[Fraction, Fraction], ...]:
-        return tuple(sorted({(n.onset, n.dur) for n in self.notes}))
 
 
 @dataclass
@@ -172,22 +164,8 @@ def _parse(root: Element) -> tuple[list[dict[str, str]], list[_Bar]]:
                         round(float(_txt(p.find("alter"), "0") or 0)),
                         _int(p.find("octave"), 4),
                     )
-                    tm = el.find("time-modification")
-                    mod = (
-                        (_int(tm.find("actual-notes"), 3), _int(tm.find("normal-notes"), 2))
-                        if tm is not None
-                        else None
-                    )
                     s = streams.setdefault(_txt(el.find("voice"), "1"), _Stream(part=pi))
-                    s.notes.append(
-                        _Note(
-                            onset=onset,
-                            dur=dur,
-                            pitch=transpose_spelled(written, *tr),
-                            ties=tuple(t.get("type", "") for t in el.findall("tie")),
-                            rhythm=(_txt(el.find("type"), "quarter"), len(el.findall("dot")), mod),
-                        )
-                    )
+                    s.notes.append(_Note(onset, dur, transpose_spelled(written, *tr)))
                 elif tag == "backup":
                     cursor = max(
                         Fraction(0), cursor - Fraction(_int(el.find("duration"), 0), divisions)
@@ -215,59 +193,8 @@ def _fifths_for(bar: _Bar, prev: int) -> int:
 class _Event:  # one chord in one voice of one staff
     onset: Fraction
     dur: Fraction
-    rhythm: tuple[str, int, tuple[int, int] | None]
-    pitches: dict[int, tuple[Spelled, set[int], set[str]]] = field(default_factory=dict)
-
-
-def _voices(streams: list[_Stream], staff: int) -> list[list[_Event]]:
-    """Rhythm-grouped voices for one staff: streams with the same rhythm -> chords."""
-    groups: dict[
-        tuple[tuple[Fraction, Fraction], ...], dict[tuple[Fraction, Fraction], _Event]
-    ] = {}
-    for s in streams:
-        notes = [n for n in s.notes if (n.pitch.midi >= 60) == (staff == 1)]
-        if not notes:
-            continue
-        sig = tuple(sorted({(n.onset, n.dur) for n in notes}))
-        ev = groups.setdefault(sig, {})
-        for n in notes:
-            e = ev.setdefault((n.onset, n.dur), _Event(n.onset, n.dur, n.rhythm))
-            key = n.pitch.midi
-            if key in e.pitches:
-                e.pitches[key][1].add(s.part)
-                e.pitches[key][2].update(n.ties)
-            else:
-                e.pitches[key] = (n.pitch, {s.part}, set(n.ties))
-    out = [sorted(v.values(), key=lambda e: e.onset) for v in groups.values()]
-    out.sort(key=lambda evs: -len(evs))  # busiest rhythm first
-    if len(out) > MAX_VOICES:  # overflow: fold the rest into the last voice where free
-        keep, rest = out[: MAX_VOICES - 1], out[MAX_VOICES - 1 :]
-        merged: dict[tuple[Fraction, Fraction], _Event] = {}
-        for evs in rest:
-            for e in evs:
-                m = merged.setdefault((e.onset, e.dur), _Event(e.onset, e.dur, e.rhythm))
-                for k, pv in e.pitches.items():
-                    if k in m.pitches:
-                        m.pitches[k][1].update(pv[1])
-                    else:
-                        m.pitches[k] = pv
-        last = sorted(merged.values(), key=lambda e: e.onset)
-        cleaned: list[_Event] = []
-        for e in last:  # drop overlaps (keep the earlier event)
-            if cleaned and e.onset < cleaned[-1].onset + cleaned[-1].dur:
-                continue
-            cleaned.append(e)
-        out = [*keep, cleaned]
-    # within a voice, overlapping events cannot be written: keep the earlier one
-    fixed = []
-    for evs in out:
-        v: list[_Event] = []
-        for e in evs:
-            if v and e.onset < v[-1].onset + v[-1].dur:
-                continue
-            v.append(e)
-        fixed.append(v)
-    return fixed
+    rhythm: tuple[str, int]  # (note type, dots)
+    pitches: dict[int, tuple[Spelled, set[int]]] = field(default_factory=dict)
 
 
 # length of a bar in quarters -> (note type, dots) for a whole-bar chord
@@ -283,14 +210,10 @@ _BAR_TYPE = {
     Fraction(9, 2): ("whole", 0),
 }
 
-# written into bundles: one chord per bar or per beat, all parts or per section.
-# "tutti" / "sections" (full rhythm with voices and ties) proved unreadable for
-# proofreading; reduce_score still builds them, bundles no longer carry them.
-BUNDLE_MODES = ("chords", "beat-chords", "section-chords", "section-beat-chords")
-MODES = (*BUNDLE_MODES, "tutti", "sections")
-_PER_BAR = ("chords", "section-chords")
+# one chord per bar or per beat, all parts or per section
+MODES = ("chords", "beat-chords", "section-chords", "section-beat-chords")
 _PER_BEAT = ("beat-chords", "section-beat-chords")
-_BY_SECTION = ("section-chords", "section-beat-chords", "sections")
+_BY_SECTION = ("section-chords", "section-beat-chords")
 
 # writable single durations in quarters -> (note type, dots)
 _DUR_TYPE = {
@@ -351,7 +274,7 @@ def _beat_chords(
             pos += d
     events = []
     for start, dur in spans:
-        ev = _Event(start, dur, (*_DUR_TYPE[dur], None))
+        ev = _Event(start, dur, _DUR_TYPE[dur])
         for s in streams:
             for n in s.notes:
                 if (n.pitch.midi >= 60) != (staff == 1):
@@ -361,7 +284,7 @@ def _beat_chords(
                     if key in ev.pitches:
                         ev.pitches[key][1].add(s.part)
                     else:
-                        ev.pitches[key] = (n.pitch, {s.part}, set())
+                        ev.pitches[key] = (n.pitch, {s.part})
         events.append(ev)
     return [events] if any(e.pitches for e in events) else []
 
@@ -369,7 +292,7 @@ def _beat_chords(
 def _bar_chord(streams: list[_Stream], staff: int, length: Fraction) -> list[list[_Event]]:
     """Every distinct pitch sounding in the bar on this staff, as one whole-bar chord
     (no rhythm, no ties): a harmonic reduction that stays readable."""
-    ev = _Event(Fraction(0), length, (*_BAR_TYPE.get(length, ("whole", 0)), None))
+    ev = _Event(Fraction(0), length, _BAR_TYPE.get(length, ("whole", 0)))
     for s in streams:
         for n in s.notes:
             if (n.pitch.midi >= 60) != (staff == 1):
@@ -378,7 +301,7 @@ def _bar_chord(streams: list[_Stream], staff: int, length: Fraction) -> list[lis
             if key in ev.pitches:
                 ev.pitches[key][1].add(s.part)
             else:
-                ev.pitches[key] = (n.pitch, {s.part}, set())
+                ev.pitches[key] = (n.pitch, {s.part})
     return [[ev]] if ev.pitches else []
 
 
@@ -387,8 +310,7 @@ def reduce_score(path: str | Path, mode: str = "chords") -> tuple[str, dict[str,
     "group", "bar"}}, "groups", "parts"}.
 
     mode: "chords" (one chord per bar, all parts on one grand staff), "beat-chords" (one
-    chord per beat), "section-chords" / "section-beat-chords" (the same per section),
-    "tutti" / "sections" (full rhythm, voices and ties; not written into bundles).
+    chord per beat), "section-chords" / "section-beat-chords" (the same per section).
     """
     if mode not in MODES:
         raise ValueError(f"unknown reduction mode {mode!r}")
@@ -453,12 +375,10 @@ def reduce_score(path: str | Path, mode: str = "chords") -> tuple[str, dict[str,
             streams = [s for s in bar.streams if s.part in members]
             first = True
             for staff in (1, 2):
-                if mode in _PER_BAR:
-                    voices = _bar_chord(streams, staff, length)
-                elif mode in _PER_BEAT:
+                if mode in _PER_BEAT:
                     voices = _beat_chords(streams, staff, length, beat_length(time))
                 else:
-                    voices = _voices(streams, staff)
+                    voices = _bar_chord(streams, staff, length)
                 if not first:
                     back = SubElement(mel, "backup")
                     SubElement(back, "duration").text = str(int(length * divisions))
@@ -491,9 +411,7 @@ def reduce_score(path: str | Path, mode: str = "chords") -> tuple[str, dict[str,
                             for _ in range(e.rhythm[1]):
                                 SubElement(rn, "dot")
                             SubElement(rn, "staff").text = str(staff)
-                        for ci, (midi, (pitch, parts_, ties)) in enumerate(
-                            sorted(e.pitches.items())
-                        ):
+                        for ci, (midi, (pitch, parts_)) in enumerate(sorted(e.pitches.items())):
                             n_id += 1
                             nid = f"t-{n_id}"
                             ids[nid] = {
@@ -512,22 +430,12 @@ def reduce_score(path: str | Path, mode: str = "chords") -> tuple[str, dict[str,
                                 SubElement(pe, "alter").text = str(pitch.alter)
                             SubElement(pe, "octave").text = str(pitch.octave)
                             SubElement(ne, "duration").text = str(int(e.dur * divisions))
-                            for tt in sorted(ties):
-                                SubElement(ne, "tie", type=tt)
                             SubElement(ne, "voice").text = voice
-                            typ, dots, mod = e.rhythm
+                            typ, dots = e.rhythm
                             SubElement(ne, "type").text = typ
                             for _ in range(dots):
                                 SubElement(ne, "dot")
-                            if mod:
-                                tm = SubElement(ne, "time-modification")
-                                SubElement(tm, "actual-notes").text = str(mod[0])
-                                SubElement(tm, "normal-notes").text = str(mod[1])
                             SubElement(ne, "staff").text = str(staff)
-                            if ties:
-                                nots = SubElement(ne, "notations")
-                                for tt in sorted(ties):
-                                    SubElement(nots, "tied", type=tt)
                         pos = e.onset + e.dur
             for bl in keep:  # right barlines (backward repeats, ending stops) close it
                 if bl.get("location") != "left":
@@ -547,7 +455,7 @@ def reduce_score(path: str | Path, mode: str = "chords") -> tuple[str, dict[str,
 def write_reductions(
     path: str | Path, root: Path, rel_dir: str = "score"
 ) -> list[tuple[str, str, str]]:
-    """Write the bundle reductions (BUNDLE_MODES: chords per bar and per beat, for all
+    """Write the bundle reductions (MODES: chords per bar and per beat, for all
     parts and per section) and their sidecars under root/rel_dir.
 
     Returns [(mode, musicxml rel path, sidecar rel path)].
