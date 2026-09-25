@@ -87,12 +87,41 @@ impl ImportStatus {
     }
 }
 
-/// The analysis CLI: `$ORCHSPEC_CLI`, else the project's venv found by walking up from
-/// `start` (a development checkout: target/release/.. -> repo/.venv), else `orchspec`
-/// on PATH.
-pub fn find_cli(start: &Path, env: Option<&str>) -> PathBuf {
+/// How to start the analysis CLI: a program and the arguments before `bundle ...`.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Cli {
+    pub program: PathBuf,
+    pub args: Vec<String>,
+    /// The runtime shipped inside the app (scripts/build_runtime.py).
+    pub bundled: bool,
+}
+
+impl Cli {
+    fn exe(program: PathBuf) -> Cli {
+        Cli { program, args: Vec::new(), bundled: false }
+    }
+}
+
+/// The interpreter of the bundled runtime under the app's resource folder.
+pub fn runtime_python(resources: &Path) -> PathBuf {
+    if cfg!(windows) {
+        resources.join("python").join("python.exe")
+    } else {
+        resources.join("python").join("bin").join("python3")
+    }
+}
+
+/// The analysis CLI: `$ORCHSPEC_CLI`, else the runtime bundled with the app
+/// (`<resources>/python`, run as `python -P -m orchspec.cli`: `-P` keeps the working
+/// folder off the import path), else the project's venv found by walking up from `start`
+/// (a development checkout: target/release/.. -> repo/.venv), else `orchspec` on PATH.
+pub fn find_cli(start: &Path, env: Option<&str>, resources: Option<&Path>) -> Cli {
     if let Some(p) = env.filter(|p| !p.is_empty()) {
-        return PathBuf::from(p);
+        return Cli::exe(PathBuf::from(p));
+    }
+    if let Some(py) = resources.map(runtime_python).filter(|p| p.is_file()) {
+        let args = ["-P", "-m", "orchspec.cli"].map(String::from).to_vec();
+        return Cli { program: py, args, bundled: true };
     }
     let rel: &[&str] =
         if cfg!(windows) { &[".venv", "Scripts", "orchspec.exe"] } else { &[".venv", "bin", "orchspec"] };
@@ -101,11 +130,11 @@ pub fn find_cli(start: &Path, env: Option<&str>) -> PathBuf {
         let mut c = d.to_path_buf();
         c.extend(rel);
         if c.is_file() {
-            return c;
+            return Cli::exe(c);
         }
         dir = d.parent();
     }
-    PathBuf::from(if cfg!(windows) { "orchspec.exe" } else { "orchspec" })
+    Cli::exe(PathBuf::from(if cfg!(windows) { "orchspec.exe" } else { "orchspec" }))
 }
 
 /// A session folder must contain mix.wav (docs: session contract).

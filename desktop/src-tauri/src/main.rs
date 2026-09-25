@@ -146,9 +146,19 @@ fn pump_lines<R: Read>(app: &AppHandle, r: R) {
 fn run_import(app: &AppHandle, session: &Path, out: &Path) {
     let exe_dir =
         std::env::current_exe().ok().and_then(|p| p.parent().map(Path::to_path_buf)).unwrap_or_default();
-    let cli = find_cli(&exe_dir, std::env::var("ORCHSPEC_CLI").ok().as_deref());
-    let mut cmd = Command::new(&cli);
-    cmd.arg("bundle")
+    let resources = app.path().resource_dir().ok();
+    let cli = find_cli(&exe_dir, std::env::var("ORCHSPEC_CLI").ok().as_deref(), resources.as_deref());
+    let mut cmd = Command::new(&cli.program);
+    if cli.bundled {
+        // isolated from any Python the user has installed; numba's JIT cache goes to a
+        // writable folder (the install folder is read-only)
+        cmd.env("PYTHONNOUSERSITE", "1").env_remove("PYTHONPATH").env_remove("PYTHONHOME");
+        if let Ok(cache) = app.path().app_cache_dir() {
+            cmd.env("NUMBA_CACHE_DIR", cache.join("numba"));
+        }
+    }
+    cmd.args(&cli.args)
+        .arg("bundle")
         .arg(session)
         .arg("-o")
         .arg(out)
@@ -170,7 +180,7 @@ fn run_import(app: &AppHandle, session: &Path, out: &Path) {
             let mut st = state.0.lock().unwrap();
             st.line(&format!(
                 "error: could not start the analysis ({}): {e}. Set ORCHSPEC_CLI to the orchspec executable.",
-                cli.display()
+                cli.program.display()
             ));
             st.finish(false);
             return;
@@ -260,12 +270,18 @@ fn main() {
             _ => {}
         })
         .setup(move |app| {
-            WebviewWindowBuilder::new(app, "main", WebviewUrl::External(app_url("?bundle=bundle/")))
-                .title("orchspec")
-                .inner_size(1440.0, 900.0)
-                .min_inner_size(800.0, 500.0)
-                .on_navigation(is_app_origin)
-                .build()?;
+            let builder =
+                WebviewWindowBuilder::new(app, "main", WebviewUrl::External(app_url("?bundle=bundle/")))
+                    .title("orchspec")
+                    .inner_size(1440.0, 900.0)
+                    .min_inner_size(800.0, 500.0)
+                    // no OS file drag-and-drop (unused): tao's RegisterDragDrop panics when
+                    // the exe sits under a very long path (a portable build unpacked deep)
+                    .disable_drag_drop_handler()
+                    .on_navigation(is_app_origin);
+            #[cfg(windows)]
+            let builder = builder.drag_and_drop(false);
+            builder.build()?;
             let handle = app.handle().clone();
             if let Some(dir) = cli_import.clone() {
                 start_import(&handle, dir);
