@@ -1,7 +1,7 @@
 // Tile cache and page assembly. A "page" is a contiguous run of frames at one LOD level,
 // frame-major uint8 (frames x n_bins), uploaded as one texture.
 
-import { loadTile, type Lod, type Manifest, type Tile } from "./bundle";
+import type { Lod, Manifest, Tile } from "./bundle";
 
 export type TrackId = "mix" | "dominant" | `stem:${string}`;
 
@@ -53,10 +53,6 @@ export class TileCache {
   get size(): number {
     return this.map.size;
   }
-}
-
-export function bundleTileLoader(base: string, m: Manifest): TileLoader {
-  return (t) => loadTile(base, m, t);
 }
 
 /**

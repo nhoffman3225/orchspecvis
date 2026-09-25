@@ -20,14 +20,6 @@ WEAK_DB = 12.0
 FLOOR_DB = -80.0
 
 
-def _band_level(db: np.ndarray, center: float, f0: int, f1: int) -> np.ndarray:
-    b = round(center)
-    lo, hi = max(0, b - 1), min(db.shape[0], b + 2)
-    if lo >= hi:
-        return np.full(max(0, f1 - f0), -np.inf, dtype=np.float32)
-    return db[lo:hi, f0:f1].max(axis=0)
-
-
 def note_fundamental_levels(
     db: np.ndarray, spec: CQTSpec, midi: np.ndarray, onset_s: np.ndarray, offset_s: np.ndarray
 ) -> tuple[np.ndarray, np.ndarray]:

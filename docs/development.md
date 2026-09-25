@@ -31,6 +31,9 @@ npm --prefix viewer run dev                  # Vite dev server (tiny test bundle
 npm --prefix desktop run dev                 # desktop app, debug build
 ```
 
+Production builds of the viewer carry no source maps (they were 20 MB of the 29 MB,
+embedded in the desktop app); `SOURCEMAP=1 npm run build` adds them for debugging.
+
 Checks, as CI runs them:
 
 ```

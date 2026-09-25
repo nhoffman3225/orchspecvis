@@ -315,7 +315,3 @@ def get_backend(name: str, device: str | None = None) -> CQTBackend:
         except ImportError as e:
             raise RuntimeError("torch backend needs the 'gpu' extra: uv sync --extra gpu") from e
     raise ValueError(f"unknown CQT backend {name!r}; choose from {BACKENDS}")
-
-
-def cqt_magnitude(y: np.ndarray, spec: CQTSpec, backend: str = "librosa") -> np.ndarray:
-    return get_backend(backend).magnitude(y, spec)
