@@ -17,7 +17,9 @@ export default defineConfig({
     viewport: { width: 1400, height: 900 },
     screenshot: "only-on-failure",
     trace: "retain-on-failure",
-    launchOptions: { args: ["--use-angle=swiftshader", "--enable-unsafe-swiftshader"] },
+    // --disable-audio-output: a fake audio sink whose clock still runs, so playback tests
+    // work on CI runners without a sound device (and stay silent locally)
+    launchOptions: { args: ["--use-angle=swiftshader", "--enable-unsafe-swiftshader", "--disable-audio-output"] },
   },
   // the production build (what users run), served statically with the test bundles
   webServer: {

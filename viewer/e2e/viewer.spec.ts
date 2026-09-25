@@ -62,7 +62,9 @@ workers: ${workers.length}; ${alive}
 test("pages are assembled, summed and smoothed in the worker (ensemble)", async ({ page, baseURL }) => {
   const g = guard(page, baseURL!);
   await page.goto(`/?bundle=${BUNDLE}&mode=ensemble&smooth=4`);
-  await expect(page.locator("html")).toHaveAttribute("data-page", /^ensemble:\d+:\d+$/);
+  // slow on CI (software WebGL renders every frame while the worker assembles pages)
+  test.setTimeout(120_000);
+  await expect(page.locator("html")).toHaveAttribute("data-page", /^ensemble:\d+:\d+$/, { timeout: 90_000 });
   await expect(page.locator("html")).toHaveAttribute("data-smoothed", "true");
   expect(g.offOrigin).toEqual([]);
   expect(g.errors, g.errors.join(" | ")).toEqual([]);
@@ -77,7 +79,11 @@ test("streams the mix WAV through the AudioWorklet (Range requests), no underrun
   await page.goto(`/?bundle=${BUNDLE}&t=2`);
   await expect(page.locator("html")).toHaveAttribute("data-audio", "stream");
   await page.locator("#play").click();
-  await expect(page.locator("#time")).toContainText("0:05", { timeout: 10_000 });
+  const secs = async (): Promise<number> => {
+    const [mm, ss] = ((await page.locator("#time").textContent()) ?? "0:0").split(" / ")[0]!.split(":");
+    return Number(mm) * 60 + Number(ss);
+  };
+  await expect.poll(secs, { timeout: 15_000 }).toBeGreaterThanOrEqual(5); // playhead advanced 3 s
   await page.locator("#play").click();
   expect(ranges.length).toBeGreaterThan(3);
   expect(ranges.every((r) => r.startsWith("bytes="))).toBe(true); // never the whole file
