@@ -4,7 +4,7 @@
 // Click the timeline to seek. The timeline is drawn once per data/size change into an
 // offscreen canvas; each frame only blits it and draws the playhead and the now panel.
 
-import { KEYS, MIDI0, smoothStats, type RegisterStats } from "./registers";
+import { KEYS, MIDI0, axisLabel, smoothStats, type AxisMode, type RegisterStats } from "./registers";
 
 export interface RegisterGroup {
   label: string;
@@ -20,9 +20,14 @@ export interface RegisterData {
   smoothSec: number; // overview smoothing (moving average), 0 = off
   thrU8: number;
   duration: number;
+  // optional: [group][frame][88] > 0 where a score note of the group has its fundamental;
+  // other levels are drawn as partials (patterned) in the now panel
+  fund?: Uint8Array;
+  partials?: "stripes" | "dots" | "solid";
+  axis?: AxisMode;
 }
 
-const AXIS_W = 40;
+const AXIS_W = 58;
 const PAD = 8;
 
 export class RegisterView {
@@ -30,6 +35,7 @@ export class RegisterView {
   private bg: HTMLCanvasElement | null = null;
   private bgKey = "";
   private ctx: CanvasRenderingContext2D;
+  private patterns = new Map<string, CanvasPattern>();
 
   constructor(private canvas: HTMLCanvasElement, onSeek: (s: number) => void) {
     this.ctx = canvas.getContext("2d")!;
@@ -71,7 +77,7 @@ export class RegisterView {
       g.fillRect(L.x0, y, L.x1 - L.x0, 1);
       g.fillRect(L.nx0, y, L.nx1 - L.nx0, 1);
       g.fillStyle = "#8a8f98";
-      g.fillText(`C${m / 12 - 1}`, 6, y);
+      g.fillText(axisLabel(m, d.axis ?? "notes"), 4, y);
     }
     const xOf = (f: number): number => L.x0 + ((f + 0.5) * d.frameSec / d.duration) * (L.x1 - L.x0);
     const radius = Math.round(d.smoothSec / d.frameSec / 2);
@@ -119,6 +125,36 @@ export class RegisterView {
     }
   }
 
+  /** Stripes or dots in `color` on transparent (partials in the now panel). */
+  private pattern(color: string, style: "stripes" | "dots"): CanvasPattern {
+    const key = `${style}|${color}`;
+    let p = this.patterns.get(key);
+    if (p) return p;
+    const c = document.createElement("canvas");
+    c.width = c.height = 6;
+    const g = c.getContext("2d")!;
+    g.fillStyle = color;
+    g.strokeStyle = color;
+    if (style === "dots") {
+      g.beginPath();
+      g.arc(3, 3, 1.3, 0, Math.PI * 2);
+      g.fill();
+    } else {
+      g.lineWidth = 1.5;
+      g.beginPath();
+      g.moveTo(-1, 7);
+      g.lineTo(7, -1);
+      g.moveTo(-1, 1);
+      g.lineTo(1, -1);
+      g.moveTo(5, 7);
+      g.lineTo(7, 5);
+      g.stroke();
+    }
+    p = this.ctx.createPattern(c, "repeat")!;
+    this.patterns.set(key, p);
+    return p;
+  }
+
   /** Draws the frame for playhead time `t` (seconds). */
   draw(t: number): void {
     const d = this.data;
@@ -164,12 +200,21 @@ export class RegisterView {
     d.groups.forEach((grp, gi) => {
       const cx = L.nx0 + gi * colW;
       const o = (gi * d.frames + f) * KEYS;
-      g.fillStyle = grp.color;
+      const style = d.fund && d.partials !== "solid" ? d.partials ?? "stripes" : "solid";
+      const partial = style === "solid" ? null : this.pattern(grp.color, style);
       for (let s = 0; s < KEYS; s++) {
         const v = d.grid[o + s]! - d.thrU8;
         if (v <= 0) continue;
         const y = this.yOf(MIDI0 + s, L.top, L.bottom) - rowH / 2;
-        g.fillRect(cx + 1, y, Math.max(1, (v / span) * (colW - 3)), Math.max(1, rowH - 0.5));
+        const w = Math.max(1, (v / span) * (colW - 3)), h = Math.max(1, rowH - 0.5);
+        const isFund = !partial || d.fund![o + s]! > 0;
+        g.fillStyle = isFund ? grp.color : partial;
+        g.fillRect(cx + 1, y, w, h);
+        if (!isFund && h >= 3) {
+          g.strokeStyle = grp.color; // outline keeps short patterned bars readable
+          g.lineWidth = 0.75;
+          g.strokeRect(cx + 1.5, y + 0.5, w - 1, h - 1);
+        }
       }
       const c = d.stats[gi]!.centroid[f]!;
       if (!Number.isNaN(c)) {

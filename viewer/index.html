@@ -22,7 +22,7 @@
         <button id="scorebtn" type="button" title="Engraved score (S); Esc to close" hidden>📜 score</button>
         <span id="time">0:00.00 / 0:00.00</span>
         <span id="barbeat"></span>
-        <label>window <select id="window"></select></label>
+        <label>window <select id="window"></select> <span class="spin" data-busy="page" hidden></span></label>
         <label>view
           <select id="mode">
             <option value="mix">mix</option>
@@ -30,6 +30,7 @@
             <option value="stems">selected stems</option>
             <option value="dominant">color by dominant stem</option>
           </select>
+          <span class="spin" data-busy="page" hidden></span>
         </label>
         <label>colors <select id="cmap"></select></label>
         <label>style
@@ -39,7 +40,7 @@
             <option value="fabric">fabric (mesh)</option>
           </select>
         </label>
-        <label title="Gaussian smoothing width in semitones (0 = raw). Merges partials into the ensemble's spectral envelope so register gaps stand out.">smooth <input id="smooth" type="range" min="0" max="12" step="0.5" value="0" /> <span id="smoothval">off</span></label>
+        <label title="Gaussian smoothing width in semitones (0 = raw). Merges partials into the ensemble's spectral envelope so register gaps stand out.">smooth <input id="smooth" type="range" min="0" max="12" step="0.5" value="0" /> <span id="smoothval">off</span> <span class="spin" data-busy="display" hidden></span></label>
         <label title="Outline the score's notes (colored by part; dashed = weak fundamental)">
           <input id="notes" type="checkbox" checked /> notes</label>
         <label title="Keep only a band around each sounding note's fundamental (hides overtones). Uses the score/MIDI, or per-stem f0 tracks when there is no score.">
@@ -52,7 +53,7 @@
         </label>
         <label title="With fundamentals on: also let overtones (2nd..16th harmonic of each note) through wherever they are at least this loud. Leftmost = off, then 0 dB; move right to let quieter harmonics in.">
           + harmonics ≥ <input id="harm" type="range" min="0" max="97" step="1" value="0" list="harmticks" />
-          <span id="harmval">off</span>
+          <span id="harmval">off</span> <span class="spin" data-busy="display" hidden></span>
           <select id="harmpreset" title="Preset thresholds">
             <option value="">preset…</option>
           </select>
@@ -114,7 +115,7 @@
           <span id="score-page"></span>
           <button id="score-next" type="button" title="next page (PgDn)">▶</button>
           <button id="score-zoomout" type="button" title="smaller (−, Ctrl+wheel)">−</button>
-          <span id="score-zoom" title="Ctrl+wheel or +/− to zoom">38 %</span>
+          <span id="score-zoom" title="Ctrl+wheel or +/− to zoom">38 %</span> <span class="spin" data-busy="score" hidden></span>
           <button id="score-zoomin" type="button" title="larger (+, Ctrl+wheel)">+</button>
           <label><input id="score-follow" type="checkbox" checked /> follow</label>
           <label title="Hide staves that only rest in a system (like a printed orchestral score)">
@@ -129,6 +130,7 @@
         <div id="tutti-bar">
           <strong>Tutti</strong>
           <span id="tutti-time"></span>
+          <span class="spin" data-busy="tutti" hidden></span>
           <label>show <select id="tutti-mode">
             <option value="grand">grand staff</option>
             <option value="sections">by section (short score)</option>
@@ -200,6 +202,18 @@
           <label title="Levels below this are ignored">threshold
             <input id="reg-thr" type="range" min="-90" max="-10" step="2" value="-50" />
             <span id="reg-thrval">-50 dB</span></label>
+          <label title="In the sound view, levels at a sounding note's fundamental are solid; other levels (partials, overtones) are patterned">partials
+            <select id="reg-partials">
+              <option value="stripes">stripes</option>
+              <option value="dots">dots</option>
+              <option value="solid">solid (no distinction)</option>
+            </select></label>
+          <label>axis <select id="reg-axis">
+            <option value="notes">notes</option>
+            <option value="hz">frequency (Hz)</option>
+            <option value="both">notes + Hz</option>
+          </select></label>
+          <span class="spin" data-busy="registers" hidden></span>
           <span id="reg-info" class="hint"></span>
           <span class="hint">bands: 10–90 % of each group's level · line: centre · click to seek · Esc close</span>
           <button id="regclose" type="button">✕ close</button>

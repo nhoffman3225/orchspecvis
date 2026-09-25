@@ -192,3 +192,13 @@ html, body { margin: 0; height: 100%; background: var(--bg); color: var(--fg); }
 #importview pre { background: var(--panel); border: 1px solid var(--line); border-radius: 4px;
   padding: 10px 12px; font-size: 11px; color: var(--muted); white-space: pre-wrap; min-height: 12em; }
 body:has(> #importview) { display: block; overflow: hidden; }
+
+/* loading indicator next to slow controls (busy.ts) */
+.spin {
+  display: inline-block; width: 10px; height: 10px; vertical-align: -1px; margin-left: 2px;
+  border: 2px solid var(--line); border-top-color: #e6c07b; border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+}
+.spin[hidden] { display: none; }
+@keyframes spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .spin { animation-duration: 2s; } }
