@@ -163,6 +163,7 @@ class ScoreMeasure(_Model):
     beats: int
     beat_type: int
     pass_no: int = Field(ge=1, default=1)
+    source_index: int | None = None  # v3: measure index in the notated score (repeats undone)
 
 
 class Alignment(_Model):
@@ -201,6 +202,7 @@ class ScoreInfo(_Model):
     measures: list[ScoreMeasure]
     notes: NotesTable
     alignment: Alignment
+    score_file: RelPath | None = None  # v3: copy of the MusicXML/.mxl for engraving
 
     @model_validator(mode="after")
     def _consistent(self) -> ScoreInfo:

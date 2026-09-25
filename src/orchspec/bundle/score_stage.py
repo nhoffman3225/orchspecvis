@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import shutil
 from collections.abc import Callable
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
@@ -48,6 +49,8 @@ class PartMeta:
     transpose_octave: int = 0
 
 
+# number, start, end (score s), beats, beat_type, pass, source measure index
+MeasureRow = tuple[str, float, float, int, int, int, int | None]
 AlignMethod = Literal["warp", "xcorr", "manual", "preroll_only"]
 
 
@@ -64,7 +67,7 @@ class ScorePlan:
     kind: Literal["musicxml", "midi"]
     source_files: list[str]
     parts: list[ScorePart]
-    measure_src: list[tuple[str, float, float, int, int, int]]  # number, start, end (score s)
+    measure_src: list[MeasureRow]
     alignment: Alignment
     cols: dict[str, np.ndarray]  # NOTE_COLUMNS; onset_s/offset_s become audio seconds
     score_on: np.ndarray  # score/MIDI seconds per note
@@ -143,8 +146,9 @@ class ScorePlan:
                 beats=bt,
                 beat_type=btt,
                 pass_no=pn,
+                source_index=si,
             )
-            for i, (num, st, en, bt, btt, pn) in enumerate(self.measure_src)
+            for i, (num, st, en, bt, btt, pn, si) in enumerate(self.measure_src)
         ]
 
     def measure_fundamentals_from_tiles(
@@ -177,8 +181,15 @@ class ScorePlan:
             self.cols["f0_db"][sel] = lvl
             self.cols["f0_ok"][sel] = ok
 
+    score_path: Path | None = None  # MusicXML to ship inside the bundle (for engraving)
+
     def write(self, root: Path, rel: str = "score/notes.f32") -> ScoreInfo:
         (root / rel).parent.mkdir(parents=True, exist_ok=True)
+        score_file = None
+        if self.score_path is not None:
+            ext = ".mxl" if self.score_path.suffix.lower() == ".mxl" else ".musicxml"
+            score_file = f"score/score{ext}"
+            shutil.copyfile(self.score_path, root / score_file)
         table = (
             np.stack([self.cols[c].astype("<f4") for c in NOTE_COLUMNS])
             if self.n
@@ -192,6 +203,7 @@ class ScorePlan:
             measures=self.measures,
             alignment=self.alignment,
             notes=NotesTable(path=rel, n=self.n, columns=list(NOTE_COLUMNS)),
+            score_file=score_file,
         )
 
 
@@ -219,8 +231,16 @@ def _from_musicxml(score_path: Path, midi: MidiFile | None):  # type: ignore[no-
         cols["beat"][i] = nt.beat
         if midi is not None:
             cols["velocity"][i] = vel.get((round(nt.onset_q * midi.ppq), round(nt.midi)), 0)
-    measures = [
-        (m.number, clock(m.start_q), clock(m.start_q + m.dur_q), m.beats, m.beat_type, m.pass_no)
+    measures: list[MeasureRow] = [
+        (
+            m.number,
+            clock(m.start_q),
+            clock(m.start_q + m.dur_q),
+            m.beats,
+            m.beat_type,
+            m.pass_no,
+            m.source_index,
+        )
         for m in score.played
     ]
     parts = [
@@ -268,8 +288,8 @@ def _from_midi(midi: MidiFile):  # type: ignore[no-untyped-def]
         cols["measure"][i] = bi
         cols["beat"][i] = 1 + (mn.on_tick - b[0]) / (midi.ppq * 4 / b[3])
         cols["velocity"][i] = mn.velocity
-    measures = [
-        (str(i + 1), midi.tick_to_seconds(a), midi.tick_to_seconds(z), num, den, 1)
+    measures: list[MeasureRow] = [
+        (str(i + 1), midi.tick_to_seconds(a), midi.tick_to_seconds(z), num, den, 1, None)
         for i, (a, z, num, den) in enumerate(bars)
     ]
     parts = sorted(
@@ -397,6 +417,7 @@ def prepare_score(
         source_files=files,
         parts=part_models,
         measure_src=measures,
+        score_path=score_path,
         alignment=alignment,
         cols=cols,
         score_on=score_on,

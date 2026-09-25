@@ -156,7 +156,10 @@ def _note_xml(n: N, div: int) -> str:
         else []
     ):
         parts.append(f'<tie type="{t}"/>')
-    parts.append(f"<voice>{n.voice}</voice><type>quarter</type><staff>{n.staff}</staff>")
+    ntype = {4.0: "whole", 2.0: "half", 1.0: "quarter", 0.5: "eighth"}.get(n.dur, "quarter")
+    if n.grace:
+        ntype = "eighth"
+    parts.append(f"<voice>{n.voice}</voice><type>{ntype}</type><staff>{n.staff}</staff>")
     if n.tie:
         parts.append(
             "<notations>"
