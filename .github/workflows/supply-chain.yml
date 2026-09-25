@@ -1,0 +1,51 @@
+name: supply-chain
+
+# Software composition analysis for all three ecosystems. Runs when a lockfile changes,
+# weekly (new advisories appear for unchanged code), and on demand.
+#   Python: pip-audit (PyPA advisory DB + OSV) on the locked requirements, all extras
+#   npm:    npm audit on viewer/ and desktop/ lockfiles
+#   Rust:   cargo-deny (RustSec advisories, licence allow-list, crates.io only; deny.toml)
+on:
+  pull_request:
+    paths:
+      - "uv.lock"
+      - "pyproject.toml"
+      - "**/package-lock.json"
+      - "Cargo.lock"
+      - "deny.toml"
+      - ".github/workflows/supply-chain.yml"
+  schedule:
+    - cron: "17 6 * * 1" # Mondays 06:17 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: astral-sh/setup-uv@v10.2.0
+
+      - name: Python (pip-audit)
+        run: |
+          uv export --frozen --all-extras --no-hashes --no-emit-project --format requirements-txt \
+            | sed -E 's/\+cu[0-9]+//' > requirements-audit.txt  # torch's local build tag
+          uvx pip-audit -r requirements-audit.txt --disable-pip --no-deps --progress-spinner off
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+
+      - name: npm (npm audit)
+        run: |
+          (cd viewer && npm audit --audit-level=moderate)
+          (cd desktop && npm audit --audit-level=moderate)
+
+      - name: Rust (cargo-deny)
+        uses: EmbarkStudios/cargo-deny-action@v2.1.1
+        with:
+          command: check advisories licenses bans sources

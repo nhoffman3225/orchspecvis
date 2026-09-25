@@ -39,6 +39,27 @@ no reason to talk to the network.
    script-src 'self' 'wasm-unsafe-eval'` (+ `style-src 'self'`, `object-src 'none'`,
    `base-uri 'none'`, `media-src 'self' blob:`).
 
+## Supply chain
+
+- **Software composition analysis** (`.github/workflows/supply-chain.yml`): on every
+  lockfile change, weekly, and on demand — `pip-audit` on the locked Python requirements
+  (all extras), `npm audit` on `viewer/` and `desktop/`, and `cargo-deny` on the Rust
+  workspace (RustSec advisories, yanked crates, a licence allow-list, crates.io as the
+  only source; policy in `deny.toml`). Any known vulnerability fails the job.
+- **Dependabot** (`.github/dependabot.yml`): weekly grouped version updates for uv, npm,
+  cargo and GitHub Actions. Enable *Dependabot alerts* and *security updates* in the
+  repository settings for immediate fixes of newly disclosed vulnerabilities.
+- **Lockfiles are committed and enforced** (`uv sync --locked`, `npm ci`, `cargo --locked`);
+  GitHub Actions are pinned to release tags.
+- **New dependencies need approval** (PLAN.md "Dependencies") and must pass the licence
+  policy (MIT project; see CREDITS.md).
+- Locally: `uvx pip-audit -r <(uv export --frozen --all-extras --no-hashes --no-emit-project)`,
+  `npm audit` in viewer/ and desktop/, `cargo deny check`.
+
+First run (2026-09-25): no Python or npm advisories; Rust flagged RUSTSEC-2026-0194/0195
+(quick-xml 0.38 via plist, from Tauri) and RUSTSEC-2026-0009 (time 0.3.45) — fixed by
+updating plist to 1.10.1 (quick-xml 0.42) and time to 0.3.55.
+
 ## Untrusted inputs
 
 - **Score PDF** (`score.pdf`, schema v6): parsed by PDFium (pypdfium2; the engine Chrome
