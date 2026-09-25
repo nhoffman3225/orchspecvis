@@ -168,10 +168,15 @@ carry the `real` marker and never run in CI.
       register "center of mass" and spread over time, per-family stacks
 - [ ] Bundle table `register_hist` [n_stems, 88, n_windows] (f32) or computed in viewer
 4. Scale & playback
-- [ ] Streaming playback (AudioWorklet + chunked decode) so 20-min stereo does not need
-      ~460 MB of decoded audio
-- [ ] Compressed tiles (gzip + DecompressionStream) and/or stems from LOD 1 (schema v3)
-- [ ] Viewer page assembly, smoothing, stem sums in a Web Worker
+- [x] Streaming playback: WAV mixes play through an AudioWorklet fed with 1 s Range chunks
+      ~5 s ahead (sample-accurate cue, starts scheduled 80 ms ahead, underruns = silence,
+      never a shift); fallback to decodeAudioData for other formats / no Range support.
+      Beethoven 5 i: 0 underruns, JS heap 52 MB (was the whole decoded file, ~140 MB)
+- [x] Compressed tiles (schema v4, `tile_encoding: gzip`, zlib level 3, mtime 0,
+      threaded): Beethoven 5 i bundle 583 -> 302 MB; viewer gunzips via DecompressionStream
+- [ ] Stems stored from LOD 1 (further size cut; needs schema + viewer upsampling)
+- [x] Page assembly, stem sums and smoothing in a Web Worker (pages.worker.ts; transferred
+      buffers, generation-guarded): Beethoven 5 i ensemble page (23 stems) in ~1 s
 - [x] Playwright E2E (@playwright/test 1.63): app load, score view (worker engraving,
       highlight, click-to-seek), piano view; every test fails on any off-origin request or
       page error; in CI (Chromium). Local runs: PW_CHANNEL=msedge; opt-in real-session spec

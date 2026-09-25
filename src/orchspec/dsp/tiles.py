@@ -7,6 +7,8 @@ tile layout (byte = frame * n_bins + bin).
 from __future__ import annotations
 
 import gzip
+import os
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -57,6 +59,16 @@ def pyramid(level0: np.ndarray, tile_frames: int) -> list[np.ndarray]:
     return levels
 
 
+_POOL: ThreadPoolExecutor | None = None
+
+
+def _pool() -> ThreadPoolExecutor:
+    global _POOL
+    if _POOL is None:
+        _POOL = ThreadPoolExecutor(max_workers=min(8, os.cpu_count() or 1))
+    return _POOL
+
+
 def encode_tile(raw: bytes, encoding: TileEncoding) -> bytes:
     # mtime=0: byte-identical output for identical input (reproducible bundles)
     return gzip.compress(raw, GZIP_LEVEL, mtime=0) if encoding == "gzip" else raw
@@ -81,12 +93,19 @@ def write_level(
     """Write one level of frame-major uint8 tiles under root/prefix/L<level>/."""
     d = root / prefix / f"L{level}"
     d.mkdir(parents=True, exist_ok=True)
-    tiles: list[Tile] = []
-    for i, start in enumerate(range(0, data.shape[0], tile_frames)):
+
+    def one(i: int) -> Tile:
+        start = i * tile_frames
         chunk = np.ascontiguousarray(data[start : start + tile_frames], dtype=np.uint8)
         rel = f"{prefix}/L{level}/{i:05d}{tile_suffix(encoding)}"
         (root / rel).write_bytes(encode_tile(chunk.tobytes(), encoding))
-        tiles.append(Tile(index=i, start_frame=start, n_frames=chunk.shape[0], path=rel))
+        return Tile(index=i, start_frame=start, n_frames=chunk.shape[0], path=rel)
+
+    n = -(-data.shape[0] // tile_frames)
+    if encoding == "raw" or n < 4:
+        tiles = [one(i) for i in range(n)]
+    else:  # zlib releases the GIL: compress tiles in parallel
+        tiles = list(_pool().map(one, range(n)))
     return Lod(level=level, hop_factor=2**level, n_frames=data.shape[0], tiles=tiles)
 
 
