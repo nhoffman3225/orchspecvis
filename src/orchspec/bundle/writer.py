@@ -8,7 +8,9 @@ from __future__ import annotations
 
 import contextlib
 import datetime as dt
+import os
 import shutil
+import stat
 import tempfile
 import time
 from collections.abc import Callable
@@ -190,18 +192,56 @@ def build_bundle(
     tmp = Path(tempfile.mkdtemp(prefix=f".{out.name}.", dir=out.parent))
     try:
         report = _build(inputs, tmp, opts, log)
-        if out.exists():
-            shutil.rmtree(out)
-        tmp.rename(out)
+        _replace_dir(tmp, out, log)
     except BaseException:
         # let background tile writes finish before deleting their dir; the original
         # error is the one to report
         with contextlib.suppress(Exception):
             flush_writes()
-        shutil.rmtree(tmp, ignore_errors=True)
+        with contextlib.suppress(OSError):
+            _rmtree(tmp)
         raise
     report.path = out
     return report
+
+
+def _retry(fn: Callable[[], object], tries: int = 20, wait: float = 0.1) -> None:
+    """Retries `fn` on PermissionError: on Windows, sync clients (OneDrive), indexers and
+    virus scanners hold files in a new or old bundle open for a moment."""
+    for i in range(tries):
+        try:
+            fn()
+            return
+        except PermissionError:
+            if i == tries - 1:
+                raise
+            time.sleep(wait)
+
+
+def _rmtree(path: Path) -> None:
+    """rmtree that also removes read-only entries (OneDrive marks its folders read-only,
+    which Windows refuses to delete) and waits out short-lived locks."""
+
+    def onexc(fn: Callable[[str], object], p: str, _e: BaseException) -> None:
+        Path(p).chmod(stat.S_IWRITE)
+        _retry(lambda: fn(p))
+
+    shutil.rmtree(path, onexc=onexc)
+
+
+def _replace_dir(new: Path, out: Path, log: Callable[[str], None]) -> None:
+    """Puts the finished bundle `new` at `out`. An existing bundle is renamed aside first
+    and deleted last, so a failure never leaves a half-deleted bundle at `out`."""
+    old = None
+    if out.exists():
+        old = out.with_name(f".{out.name}.old-{os.getpid()}")
+        _retry(lambda: out.rename(old))
+    _retry(lambda: new.rename(out))
+    if old is not None:
+        try:
+            _rmtree(old)
+        except OSError as e:  # the new bundle is in place; the old one is only clutter
+            log(f"warning: could not remove the previous bundle {old}: {e}")
 
 
 def _build(

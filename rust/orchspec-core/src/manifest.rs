@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 use std::fmt;
 
 pub const MANIFEST_NAME: &str = "manifest.json";
-pub const SUPPORTED_VERSIONS: [u32; 6] = [1, 2, 3, 4, 5, 6];
+pub const SUPPORTED_VERSIONS: [u32; 7] = [1, 2, 3, 4, 5, 6, 7];
 pub const NONE_STEM: u32 = 255;
 pub const NOTE_COLUMNS: [&str; 11] = [
     "part", "staff", "voice", "midi", "onset_s", "offset_s", "measure", "beat", "velocity", "f0_db", "f0_ok",
@@ -319,7 +319,7 @@ pub struct PdfBar {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Reduction {
-    pub mode: String, // chords | section-chords | tutti | sections
+    pub mode: String, // chords | section-chords | beat-chords | section-beat-chords (v7) | tutti | sections
     pub musicxml: String,
     pub map: String,
 }
@@ -485,6 +485,9 @@ impl Manifest {
             if !sc.reductions.is_empty() && self.schema_version < 5 {
                 return fail("score reductions require schema_version 5");
             }
+            if sc.reductions.iter().any(|r| r.mode.contains("beat")) && self.schema_version < 7 {
+                return fail("chord-per-beat reductions require schema_version 7");
+            }
             if let Some(pdf) = &sc.pdf {
                 if self.schema_version < 6 {
                     return fail("a score pdf requires schema_version 6");
@@ -497,7 +500,11 @@ impl Manifest {
                 }
             }
             for r in &sc.reductions {
-                one_of("score.reductions.mode", &r.mode, &["chords", "section-chords", "tutti", "sections"])?;
+                one_of(
+                    "score.reductions.mode",
+                    &r.mode,
+                    &["chords", "section-chords", "beat-chords", "section-beat-chords", "tutti", "sections"],
+                )?;
                 check_rel_path(&r.musicxml)?;
                 check_rel_path(&r.map)?;
             }

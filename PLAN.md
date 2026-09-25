@@ -196,6 +196,15 @@ carry the `real` marker and never run in CI.
       common spelling, ascending from the lowest note) plus pitches with their parts and a
       keyboard strip. The canvas reduction remains for MIDI-only bundles. Dorico 6.2
       MusicXML export writes 18 separate one-staff parts (no condensing information)
+- [x] Tutti per beat (2026-09-25, schema v7): `beat-chords` / `section-beat-chords`, one
+      chord per beat (held notes included; dotted beat in compound time; empty beats are
+      rests). Full-rhythm reductions dropped from bundles and from the viewer (decision:
+      ties and voices made them unreadable); v5-v6 bundles still load
+- [x] UI (2026-09-25): views dock below the toolbar instead of covering the window (the
+      "disappearing UI"), top edge draggable; splitters for the 2D pane, stems list and
+      tutti side panel (min sizes, double-click reset, remembered per browser); toolbar in
+      labelled groups; desktop View > Full Screen (F11)
+- [ ] Canvas tutti for MIDI-only bundles is still full rhythm (no engraving path there)
 - [x] Score PDF (2026-09-25, schema v6 `score.pdf`): session `score.pdf` rendered once at
       import (pypdfium2 / PDFium, 150 dpi grayscale PNG); bars found on the image (staff
       lines, barlines through every staff of a system) and numbered from the PDF's text
@@ -261,11 +270,24 @@ carry the `real` marker and never run in CI.
       analysis CLI as a subprocess (no shell) into Documents/orchspec/bundles with a live
       progress screen (read-only app/import.json), then opens the bundle. Beethoven 5 i:
       24 s on main (~10 s with the PR #13 speed-ups). Store-Python AppData redirection
-      found and avoided. Next: bundle the analysis (no Python install) for distribution
+      found and avoided.
+- [x] Distributable builds (2026-09-25): `scripts/build_runtime.py` bundles the analysis
+      (uv's standalone CPython + orchspec + the locked deps from a hash-checked PEP 751
+      `pylock.toml`, precompiled, import-checked) as app resources; the app prefers it over
+      a checkout venv (`find_cli`). `npm run dist`: NSIS installer, 97 MB, Beethoven 5 i
+      import 57 s on CPU (numpy/librosa). `npm run dist:gpu`: CUDA torch, portable .7z
+      (1.8 GB; NSIS stops at 2 GB), 13 s on an RTX 5070 Ti. release.yml: tag `v*` -> draft
+      GitHub Release with the Windows CPU installer + macOS MPS .dmg; the CUDA build is
+      build-it-yourself (decision 2026-09-25: GitHub's 2 GiB per-file limit). Replacing a
+      bundle now survives OneDrive's read-only folders (rename aside, then delete)
+- [ ] Code signing (Windows Authenticode, macOS notarization) for the published builds
+- [ ] macOS .dmg from release.yml checked on a real Mac (MPS import time)
 - [ ] macOS build + .dmg in CI (macOS minutes are 10x: on main pushes only)
 - [ ] Desktop release notices: ship the licence texts of the Rust crates compiled into the
       app (generated from `cargo metadata`, like scripts/credits.py) alongside the viewer's
       licenses/THIRD-PARTY.txt; 5 MPL-2.0 crates are used unmodified (file-level copyleft)
+      and of the bundled runtime's Python packages (python/RUNTIME.txt lists them; their
+      licence files are inside python/Lib/site-packages/*.dist-info)
 - [ ] xcorr / alignment in Rust; PyO3 bindings (+ maturin) once the Python writer uses it
 - [x] rustfmt + clippy locally and in CI (rust-core job: fmt --check, test, clippy)
 Acceptance: same bundle opens identically in Tauri on Windows and macOS.

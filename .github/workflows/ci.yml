@@ -122,7 +122,7 @@ jobs:
             ~/.cargo/registry
             ~/.cargo/git
             target
-          key: cargo-core-${{ runner.os }}-${{ hashFiles('Cargo.lock') }}
+          key: cargo-core-${{ github.event.repository.name }}-${{ runner.os }}-${{ hashFiles('Cargo.lock') }}
 
       - name: Python-written test bundle (gzip tiles + score)
         run: |

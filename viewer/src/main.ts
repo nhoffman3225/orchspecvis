@@ -24,6 +24,10 @@ import { PagesClient } from "./pagesclient";
 import { FAMILIES, FAMILY_COLORS, KEYS, combineGroups, familyOf, notesGrid, registerLevel, registerStats,
   type AxisMode, type Family } from "./registers";
 import { RegisterView, type RegisterGroup } from "./registerview";
+import { Splitter } from "./splitter";
+import { initFolds } from "./toolbar";
+import { initHoverTips } from "./hovertip";
+import { renderHelp } from "./help";
 
 type Mode = "mix" | "ensemble" | "stems" | "dominant";
 
@@ -141,7 +145,7 @@ async function main(): Promise<void> {
   }
 
   const cmapSel = $<HTMLSelectElement>("cmap");
-  for (const c of COLORMAPS) cmapSel.add(new Option(c, c));
+  for (const c of COLORMAPS) cmapSel.add(new Option(c[0]!.toUpperCase() + c.slice(1), c));
   cmapSel.value = ui.cmap;
 
   const modeSel = $<HTMLSelectElement>("mode");
@@ -328,7 +332,7 @@ async function main(): Promise<void> {
   for (const p of HARM_PRESETS) {
     const v = harmSliderValue(p);
     ticks.append(new Option("", String(v)));
-    presetSel.add(new Option(p === null ? "off" : `${p} dB`, String(v)));
+    presetSel.add(new Option(p === null ? "Off" : `${p} dB`, String(v)));
   }
   presetSel.addEventListener("change", () => {
     if (presetSel.value === "") return;
@@ -339,6 +343,7 @@ async function main(): Promise<void> {
   });
   const syncHarm = (): void => {
     harm.disabled = !fundBox.checked || fundBox.disabled;
+    presetSel.disabled = harm.disabled; // presets set the slider: same state
     const hd = harmDb();
     $("harmval").textContent = hd === null ? "off" : `${hd === 0 ? "0" : hd} dB`;
   };
@@ -656,12 +661,17 @@ async function main(): Promise<void> {
   });
 
   // ---- tutti reduction (proofreading)
-  // Engraved (bundles with score reductions, schema v5): Verovio renders one chord per bar
-  // or the full-rhythm reduction; a selection condenses into one chord plus its pitch-class
-  // set. MIDI-only scores fall back to the canvas reduction (tuttiview.ts).
+  // Engraved (bundles with score reductions, schema v5+): Verovio renders one chord per bar
+  // or per beat (v7), for all parts or by section; a selection condenses into one chord plus
+  // its pitch-class set. Full-rhythm reductions (v5-v6 bundles) are not offered: ties and
+  // voices made them unreadable. MIDI-only scores fall back to the canvas reduction.
   let tuttiOpen = false;
   let tutti: TuttiView | null = null;
-  const reductions = m.score?.reductions ?? [];
+  const TUTTI_LABELS: Record<string, string> = {
+    "chords": "One Chord per Bar", "beat-chords": "One Chord per Beat",
+    "section-chords": "Per Bar, by Section", "section-beat-chords": "Per Beat, by Section",
+  };
+  const reductions = (m.score?.reductions ?? []).filter((r) => r.mode in TUTTI_LABELS);
   const engraved = reductions.length > 0;
   let tuttiColor: "section" | "part" = params.get("tcolor") === "part" ? "part" : "section";
   const uiColorOf = (p: number): string => tuttiColor === "part" ? toHex(partColor(p))
@@ -814,7 +824,7 @@ async function main(): Promise<void> {
       for (const k of keyLayout(w)) {
         if (k.black !== black) continue;
         const kh = black ? hh * 0.6 : hh;
-        g.fillStyle = selMidis.has(k.midi) ? "#e6c07b" : now.get(k.midi) ?? (black ? "#15171c" : "#d8d9dd");
+        g.fillStyle = selMidis.has(k.midi) ? "#ffd23f" : now.get(k.midi) ?? (black ? "#15171c" : "#d8d9dd");
         g.fillRect(k.x + 0.5, 0, k.w - 1, kh);
         if (!black) {
           g.strokeStyle = "#0b0c10";
@@ -827,11 +837,7 @@ async function main(): Promise<void> {
   const tm = $<HTMLSelectElement>("tutti-mode");
   if (engraved && m.score) {
     $("tuttibtn").hidden = false;
-    const labels: Record<string, string> = {
-      "chords": "one chord per bar", "section-chords": "chords by section",
-      "tutti": "full rhythm", "sections": "full rhythm by section",
-    };
-    tm.replaceChildren(...reductions.map((r) => new Option(labels[r.mode] ?? r.mode, r.mode)));
+    tm.replaceChildren(...reductions.map((r) => new Option(TUTTI_LABELS[r.mode]!, r.mode)));
     tm.value = reductions.some((r) => r.mode === params.get("tutti")) ? params.get("tutti")! : reductions[0]!.mode;
     for (const el of document.querySelectorAll<HTMLElement>("#tuttiview .t-eng")) el.hidden = false;
     for (const el of document.querySelectorAll<HTMLElement>("#tuttiview .t-canvas")) el.hidden = true;
@@ -928,7 +934,7 @@ async function main(): Promise<void> {
     const fams = names.map(familyOf);
     const present = FAMILIES.filter((f) => fams.includes(f));
     return { groupOf: fams.map((f) => present.indexOf(f)),
-      groups: present.map((f: Family) => ({ label: f, color: FAMILY_COLORS[f] })) };
+      groups: present.map((f: Family) => ({ label: f[0]!.toUpperCase() + f.slice(1), color: FAMILY_COLORS[f] })) };
   };
   function buildRegisters(): Promise<void> {
     return busy.while("registers", buildRegistersNow());
@@ -1190,6 +1196,83 @@ async function main(): Promise<void> {
   if (params.get("view") === "registers") setRegisters(true);
   if (params.get("view") === "tutti") setTutti(true);
   for (const f of afterSetup) f();
+
+  // ---- resizable panels (splitter.ts); the 3D view keeps at least 120 px (style.css)
+  const app = $("app");
+  new Splitter($("split-pane"), {
+    host: app, prop: "--pane-h", axis: "y", sign: -1, key: "orchspec.pane-h",
+    min: () => 80, max: () => innerHeight - $("bar").offsetHeight - 64 - 40 - 120,
+    measure: () => $("pane").getBoundingClientRect().height,
+  });
+  $("split-stems").hidden = $("stems").hidden;
+  new Splitter($("split-stems"), {
+    host: app, prop: "--stems-w", axis: "x", sign: -1, key: "orchspec.stems-w",
+    min: () => 150, max: () => Math.min(600, innerWidth - 300),
+    measure: () => $("stems").getBoundingClientRect().width,
+  });
+  let tuttiRelayout = 0;
+  new Splitter($("split-tutti"), {
+    host: app, prop: "--tutti-side-w", axis: "x", sign: -1, key: "orchspec.tutti-side-w",
+    min: () => 200, max: () => Math.min(900, innerWidth - 300),
+    measure: () => $("tutti-side").getBoundingClientRect().width,
+    onChange: () => {
+      clearTimeout(tuttiRelayout);
+      tuttiRelayout = window.setTimeout(() => void (tv && busy.while("tutti", tv.relayout())), 200);
+    },
+  });
+
+  // views dock below the toolbar (style.css --dock-top); their top edge is draggable
+  new ResizeObserver(() => app.style.setProperty("--bar-h", `${$("bar").offsetHeight}px`))
+    .observe($("bar"));
+  const docked = ["scoreview", "tuttiview", "regview", "pianoview"].map((id) => $(id));
+  const splitView = $("split-view");
+  const helpView = $("helpview");
+  const syncDock = (): void => {
+    // write only on change: every attribute write re-triggers this observer
+    if (!docked.every((v) => v.hidden) && !helpView.hidden) helpView.hidden = true; // replaced
+    const none = docked.every((v) => v.hidden) && helpView.hidden !== false;
+    if (splitView.hidden !== none) splitView.hidden = none;
+  };
+  const dockObs = new MutationObserver(syncDock);
+  for (const v of [...docked, helpView]) dockObs.observe(v, { attributes: true, attributeFilter: ["hidden"] });
+  syncDock();
+
+  // ---- toolbar folds, hover help, help view
+  initFolds($("bar"), params.get("tools") === "open");
+  initHoverTips();
+  let helpBuilt = false;
+  const setHelp = (open: boolean): void => {
+    if (open) {
+      if (scoreOpen) setScore(false);
+      if (tuttiOpen) setTutti(false);
+      if (regOpen) setRegisters(false);
+      setPiano(false);
+      if (!helpBuilt) renderHelp($("help-ref"), $("bar"));
+      helpBuilt = true;
+    }
+    helpView.hidden = !open;
+  };
+  $("helpbtn").addEventListener("click", () => setHelp(helpView.hidden !== false));
+  $("helpclose").addEventListener("click", () => setHelp(false));
+  addEventListener("keydown", (e) => {
+    if (e.target instanceof HTMLInputElement || e.target instanceof HTMLSelectElement) return;
+    if (e.key === "?" || (e.code === "KeyH" && !e.ctrlKey && !e.metaKey)) setHelp(helpView.hidden !== false);
+    else if (e.code === "Escape" && !helpView.hidden) setHelp(false);
+  });
+  if (params.get("view") === "help") setHelp(true);
+  let viewRelayout = 0;
+  new Splitter(splitView, {
+    host: app, prop: "--view-gap", axis: "y", sign: 1, key: "orchspec.view-gap",
+    min: () => 0, max: () => innerHeight - $("bar").offsetHeight - 220,
+    measure: () => 0,
+    onChange: () => {
+      clearTimeout(viewRelayout);
+      viewRelayout = window.setTimeout(() => {
+        if (scoreOpen) void scoreView?.relayout();
+        if (tuttiOpen && tv) void busy.while("tutti", tv.relayout());
+      }, 200);
+    },
+  });
 
   // ---- frame loop
   const view = $("view3d");

@@ -93,6 +93,27 @@ def test_dominant_and_energy(bundle: Path) -> None:
     assert e[1, late].mean() > e[0, late].mean() + 30
 
 
+def test_overwrite_replaces_read_only_bundle(tmp_path: Path) -> None:
+    """Replacing a bundle whose folders are read-only (OneDrive marks its folders so,
+    and Windows then refuses to delete them) leaves only the new bundle."""
+    from orchspec.bundle.writer import _replace_dir
+
+    out = tmp_path / "x.bundle"
+    (out / "tiles" / "L0").mkdir(parents=True)
+    (out / "tiles" / "L0" / "0.u8.gz").write_bytes(b"old")
+    (out / "manifest.json").write_text("old", encoding="utf-8")
+    for p in (out / "tiles" / "L0" / "0.u8.gz", out / "tiles" / "L0", out / "tiles"):
+        p.chmod(0o444 if p.is_file() else 0o555)
+    new = tmp_path / ".x.bundle.tmp"
+    new.mkdir()
+    (new / "manifest.json").write_text("new", encoding="utf-8")
+    logged: list[str] = []
+    _replace_dir(new, out, logged.append)
+    assert (out / "manifest.json").read_text(encoding="utf-8") == "new"
+    assert sorted(p.name for p in tmp_path.iterdir()) == ["x.bundle"], logged
+    assert not logged
+
+
 def test_overwrite_protection(bundle: Path, session_dir: Path, tmp_path: Path) -> None:
     with pytest.raises(FileExistsError):
         build_bundle(inputs_from_session(load_session(session_dir)), bundle)

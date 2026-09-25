@@ -1,4 +1,6 @@
-use orchspec_core::session_import::{ImportState, ImportStatus, find_cli, looks_like_session};
+use orchspec_core::session_import::{
+    ImportState, ImportStatus, find_cli, looks_like_session, runtime_python,
+};
 use std::fs;
 
 #[test]
@@ -40,11 +42,22 @@ fn finds_the_cli_in_a_checkout_venv() {
     fs::write(&exe, b"").unwrap();
     let deep = base.join("target/release");
     fs::create_dir_all(&deep).unwrap();
-    assert_eq!(find_cli(&deep, None), exe);
+    let cli = find_cli(&deep, None, None);
+    assert_eq!((cli.program, cli.args.len(), cli.bundled), (exe.clone(), 0, false));
     assert_eq!(
-        find_cli(&deep, Some("D:/tools/orchspec.exe")),
+        find_cli(&deep, Some("D:/tools/orchspec.exe"), None).program,
         std::path::PathBuf::from("D:/tools/orchspec.exe")
     );
+    // a bundled runtime wins over the checkout venv; a missing one is skipped
+    let res = base.join("resources");
+    assert_eq!(find_cli(&deep, None, Some(&res)).program, exe);
+    let py = runtime_python(&res);
+    fs::create_dir_all(py.parent().unwrap()).unwrap();
+    fs::write(&py, b"").unwrap();
+    let cli = find_cli(&deep, None, Some(&res));
+    assert!(cli.bundled && cli.program == py);
+    assert_eq!(cli.args, ["-P", "-m", "orchspec.cli"]);
+    assert_eq!(find_cli(&deep, Some("D:/x.exe"), Some(&res)).program.to_str(), Some("D:/x.exe"));
     fs::write(base.join("mix.wav"), b"RIFF").unwrap();
     assert!(looks_like_session(&base));
     assert!(!looks_like_session(&deep));

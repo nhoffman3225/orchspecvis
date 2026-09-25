@@ -145,7 +145,7 @@ export class PianoView {
       const y = yOf(ms.start_s);
       ctx.fillStyle = "rgba(230,192,123,0.35)";
       ctx.fillRect(0, y, ctx.canvas.clientWidth, 1);
-      ctx.fillStyle = "#e6c07b";
+      ctx.fillStyle = "#ffd23f";
       ctx.fillText(`m. ${ms.number}${ms.pass_no > 1 ? ` (${ms.pass_no})` : ""}`, 4, y - 1);
     }
     // notes: upcoming ones fall toward the keys; sounding ones touch the "now" line

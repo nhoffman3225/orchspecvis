@@ -202,13 +202,14 @@ test("section buttons select stems and parts by family", async ({ page, baseURL 
   expect(g.errors, g.errors.join(" | ")).toEqual([]);
 });
 
-test("tutti: engraved chord-per-bar reduction; a bar condenses into a chord and its pitch set", async ({ page, baseURL }) => {
+test("tutti: chord per bar / per beat; a bar condenses into a chord and its pitch set", async ({ page, baseURL }) => {
   test.setTimeout(120_000); // Verovio engraving on CI
   const g = guard(page, baseURL!);
   await page.goto(`/?${Q}&view=tutti&t=3`);
   const host = page.locator("#tutti-score");
   await expect(host.locator("svg").first()).toBeVisible({ timeout: 90_000 });
   await expect(page.locator("#tutti-mode")).toHaveValue("chords");
+  await expect(page.locator("#tutti-win")).toBeHidden(); // canvas-only control stays hidden
   await expect(host.locator("g.note[fill]").first()).toBeAttached(); // coloured by section
   const bars = host.locator("g.measure");
   const box = (await bars.nth(1).boundingBox())!;
@@ -227,6 +228,14 @@ test("tutti: engraved chord-per-bar reduction; a bar condenses into a chord and 
   await expect(page.locator("#tutti-sel h3")).toContainText("m. 2–3");
   await page.keyboard.press("Escape"); // clears
   await expect(page.locator("#tutti-sel h3")).toHaveCount(0);
+  // only chord-per-bar / chord-per-beat reductions are offered (no full rhythm)
+  await expect(page.locator("#tutti-mode option")).toHaveText([
+    "One Chord per Bar", "One Chord per Beat", "Per Bar, by Section", "Per Beat, by Section",
+  ]);
+  const heads = async (): Promise<number> => host.locator("g.note").count();
+  const perBar = await heads();
+  await page.selectOption("#tutti-mode", "beat-chords");
+  await expect.poll(heads, { timeout: 60_000 }).toBeGreaterThan(perBar); // held notes repeat per beat
   await page.keyboard.press("Escape"); // closes
   await expect(page.locator("#tuttiview")).toBeHidden();
   expect(g.offOrigin).toEqual([]);
@@ -256,6 +265,92 @@ test("piano view renders", async ({ page, baseURL }) => {
   await page.goto(`/?${Q}&view=piano&t=3`); // bar 2 starts at ~2.54 s (audio)
   await expect(page.locator("#pianoview")).toBeVisible();
   await expect(page.locator("#piano-time")).toContainText("m. 2");
+  expect(g.offOrigin).toEqual([]);
+  expect(g.errors, g.errors.join(" | ")).toEqual([]);
+});
+
+test("views dock below the toolbar; panels resize by dragging and remember it", async ({ page, baseURL }) => {
+  const g = guard(page, baseURL!);
+  await page.setViewportSize({ width: 1280, height: 800 }); // room for the splitter limits
+  await page.goto(`/?${Q}&view=registers`);
+  const view = page.locator("#regview");
+  await expect(view).toBeVisible();
+  // the toolbar stays reachable while a view is open
+  const bar = (await page.locator("#bar").boundingBox())!;
+  const top0 = (await view.boundingBox())!.y;
+  expect(top0).toBeGreaterThanOrEqual(bar.y + bar.height - 1);
+  await page.locator("#play").click();
+  await expect(page.locator("#play")).toHaveText("❚❚");
+  await page.locator("#play").click();
+  // drag the view's top edge down: the spectrogram above shows again
+  const h = (await page.locator("#split-view").boundingBox())!;
+  await page.mouse.move(400, h.y + 2);
+  await page.mouse.down();
+  await page.mouse.move(400, h.y + 150, { steps: 4 });
+  await page.mouse.up();
+  await expect.poll(async () => (await view.boundingBox())!.y).toBeGreaterThan(top0 + 100);
+  await page.keyboard.press("Escape");
+  await expect(page.locator("#split-view")).toBeHidden();
+  // the 2D pane splitter; the size survives a reload
+  const pane = page.locator("#pane");
+  const ph = (await pane.boundingBox())!.height;
+  const s = (await page.locator("#split-pane").boundingBox())!;
+  await page.mouse.move(400, s.y + 2);
+  await page.mouse.down();
+  await page.mouse.move(400, s.y - 60, { steps: 4 });
+  await page.mouse.up();
+  // (clamped so the 3D view keeps 120 px: in this small viewport the gain is limited)
+  await expect.poll(async () => (await pane.boundingBox())!.height).toBeGreaterThan(ph + 20);
+  const grown = (await pane.boundingBox())!.height;
+  await page.goto(`/?${Q}`); // reload (without view=registers, which would cover the pane)
+  await expect.poll(async () => Math.round((await pane.boundingBox())!.height)).toBe(Math.round(grown));
+  const sp = (await page.locator("#split-pane").boundingBox())!;
+  await page.mouse.dblclick(400, sp.y + sp.height / 2); // reset
+  await expect.poll(async () => Math.round((await pane.boundingBox())!.height)).toBe(Math.round(ph));
+  expect(g.offOrigin).toEqual([]);
+  expect(g.errors, g.errors.join(" | ")).toEqual([]);
+});
+
+test("toolbar groups fold open; hover tips; the help view lists every control", async ({ page, baseURL }) => {
+  const g = guard(page, baseURL!);
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await page.goto(`/?${Q}`);
+  await page.evaluate(() => localStorage.clear());
+  await page.goto(`/?${Q}`);
+  const spectrum = page.locator('.grp[data-fold="spectrum"]');
+  const cap = spectrum.locator("button.cap");
+  await expect(cap).toHaveAttribute("aria-expanded", "false"); // condensed by default
+  await expect(page.locator("#mode")).not.toBeInViewport();
+  await cap.click();
+  await expect(cap).toHaveAttribute("aria-expanded", "true");
+  await expect(page.locator("#mode")).toBeInViewport();
+  await page.goto(`/?${Q}`); // remembered
+  await expect(cap).toHaveAttribute("aria-expanded", "true");
+  // accordion: opening Surface folds Spectrum; Shift+click keeps others open
+  const surface = page.locator('.grp[data-fold="surface"] button.cap');
+  await surface.click();
+  await expect(surface).toHaveAttribute("aria-expanded", "true");
+  await expect(cap).toHaveAttribute("aria-expanded", "false");
+  await cap.click({ modifiers: ["Shift"] });
+  await expect(cap).toHaveAttribute("aria-expanded", "true");
+  await expect(surface).toHaveAttribute("aria-expanded", "true");
+  // the harmonics presets follow the slider: disabled while fundamentals are off
+  await expect(page.locator("#harmpreset")).toBeDisabled();
+  // hover help instead of the browser's title tooltip
+  await page.waitForTimeout(400); // let the groups finish sliding open
+  await page.locator("#mode").hover();
+  await expect(page.locator("#hovertip")).toBeVisible();
+  await expect(page.locator("#hovertip")).toContainText("What the spectrum shows");
+  // help view: H opens it (docked below the toolbar), with a row for each control
+  await page.mouse.move(5, 790);
+  await page.keyboard.press("KeyH");
+  await expect(page.locator("#helpview")).toBeVisible();
+  await expect(page.locator("#help-ref")).toContainText("Fundamentals ±");
+  await expect(page.locator("#help-ref")).toContainText("Colour map for loudness");
+  expect(await page.locator("#help-ref td").count()).toBeGreaterThan(30);
+  await page.keyboard.press("KeyR"); // another view replaces help
+  await expect(page.locator("#helpview")).toBeHidden();
+  await expect(page.locator("#regview")).toBeVisible();
   expect(g.offOrigin).toEqual([]);
   expect(g.errors, g.errors.join(" | ")).toEqual([]);
 });

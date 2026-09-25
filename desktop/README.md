@@ -20,7 +20,8 @@ one local bundle folder.
   (`orchspec bundle … --backend auto`) as a subprocess — argument list, no shell, no
   console window — into `Documents/orchspec/bundles`, shows its progress (the viewer polls
   the read-only `app/import.json`), then opens the result. The CLI is `$ORCHSPEC_CLI`, else
-  the checkout's `.venv` found above the executable, else `orchspec` on PATH. (Not under
+  the analysis runtime shipped with the app (`<resources>/python`, see below), else the
+  checkout's `.venv` found above the executable, else `orchspec` on PATH. (Not under
   AppData: the Microsoft Store build of Python redirects AppData writes into a private
   package folder the app cannot see.)
 
@@ -37,8 +38,35 @@ npm --prefix ../viewer ci
 npm ci
 npm run build        # release app: ../target/release/orchspec-desktop.exe (~14 MB)
 npm run dev          # debug build + run
-npm run installer    # release + NSIS installer (the Tauri CLI downloads NSIS the first time)
+npm run installer    # release + NSIS installer, analysis from your checkout's .venv
+npm run dist         # release + NSIS installer with the bundled analysis runtime (below)
 ```
+
+### Distributable build (bundled analysis runtime)
+
+`npm run dist` builds an installer that imports sessions without any Python install:
+`scripts/build_runtime.py` copies uv's standalone CPython into `desktop/runtime/python`
+(git-ignored), installs orchspec and its locked dependencies into it from a PEP 751
+`pylock.toml` export of `uv.lock` (exact wheel URLs, hash-checked), precompiles it, checks
+every import, and `tauri build --config src-tauri/tauri.dist.conf.json` ships it as
+resources. Needs uv in addition to the prerequisites above.
+
+| Variant | Build | Output | Beethoven 5 i import |
+|---|---|---|---|
+| CPU (Windows/Linux default; published) | `npm run dist` | NSIS installer ~97 MB, ~410 MB installed | ~57 s (numpy/librosa) |
+| macOS Apple silicon, MPS torch (published) | `npm run dist` | .dmg | not measured yet |
+| NVIDIA GPU, CUDA 13 torch (build it yourself) | `npm run dist:gpu` | portable `dist/orchspec-dev-Windows-gpu-cuda.7z`, ~1.8 GB, ~3.5 GB unpacked | ~13 s (RTX 5070 Ti) |
+
+The GPU build is a portable folder rather than an installer: NSIS installers stop at
+2 GB, and it is not published because it sits next to GitHub's 2 GiB per-file limit.
+Unpack it anywhere with a normal-length path (Windows 11 opens .7z; the build needs 7-Zip
+on PATH) and run `orchspec-desktop.exe`; `python\` beside it is found as the app's
+resource folder. Without an NVIDIA driver it falls back to CPU torch.
+
+Precompiled builds come from `.github/workflows/release.yml`: pushing a tag `v*` builds
+the Windows installer and the macOS .dmg and attaches them (with SHA-256 sums) to a
+draft GitHub Release; "Run workflow" builds them as artifacts only. They are not
+code-signed yet, so Windows SmartScreen and macOS Gatekeeper warn on first start.
 
 Open a bundle: pass the folder (`orchspec-desktop.exe "out/Beethoven 5.bundle"`), or use
 File › Open Bundle… (Ctrl/Cmd+O; also shown at start). Bundles are made with

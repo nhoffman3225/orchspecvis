@@ -9,110 +9,140 @@
     <meta name="referrer" content="no-referrer" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>orchspec</title>
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect x='3' y='3' width='26' height='26' fill='%23000'/%3E%3Crect x='1' y='1' width='26' height='26' fill='%23ffd23f' stroke='%23000' stroke-width='2'/%3E%3Cpath d='M5 21 L10 11 L14 18 L18 7 L23 16' fill='none' stroke='%23000' stroke-width='3'/%3E%3Ccircle cx='23' cy='22' r='3' fill='%23ff5fa2' stroke='%23000' stroke-width='1.5'/%3E%3C/svg%3E" />
     <link rel="stylesheet" href="/src/style.css" />
   </head>
   <body>
     <div id="app">
       <header id="bar">
-        <button id="play" type="button" title="Play/pause (Space)">▶</button>
-        <button id="pianobtn" type="button" title="Full-screen piano view (P); Esc to close">🎹 piano</button>
-        <button id="regbtn" type="button" title="Register distribution by section (R); Esc to close">📊 registers</button>
-        <button id="tuttibtn" type="button" title="Tutti reduction for proofreading (T); Esc to close" hidden>🎼 tutti</button>
-        <button id="aboutbtn" type="button" title="About orchspec and open-source credits">ⓘ credits</button>
-        <button id="scorebtn" type="button" title="Engraved score (S); Esc to close" hidden>📜 score</button>
-        <span id="time">0:00.00 / 0:00.00</span>
-        <span id="barbeat"></span>
-        <label>window <select id="window"></select> <span class="spin" data-busy="page" hidden></span></label>
-        <label>view
-          <select id="mode">
-            <option value="mix">mix</option>
-            <option value="ensemble">full ensemble (all stems)</option>
-            <option value="stems">selected stems</option>
-            <option value="dominant">color by dominant stem</option>
-          </select>
-          <span class="spin" data-busy="page" hidden></span>
-        </label>
-        <label>colors <select id="cmap"></select></label>
-        <label>style
-          <select id="style" title="surface: colormapped relief · terrain: hillshade + contours (3 dB, index every 15 dB) · fabric: glowing mesh">
-            <option value="surface">surface</option>
-            <option value="terrain">terrain (contours)</option>
-            <option value="fabric">fabric (mesh)</option>
-          </select>
-        </label>
-        <label title="Gaussian smoothing width in semitones (0 = raw). Merges partials into the ensemble's spectral envelope so register gaps stand out.">smooth <input id="smooth" type="range" min="0" max="12" step="0.5" value="0" /> <span id="smoothval">off</span> <span class="spin" data-busy="display" hidden></span></label>
-        <label title="Outline the score's notes (colored by part; dashed = weak fundamental)">
-          <input id="notes" type="checkbox" checked /> notes</label>
-        <label title="Keep only a band around each sounding note's fundamental (hides overtones). Uses the score/MIDI, or per-stem f0 tracks when there is no score.">
-          <input id="fund" type="checkbox" /> fundamentals ±
-          <select id="fundw">
-            <option value="25">25¢</option>
-            <option value="50" selected>50¢</option>
-            <option value="100">100¢</option>
-          </select>
-        </label>
-        <label title="With fundamentals on: also let overtones (2nd..16th harmonic of each note) through wherever they are at least this loud. Leftmost = off, then 0 dB; move right to let quieter harmonics in.">
-          + harmonics ≥ <input id="harm" type="range" min="0" max="97" step="1" value="0" list="harmticks" />
-          <span id="harmval">off</span> <span class="spin" data-busy="display" hidden></span>
-          <select id="harmpreset" title="Preset thresholds">
-            <option value="">preset…</option>
-          </select>
-          <datalist id="harmticks"></datalist>
-        </label>
-        <label title="Heat map on the keyboard: recent activity per key, fading with time constant τ. sound = measured energy at the key (follows the audio's decay); notes = how much the score plays there.">
-          key heat <select id="heat">
-            <option value="off">off</option>
-            <option value="sound">sound</option>
-            <option value="notes" selected>notes</option>
-          </select>
-          τ <input id="tau" type="range" min="0.2" max="10" step="0.1" value="3" />
-          <span id="tauval">3.0 s</span>
-        </label>
-        <label title="Spectral gaps: quiet pitch regions inside the ensemble's sounding span">
-          <input id="gaps" type="checkbox" /> gaps ≤
-          <input id="gapdb" type="range" min="-90" max="-15" step="1" value="-50" />
-          <span id="gapval">-50 dB</span>
-        </label>
-        <label>floor <input id="floor" type="range" min="0" max="0.9" step="0.01" value="0.3" /></label>
-        <label>height <input id="height" type="range" min="0.05" max="3" step="0.01" value="0.45" /></label>
-        <label><input id="follow" type="checkbox" checked /> follow</label>
-        <label><input id="grid" type="checkbox" checked /> C lines</label>
-        <label>vol <input id="vol" type="range" min="0" max="1" step="0.01" value="0.8" /></label>
+        <div class="grp" role="group" aria-label="Playback">
+          <button id="play" type="button" title="Play/pause (Space)">▶</button>
+          <span id="time">0:00.00 / 0:00.00</span>
+          <span id="barbeat"></span>
+          <label title="Playback volume" aria-label="Volume"><span class="ico" aria-hidden="true">🔊</span><input id="vol" type="range" min="0" max="1" step="0.01" value="0.8" /></label>
+        </div>
+        <div class="grp" role="group" aria-label="Views">
+          <span class="cap">Views</span>
+          <button id="scorebtn" type="button" title="Engraved score (S); Esc to close" hidden>📜 Score</button>
+          <button id="tuttibtn" type="button" title="Tutti reduction for proofreading (T); Esc to close" hidden>🎼 Tutti</button>
+          <button id="regbtn" type="button" title="Register distribution by section (R); Esc to close">📊 Registers</button>
+          <button id="pianobtn" type="button" title="Piano view (P); Esc to close">🎹 Piano</button>
+          <button id="helpbtn" type="button" title="What every control does, keys and a short guide (H or ?); Esc to close">? Help</button>
+          <button id="aboutbtn" type="button" title="About orchspec and open-source credits">ⓘ Credits</button>
+        </div>
+        <div class="grp fold" role="group" aria-label="Spectrum" data-fold="spectrum">
+          <button class="cap" type="button" aria-expanded="false" aria-controls="grp-spectrum" title="Show the Spectrum settings (Shift+click keeps other groups open)">Spectrum</button>
+          <div class="grp-body" id="grp-spectrum">
+            <label title="How many seconds of music the 3D view and the 2D pane show">Window <select id="window"></select> <span class="spin" data-busy="page" hidden></span></label>
+            <label title="What the spectrum shows: the mix; all stems summed; only the stems ticked in the list; or the mix coloured by the loudest stem at each point">View
+              <select id="mode">
+                <option value="mix">Mix</option>
+                <option value="ensemble">Full Ensemble (All Stems)</option>
+                <option value="stems">Selected Stems</option>
+                <option value="dominant">Colour by Dominant Stem</option>
+              </select>
+              <span class="spin" data-busy="page" hidden></span>
+            </label>
+            <label title="Colour map for loudness (dB)">Colours <select id="cmap"></select></label>
+            <label title="How the 3D spectrum is drawn">Style
+              <select id="style" title="surface: colormapped relief · terrain: hillshade + contours (3 dB, index every 15 dB) · fabric: glowing mesh">
+                <option value="surface">Surface</option>
+                <option value="terrain">Terrain (Contours)</option>
+                <option value="fabric">Fabric (Mesh)</option>
+              </select>
+            </label>
+            <label title="Gaussian smoothing width in semitones (0 = raw). Merges partials into the ensemble's spectral envelope so register gaps stand out.">Smooth <input id="smooth" type="range" min="0" max="12" step="0.5" value="0" /> <span id="smoothval">off</span> <span class="spin" data-busy="display" hidden></span></label>
+          </div>
+        </div>
+        <div class="grp fold" role="group" aria-label="Surface" data-fold="surface">
+          <button class="cap" type="button" aria-expanded="false" aria-controls="grp-surface" title="Show the Surface settings (Shift+click keeps other groups open)">Surface</button>
+          <div class="grp-body" id="grp-surface">
+            <label title="Floor level of the 3D surface">Floor <input id="floor" type="range" min="0" max="0.9" step="0.01" value="0.3" /></label>
+            <label title="Vertical scale of the 3D surface">Height <input id="height" type="range" min="0.05" max="3" step="0.01" value="0.45" /></label>
+            <label title="Keep the playhead in view"><input id="follow" type="checkbox" checked /> Follow</label>
+            <label title="Octave guide lines at each C"><input id="grid" type="checkbox" checked /> C Lines</label>
+          </div>
+        </div>
+        <div class="grp fold" role="group" aria-label="Score Overlay" data-fold="score">
+          <button class="cap" type="button" aria-expanded="false" aria-controls="grp-score" title="Show the Score overlay settings (Shift+click keeps other groups open)">Score</button>
+          <div class="grp-body" id="grp-score">
+            <label title="Outline the score's notes (colored by part; dashed = weak fundamental)">
+              <input id="notes" type="checkbox" checked /> Notes</label>
+            <label title="Keep only a band around each sounding note's fundamental (hides overtones). Uses the score/MIDI, or per-stem f0 tracks when there is no score.">
+              <input id="fund" type="checkbox" /> Fundamentals ±
+              <select id="fundw">
+                <option value="25">25¢</option>
+                <option value="50" selected>50¢</option>
+                <option value="100">100¢</option>
+              </select>
+            </label>
+            <label title="With fundamentals on: also let overtones (2nd..16th harmonic of each note) through wherever they are at least this loud. Leftmost = off, then 0 dB; move right to let quieter harmonics in.">
+              + Harmonics ≥ <input id="harm" type="range" min="0" max="97" step="1" value="0" list="harmticks" />
+              <span id="harmval">off</span> <span class="spin" data-busy="display" hidden></span>
+              <select id="harmpreset" title="Preset thresholds">
+                <option value="">Preset…</option>
+              </select>
+              <datalist id="harmticks"></datalist>
+            </label>
+            <label title="Spectral gaps: quiet pitch regions inside the ensemble's sounding span">
+              <input id="gaps" type="checkbox" /> Gaps ≤
+              <input id="gapdb" type="range" min="-90" max="-15" step="1" value="-50" />
+              <span id="gapval">-50 dB</span>
+            </label>
+          </div>
+        </div>
+        <div class="grp fold" role="group" aria-label="Keyboard" data-fold="keys">
+          <button class="cap" type="button" aria-expanded="false" aria-controls="grp-keys" title="Show the keyboard heat settings (Shift+click keeps other groups open)">Keys</button>
+          <div class="grp-body" id="grp-keys">
+            <label title="Heat map on the keyboard: recent activity per key, fading with time constant τ. sound = measured energy at the key (follows the audio's decay); notes = how much the score plays there.">
+              Key Heat <select id="heat">
+                <option value="off">Off</option>
+                <option value="sound">Sound</option>
+                <option value="notes" selected>Notes</option>
+              </select>
+              τ <input id="tau" type="range" min="0.2" max="10" step="0.1" value="3" />
+              <span id="tauval">3.0 s</span>
+            </label>
+          </div>
+        </div>
         <span id="gapinfo"></span>
         <span id="title"></span>
       </header>
       <main id="main">
         <div id="view3d"><canvas id="gl"></canvas></div>
+        <div id="split-stems" class="splitter x" hidden></div>
         <aside id="stems" hidden>
           <div id="sections" title="Select by section (from part and stem names). Click: only this section; Ctrl/Shift+click: add or remove it."></div>
           <div class="stems-head">
             <strong>Stems</strong>
-            <button id="stems-all" type="button">all</button>
-            <button id="stems-none" type="button">none</button>
+            <button id="stems-all" type="button">All</button>
+            <button id="stems-none" type="button">None</button>
           </div>
           <ul id="stem-list"></ul>
           <section id="parts-sec" hidden>
             <div class="stems-head"><strong>Parts</strong>
-              <button id="parts-all" type="button">all</button>
-              <button id="parts-none" type="button">none</button>
+              <button id="parts-all" type="button">All</button>
+              <button id="parts-none" type="button">None</button>
             </div>
             <ul id="part-list"></ul>
             <p class="hint">Click a name to show its range on the keyboard.</p>
           </section>
         </aside>
       </main>
+      <div id="split-pane" class="splitter y"></div>
       <section id="pane" title="wheel: stretch pitch axis · shift+wheel: pan · double-click: reset">
         <canvas id="cqt2d"></canvas>
         <div id="tip" hidden></div>
       </section>
       <canvas id="lufs"></canvas>
       <div id="status">loading…</div>
+      <div id="split-view" class="splitter y" hidden></div>
       <div id="scoreview" hidden>
         <div id="score-bar">
           <strong>Score</strong>
           <label id="score-src-l" hidden title="The engraved MusicXML (Verovio) or the imported PDF (e.g. Dorico's condensed layout)">
             <select id="score-src">
-              <option value="xml">engraved (MusicXML)</option>
+              <option value="xml">Engraved (MusicXML)</option>
               <option value="pdf">PDF</option>
             </select></label>
           <span id="score-time"></span>
@@ -122,12 +152,12 @@
           <button id="score-zoomout" type="button" title="smaller (−, Ctrl+wheel)">−</button>
           <span id="score-zoom" title="Ctrl+wheel or +/− to zoom">38 %</span> <span class="spin" data-busy="score" hidden></span>
           <button id="score-zoomin" type="button" title="larger (+, Ctrl+wheel)">+</button>
-          <label><input id="score-follow" type="checkbox" checked /> follow</label>
+          <label title="Turn pages with the music"><input id="score-follow" type="checkbox" checked /> Follow</label>
           <label title="Hide staves that only rest in a system (like a printed orchestral score)">
-            <input id="score-condense" type="checkbox" /> hide empty staves</label>
+            <input id="score-condense" type="checkbox" /> Hide Empty Staves</label>
           <span id="score-info" class="hint"></span>
           <span class="hint">click a note to jump there · Space play/pause · Esc close</span>
-          <button id="scoreclose" type="button">✕ close</button>
+          <button id="scoreclose" type="button" title="Close the score (Esc)">✕ Close</button>
         </div>
         <div id="score-host"></div>
         <div id="score-pdf" hidden></div>
@@ -137,22 +167,22 @@
           <strong>Tutti</strong>
           <span id="tutti-time"></span>
           <span class="spin" data-busy="tutti" hidden></span>
-          <label>show <select id="tutti-mode">
-            <option value="grand">grand staff</option>
-            <option value="sections">by section (short score)</option>
+          <label title="One chord per bar or per beat, for all parts together or by section">Show <select id="tutti-mode">
+            <option value="grand">Grand Staff</option>
+            <option value="sections">By Section (Short Score)</option>
           </select></label>
-          <label class="t-eng" hidden>colour <select id="tutti-color">
-            <option value="section">by section</option>
-            <option value="part">by part / stem</option>
+          <label class="t-eng" hidden title="Colour notes by orchestral section or by part / stem">Colour <select id="tutti-color">
+            <option value="section">By Section</option>
+            <option value="part">By Part / Stem</option>
           </select></label>
           <span class="t-eng" hidden><button id="tutti-zoomout" type="button" title="smaller">−</button>
             <button id="tutti-zoomin" type="button" title="larger">+</button></span>
-          <label class="t-canvas" title="Seconds in view (also: mouse wheel)">window
+          <label class="t-canvas" title="Seconds in view (also: mouse wheel)">Window
             <input id="tutti-win" type="range" min="2" max="30" step="0.5" value="8" />
             <span id="tutti-winval">8 s</span></label>
-          <label><input id="tutti-follow" type="checkbox" checked /> follow</label>
+          <label title="Scroll with the music"><input id="tutti-follow" type="checkbox" checked /> Follow</label>
           <span class="hint" title="click: a chord or bar · Alt+click: every note on the same beat position · drag: box · Shift/Ctrl: add · double-click: seek · Esc: clear, then close">click · Alt+click · drag · Shift adds · ⓘ</span>
-          <button id="tutticlose" type="button">✕ close</button>
+          <button id="tutticlose" type="button" title="Close the tutti view (Esc)">✕ Close</button>
         </div>
         <div id="tutti-body">
           <div id="tutti-main">
@@ -161,6 +191,7 @@
             <canvas id="tutti-kb" hidden></canvas>
             <span id="tutti-info" class="hint"></span>
           </div>
+          <div id="split-tutti" class="splitter x"></div>
           <aside id="tutti-side">
             <div id="tutti-chord"></div>
             <div id="tutti-scale"></div>
@@ -168,19 +199,58 @@
           </aside>
         </div>
       </div>
+      <div id="helpview" hidden>
+        <div id="help-bar">
+          <strong>Help</strong>
+          <span class="hint">Hover any control for what it does · the full guide is docs/user-guide.md</span>
+          <button id="helpclose" type="button" title="Close help (Esc)">✕ Close</button>
+        </div>
+        <div id="help-body">
+          <section class="help-cols">
+            <div>
+              <h2>Getting Around</h2>
+              <p>The <b>3D spectrum</b> (top) and the <b>2D pane</b> (middle) show time × pitch ×
+                loudness; the score's notes are outlined in part colours. Drag the 3D view to
+                orbit, wheel to zoom. In the 2D pane: wheel stretches pitch, Shift+wheel pans,
+                double-click resets; hover for time, pitch, level, bar and beat.</p>
+              <p>The <b>views</b> (Score, Tutti, Registers, Piano) open below the toolbar, which
+                stays usable. Drag the top edge of a view to see the spectrum above it; drag the
+                bars between panels to resize them (double-click resets).</p>
+              <p>Toolbar groups with a coloured tag (<b>Spectrum, Surface, Score, Keys</b>) fold
+                away: click the tag to slide the settings open.</p>
+            </div>
+            <div>
+              <h2>Keys</h2>
+              <table class="keys">
+                <tr><td><kbd>Space</kbd></td><td>Play / pause</td></tr>
+                <tr><td><kbd>←</kbd> <kbd>→</kbd></td><td>Back / forward 5 s (Shift: 1 s)</td></tr>
+                <tr><td><kbd>Home</kbd></td><td>Back to the start</td></tr>
+                <tr><td><kbd>S</kbd> <kbd>T</kbd> <kbd>R</kbd> <kbd>P</kbd></td><td>Score, Tutti, Registers, Piano</td></tr>
+                <tr><td><kbd>H</kbd> <kbd>?</kbd></td><td>This help</td></tr>
+                <tr><td><kbd>PgUp</kbd> <kbd>PgDn</kbd></td><td>Score pages</td></tr>
+                <tr><td><kbd>+</kbd> <kbd>−</kbd></td><td>Score zoom</td></tr>
+                <tr><td><kbd>Esc</kbd></td><td>Clear the tutti selection, or close the view</td></tr>
+                <tr><td><kbd>F11</kbd></td><td>Full screen (desktop app)</td></tr>
+              </table>
+            </div>
+          </section>
+          <h2>Every Control</h2>
+          <div id="help-ref"></div>
+        </div>
+      </div>
       <div id="aboutview" hidden>
         <div id="about-bar">
-          <strong>About &amp; credits</strong>
-          <button id="aboutclose" type="button">✕ close</button>
+          <strong>About &amp; Credits</strong>
+          <button id="aboutclose" type="button" title="Close (Esc)">✕ Close</button>
         </div>
         <div id="about-body">
           <h2>orchspec</h2>
           <p>Score-aware orchestral spectral visualizer. Local-only: nothing leaves this computer.
             Released under the MIT licence.</p>
-          <h2>Built with open source</h2>
+          <h2>Built with Open Source</h2>
           <p>Thank you to the people who build and maintain these projects. Shipped in this viewer:</p>
           <table>
-            <tr><th>project</th><th>licence</th><th>what it does here</th></tr>
+            <tr><th>Project</th><th>Licence</th><th>What It Does Here</th></tr>
             <tr><td>three.js — threejs.org</td><td>MIT</td><td>WebGL rendering of the spectral surface</td></tr>
             <tr><td>Verovio — verovio.org</td><td>LGPL-3.0-or-later</td><td>music engraving of the score view
               (shipped unmodified as a separate, replaceable file)</td></tr>
@@ -189,7 +259,7 @@
             libsndfile, pyloudnorm, pydantic and PyTorch; the tooling on Vite, TypeScript, Vitest,
             ESLint and Playwright; the desktop app on Tauri and the Rust ecosystem. The full list,
             with versions and licences, is in CREDITS.md in the source repository.</p>
-          <p><button id="about-lic" type="button">Show full licence texts</button></p>
+          <p><button id="about-lic" type="button">Show Full Licence Texts</button></p>
           <pre id="about-text" hidden></pre>
         </div>
       </div>
@@ -197,32 +267,32 @@
         <div id="reg-bar">
           <strong>Registers</strong>
           <span id="reg-time"></span>
-          <label>from <select id="reg-src">
-            <option value="sound">sound (stem spectra, incl. overtones)</option>
-            <option value="notes">notes (score)</option>
+          <label title="Measure registers from the sound (stem spectra, overtones included) or from the notes of the score">From <select id="reg-src">
+            <option value="sound">Sound (Stem Spectra, incl. Overtones)</option>
+            <option value="notes">Notes (Score)</option>
           </select></label>
-          <label>by <select id="reg-by">
-            <option value="family">section</option>
-            <option value="each">stem / part</option>
+          <label title="One band per orchestral section, or per stem / part">By <select id="reg-by">
+            <option value="family">Section</option>
+            <option value="each">Stem / Part</option>
           </select></label>
-          <label title="Levels below this are ignored">threshold
+          <label title="Levels below this are ignored">Threshold
             <input id="reg-thr" type="range" min="-90" max="-10" step="2" value="-50" />
             <span id="reg-thrval">-50 dB</span></label>
-          <label title="In the sound view, levels at a sounding note's fundamental are solid; other levels (partials, overtones) are patterned">partials
+          <label title="In the sound view, levels at a sounding note's fundamental are solid; other levels (partials, overtones) are patterned">Partials
             <select id="reg-partials">
-              <option value="stripes">stripes</option>
-              <option value="dots">dots</option>
-              <option value="solid">solid (no distinction)</option>
+              <option value="stripes">Stripes</option>
+              <option value="dots">Dots</option>
+              <option value="solid">Solid (No Distinction)</option>
             </select></label>
-          <label>axis <select id="reg-axis">
-            <option value="notes">notes</option>
-            <option value="hz">frequency (Hz)</option>
-            <option value="both">notes + Hz</option>
+          <label title="Label the pitch axis with note names, frequencies, or both">Axis <select id="reg-axis">
+            <option value="notes">Notes</option>
+            <option value="hz">Frequency (Hz)</option>
+            <option value="both">Notes + Hz</option>
           </select></label>
           <span class="spin" data-busy="registers" hidden></span>
           <span id="reg-info" class="hint"></span>
           <span class="hint">bands: 10–90 % of each group's level · line: centre · click to seek · Esc close</span>
-          <button id="regclose" type="button">✕ close</button>
+          <button id="regclose" type="button" title="Close the registers view (Esc)">✕ Close</button>
         </div>
         <canvas id="regcanvas"></canvas>
       </div>
@@ -230,14 +300,14 @@
         <div id="piano-bar">
           <strong>Piano</strong>
           <span id="piano-time"></span>
-          <label title="How far ahead the falling notes are shown">lookahead
+          <label title="How far ahead the falling notes are shown">Lookahead
             <input id="lookahead" type="range" min="1" max="12" step="0.5" value="4" />
             <span id="lookval">4 s</span></label>
-          <label title="Stretch the keyboard vertically">key height
+          <label title="Stretch the keyboard vertically">Key Height
             <input id="keyh" type="range" min="0.5" max="2.5" step="0.1" value="1" /></label>
-          <label><input id="pspec" type="checkbox" checked /> live spectrum</label>
+          <label title="Show the measured spectrum above the keys"><input id="pspec" type="checkbox" checked /> Live Spectrum</label>
           <span class="hint">wheel: stretch time · Space play/pause · ←/→ seek · Esc close</span>
-          <button id="pianoclose" type="button">✕ close</button>
+          <button id="pianoclose" type="button" title="Close the piano view (Esc)">✕ Close</button>
         </div>
         <canvas id="piano"></canvas>
       </div>

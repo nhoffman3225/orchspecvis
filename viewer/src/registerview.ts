@@ -188,7 +188,7 @@ export class RegisterView {
     const L = this.layout(w, h);
     // playhead
     const px = L.x0 + (t / d.duration) * (L.x1 - L.x0);
-    g.fillStyle = "#e6c07b";
+    g.fillStyle = "#ffd23f";
     g.fillRect(px - 0.5, L.top, 1.5, L.bottom - L.top);
     // now panel
     const f = Math.min(d.frames - 1, Math.max(0, Math.floor(t / d.frameSec)));
