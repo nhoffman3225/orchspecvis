@@ -40,3 +40,5 @@ tests/fixtures/synthetic/
 viewer/.claude/
 viewer/test-data/
 .venv-cpu/
+viewer/test-results/
+viewer/playwright-report/

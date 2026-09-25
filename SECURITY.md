@@ -11,7 +11,8 @@ no reason to talk to the network.
    three.js (and later Verovio) are bundled by Vite into `viewer/dist`.
    - Enforced in tests: pytest runs under `pytest-socket` with
      `--disable-socket --allow-hosts=127.0.0.1,localhost`; a vitest check fails if the
-     viewer attempts any non-same-origin request.
+     viewer attempts any non-same-origin request, and every Playwright E2E test (real
+     browser, incl. the Verovio worker) fails on any off-origin request or page error.
    - Dependency installation (`uv sync`, `npm ci`) obviously uses the network; runtime
      does not.
 2. **No downloads from code.** Never call `librosa.example()`, `torch.hub`, dataset

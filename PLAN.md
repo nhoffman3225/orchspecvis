@@ -148,12 +148,21 @@ carry the `real` marker and never run in CI.
   material within ~22 ms, strong per-part drift NOT resolvable from a mix alone
 ### Phase 3 (cont.) — score view, registers, scale
 2. Engraved score view
-- [ ] Verovio (bundled wasm via Vite; LGPL-3.0, approved 2026-09-24) renders the MusicXML;
-      follows the playhead (page/system turns), highlights sounding notes by part color,
-      click a note/measure -> seek; part filter shared with the piano view
-- [ ] Map Verovio element ids <-> bundle notes (part/staff/voice/measure/beat), incl.
-      repeats (pass number)
-  Acceptance: highlight stays within one beat over a 20-min fixture
+- [x] Verovio 6.3 (bundled wasm, lazily loaded 8 MB chunk; LGPL-3.0) renders the bundle's
+      copy of the MusicXML (`score.score_file`); follows the playhead with page turns and
+      scrolling, highlights sounding notes in part colours, click a note/measure -> seek
+      (the repeat pass nearest the playhead); part filter shared with the other views
+- [x] Sync through measures, not note ids: Verovio's timemap lists measures in playback
+      order with repeats expanded ("-rend2"), aligned to score.measures by number (LCS);
+      sounding notes from the timemap's on/off lists (getElementsAtTime only reports notes
+      near onsets); SVG sanitized before insertion (strict CSP kept)
+- [x] Verovio in a Web Worker (verovio.worker.ts + testable verovioCore.ts): the main
+      thread stays responsive while a movement engraves; per-frame page/sounding lookups
+      are local. Hide-empty-staves option (Verovio condense); parts found via staff@n
+      (data-n) so colours stay right when staves are hidden. Click anywhere in a bar seeks
+      to it; Verovio's rounded-down element times are nudged +2 ms
+  Acceptance: highlight stays within one beat — met on Beethoven 5 i (626 played bars map
+  1:1; m. 48 beat 2.5 highlighted at 0:30); a 20-min fixture is still to do
 3. Register-distribution views
 - [ ] Per-section/stem pitch-energy histograms over sliding windows (from tiles or notes),
       register "center of mass" and spread over time, per-family stacks
@@ -163,7 +172,14 @@ carry the `real` marker and never run in CI.
       ~460 MB of decoded audio
 - [ ] Compressed tiles (gzip + DecompressionStream) and/or stems from LOD 1 (schema v3)
 - [ ] Viewer page assembly, smoothing, stem sums in a Web Worker
-- [ ] Playwright E2E smoke + network check (@playwright/test approved 2026-09-24)
+- [x] Playwright E2E (@playwright/test 1.63): app load, score view (worker engraving,
+      highlight, click-to-seek), piano view; every test fails on any off-origin request or
+      page error; in CI (Chromium). Local runs: PW_CHANNEL=msedge; opt-in real-session spec
+      via E2E_URL (Beethoven 5 i: engraved + highlighted in 6.9 s)
+- [x] CI minutes: E2E runs once on ubuntu-latest (own job); the Windows + macOS matrix runs
+      pytest and viewer lint/unit/build only; job timeouts; superseded PR runs cancelled.
+      Open: on the windows-latest runner the Verovio wasm never finished starting inside the
+      worker (passes locally with Edge and Playwright's Chromium, and on macOS CI)
 
 - [ ] Cubase + BBC SO Pro sessions (moved from 3A)
 
@@ -307,6 +323,10 @@ Checked on the first real session (Dorico 5 + NotePerformer 5, Beethoven 5 i, 6:
   (integral of input * exp(-(t-s)/tau) over the last 8 tau), not accumulated during
   playback: identical result for play, seek and scrub. "sound" is normalized to the
   hottest key (40 dB range), "notes" linearly to the hottest key (floor 0.5 tau).
+
+- 2026-09-25: Verovio `svgHtml5` turns element ids into `data-id`; orchspec keeps plain
+  ids. Pages hold whole systems (~3 viewports, adjustPageHeight): a whole movement on one
+  page was a 5.4 MB SVG that stalled the browser.
 
 ## API drift
 

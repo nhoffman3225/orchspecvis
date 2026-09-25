@@ -40,6 +40,8 @@ npm run dev        # Vite dev server on 127.0.0.1 (tiny-bundle by default)
 npm run build      # -> viewer/dist (served by `orchspec serve`)
 npm run lint       # eslint + tsc --noEmit
 npm test           # vitest (includes schema cross-check + no-network check)
+npm run e2e        # Playwright (needs viewer/test-data from `uv run pytest`); PW_CHANNEL=msedge locally
+E2E_URL="<orchspec serve URL>" PW_CHANNEL=msedge npx playwright test real   # LOCAL real session
 ```
 
 `npm run dev` shows viewer/public/tiny-bundle; add `?bundle=/path/` for another bundle
@@ -48,7 +50,8 @@ initial view; also `style=surface|terrain|fabric`, `smooth=<semitones>`, `gaps=<
 (e.g. `&mode=ensemble&style=terrain&smooth=4&gaps=-45`); with a score also `notes=0`,
 `fund=1`, `fundw=25|50|100` (fundamentals-only band in cents), `harm=<dB>` (overtones
 that loud pass too), `heat=off|sound|notes`, `tau=<s>`, `t=<s>` (start position),
-`view=piano`, `lookahead=<s>`, `keyh=<x>`, `pitch=<lo>-<hi>` (2D pane MIDI range). The cross-language test reads viewer/test-data/py-bundle, written by
+`view=piano|score`, `lookahead=<s>`, `keyh=<x>`, `pitch=<lo>-<hi>` (2D pane MIDI range),
+`window=<s>` (one of the window choices). Keys: P piano, S score, Space, arrows, Esc. The cross-language test reads viewer/test-data/py-bundle, written by
 `uv run pytest tests/test_bundle_writer.py` (git-ignored) — run pytest before vitest.
 
 On this Windows box Node comes from Scoop `nodejs-lts`, which is added to PATH by the
@@ -76,6 +79,9 @@ viewer/             Vite + TS + three.js (WebGL2 only)
   src/tiles.ts      tile LRU cache, page assembly, stem power-sum
   src/surface.ts    heightmap shader surface; src/pane2d.ts 2D pane + LUFS strip
   src/notes.ts      note index, note/f0 rasterization (overlay + fundamentals mask), bar/beat
+  src/scoreview.ts  engraved score view; Verovio runs in src/verovio.worker.ts (verovioCore.ts)
+  src/scoremap.ts   measure sync (score <-> audio), sounding tracker, SVG sanitizer
+  e2e/              Playwright specs (guard.ts fails tests on off-origin requests)
   src/piano.ts      full-screen piano view (keyboard, live spectrum, falling-notes roll)
   src/presets.ts    harmonics-slider preset stops
   src/heat.ts       keyboard heat map (decayed per-key activity from sound or notes)

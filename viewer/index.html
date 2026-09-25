@@ -16,6 +16,7 @@
       <header id="bar">
         <button id="play" type="button" title="Play/pause (Space)">▶</button>
         <button id="pianobtn" type="button" title="Full-screen piano view (P); Esc to close">🎹 piano</button>
+        <button id="scorebtn" type="button" title="Engraved score (S); Esc to close" hidden>📜 score</button>
         <span id="time">0:00.00 / 0:00.00</span>
         <span id="barbeat"></span>
         <label>window <select id="window"></select></label>
@@ -101,6 +102,24 @@
       </section>
       <canvas id="lufs"></canvas>
       <div id="status">loading…</div>
+      <div id="scoreview" hidden>
+        <div id="score-bar">
+          <strong>Score</strong>
+          <span id="score-time"></span>
+          <button id="score-prev" type="button" title="previous page (PgUp)">◀</button>
+          <span id="score-page"></span>
+          <button id="score-next" type="button" title="next page (PgDn)">▶</button>
+          <button id="score-zoomout" type="button" title="smaller">−</button>
+          <button id="score-zoomin" type="button" title="larger">+</button>
+          <label><input id="score-follow" type="checkbox" checked /> follow</label>
+          <label title="Hide staves that only rest in a system (like a printed orchestral score)">
+            <input id="score-condense" type="checkbox" /> hide empty staves</label>
+          <span id="score-info" class="hint"></span>
+          <span class="hint">click a note to jump there · Space play/pause · Esc close</span>
+          <button id="scoreclose" type="button">✕ close</button>
+        </div>
+        <div id="score-host"></div>
+      </div>
       <div id="pianoview" hidden>
         <div id="piano-bar">
           <strong>Piano</strong>

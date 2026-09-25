@@ -8,6 +8,11 @@ on:
 permissions:
   contents: read
 
+# a new push to the same PR cancels the run still in progress (saves minutes)
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   test:
     strategy:
@@ -15,6 +20,7 @@ jobs:
       matrix:
         os: [windows-latest, macos-latest]
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v7
 
@@ -50,3 +56,44 @@ jobs:
           npm run lint
           npm test
           npm run build
+
+  # Browser E2E runs once, on Linux (the cheapest runner); the OS matrix above covers the
+  # Python core and the viewer unit tests + build.
+  e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: viewer/package-lock.json
+
+      - uses: astral-sh/setup-uv@v10.2.0
+        with:
+          enable-cache: true
+
+      - name: Test bundle (synthetic score session)
+        run: |
+          uv sync --locked --extra dev
+          uv run pytest tests/test_score_bundle.py
+
+      - name: Viewer install
+        working-directory: viewer
+        run: |
+          npm ci
+          npx playwright install --with-deps chromium
+
+      - name: Viewer E2E (Playwright; no off-origin requests, score + piano views)
+        working-directory: viewer
+        run: npx playwright test
+
+      - name: Upload E2E results on failure
+        if: failure()
+        uses: actions/upload-artifact@v7.0.1
+        with:
+          name: e2e-results
+          path: viewer/test-results/
+          retention-days: 7

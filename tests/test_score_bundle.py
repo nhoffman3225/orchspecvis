@@ -46,6 +46,9 @@ def test_manifest_v2_score_section(bundle) -> None:  # type: ignore[no-untyped-d
     assert [p.range_id for p in s.parts] == ["flute", "clarinet_bb", "double_bass", "piano"]
     assert (s.parts[2].range_low, s.parts[2].range_high) == (24, 67)
     assert [x.number for x in s.measures] == ["1", "2", "3", "2", "4", "5"]
+    assert [x.source_index for x in s.measures] == [0, 1, 2, 1, 3, 4]
+    assert s.score_file == "score/score.musicxml"
+    assert (root / s.score_file).read_bytes().startswith(b"<?xml")
     assert s.alignment.method == "warp" and s.alignment.time_source == "midi"
     assert s.alignment.snapped == 1.0 and len(s.alignment.warp) > 5
     assert s.alignment.pitch_agreement == 1.0

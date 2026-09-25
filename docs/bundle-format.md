@@ -119,6 +119,9 @@ Schema v3 adds, all optional:
 - `score.alignment.snapped`: fraction of notes whose onset was snapped to an audio onset.
 - `score.parts[].latency_sec` (seconds, relative to the typical part) and
   `score.parts[].snapped` (fraction).
+- `score.score_file`: bundle-relative copy of the MusicXML (`score/score.musicxml` or
+  `score/score.mxl`) for engraving; `score.measures[].source_index`: the notated measure
+  a played measure comes from (repeats undone).
 Note times in the notes table are final audio times either way.
 
 Readers must accept schema_version 1 (no score), 2 and 3.
