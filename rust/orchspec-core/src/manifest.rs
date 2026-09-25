@@ -362,10 +362,10 @@ impl Manifest {
         if self.sr == 0 || self.hop == 0 || self.n_samples == 0 || self.n_bins == 0 || self.tile_frames == 0 {
             return fail("sr, hop, n_samples, n_bins and tile_frames must be > 0");
         }
-        if !(self.duration_seconds > 0.0) {
+        if self.duration_seconds.is_nan() || self.duration_seconds <= 0.0 {
             return fail("duration_seconds must be > 0");
         }
-        if self.bins_per_octave == 0 || self.bins_per_octave % 12 != 0 {
+        if self.bins_per_octave == 0 || !self.bins_per_octave.is_multiple_of(12) {
             return fail("bins_per_octave must be a multiple of 12");
         }
         if self.db_max <= self.db_min {
@@ -429,7 +429,7 @@ impl Manifest {
         for s in self.features.iter().chain(&self.tables) {
             check_rel_path(&s.path)?;
             one_of("series dtype", &s.dtype, &["f32le"])?;
-            if !(s.hop_seconds > 0.0) {
+            if s.hop_seconds.is_nan() || s.hop_seconds <= 0.0 {
                 return fail(format!("{}: hop_seconds must be > 0", s.name));
             }
         }
@@ -455,10 +455,10 @@ impl Manifest {
             one_of("score.alignment.time_source", &sc.alignment.time_source, &["midi", "score_tempo"])?;
             for p in &sc.parts {
                 one_of("stem_match", &p.stem_match, &["name", "fuzzy", "order", "none"])?;
-                if let Some(id) = &p.stem_id {
-                    if !self.stems.iter().any(|s| &s.id == id) {
-                        return fail(format!("score part {:?} refers to unknown stem {id:?}", p.name));
-                    }
+                if let Some(id) = &p.stem_id
+                    && !self.stems.iter().any(|s| &s.id == id)
+                {
+                    return fail(format!("score part {:?} refers to unknown stem {id:?}", p.name));
                 }
             }
         }

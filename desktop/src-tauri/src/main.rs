@@ -110,7 +110,7 @@ fn main() {
                 .title("orchspec")
                 .inner_size(1440.0, 900.0)
                 .min_inner_size(800.0, 500.0)
-                .on_navigation(|u| is_app_origin(u))
+                .on_navigation(is_app_origin)
                 .build()?;
             let handle = app.handle().clone();
             match cli_bundle.clone() {

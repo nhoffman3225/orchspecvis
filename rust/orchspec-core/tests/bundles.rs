@@ -3,9 +3,10 @@
 //! - viewer/test-data/py-score-bundle (gzip tiles, score; written by
 //!   `uv run pytest tests/test_score_bundle.py`, skipped when absent)
 //!
-//! For every pyramid: the manifest validates, every tile decodes to n_frames * n_bins
-//! bytes, and rebuilding levels 1.. from level 0 in Rust reproduces Python's levels
-//! byte-for-byte (decoded).
+//! The manifest validates, every tile decodes to n_frames * n_bins bytes, rebuilding
+//! levels 1.. of the mix and each stem from level 0 in Rust reproduces Python's levels
+//! byte-for-byte (decoded), and every dominant-stem level equals the argmax over the
+//! stems recomputed in Rust.
 
 use orchspec_core::manifest::{Manifest, TileEncoding};
 use orchspec_core::tiles::{decode_tile, encode_tile, lod_frame_counts, pool_max, pyramid, read_level, write_level};
@@ -16,10 +17,36 @@ fn repo() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../..")
 }
 
+/// `v = round_half_even((clamp(db) - db_min) * 255 / range)` (numpy rint), as the writer does.
+fn quantize(db: f64, db_min: f64, db_max: f64) -> u8 {
+    ((db.clamp(db_min, db_max) - db_min) * 255.0 / (db_max - db_min)).round_ties_even() as u8
+}
+
 fn check_bundle(root: &Path) -> Manifest {
     let m = open_bundle(root).unwrap_or_else(|e| panic!("{}: {e}", root.display()));
     let n_bins = m.n_bins as usize;
-    for (name, lods) in m.all_lods() {
+    // dominant-stem tiles are not pooled: each level is the per-cell argmax over the
+    // stems' (pooled) levels, earliest stem on ties, none_value at or below the floor
+    if let Some(d) = &m.dominant {
+        let floor = quantize(d.floor_db, m.db_min, m.db_max);
+        for (lv, dl) in d.lods.iter().enumerate() {
+            let got = read_level(root, dl, n_bins, m.tile_encoding).unwrap();
+            let stems: Vec<Vec<u8>> =
+                m.stems.iter().map(|s| read_level(root, &s.lods[lv], n_bins, m.tile_encoding).unwrap()).collect();
+            let mut best = vec![0u8; got.len()];
+            let mut want = vec![d.none_value as u8; got.len()];
+            for (si, st) in stems.iter().enumerate() {
+                for ((b, w), &v) in best.iter_mut().zip(want.iter_mut()).zip(st) {
+                    if v > *b && v > floor {
+                        *b = v;
+                        *w = si as u8;
+                    }
+                }
+            }
+            assert!(got == want, "dominant: level {lv} is not the argmax over the stems");
+        }
+    }
+    for (name, lods) in m.all_lods().into_iter().filter(|(n, _)| n != "dominant") {
         let levels: Vec<Vec<u8>> = lods
             .iter()
             .map(|l| read_level(root, l, n_bins, m.tile_encoding).unwrap_or_else(|e| panic!("{name}: {e}")))

@@ -78,26 +78,30 @@ pub fn content_type(path: &Path) -> &'static str {
     }
 }
 
+/// A Range header that cannot be satisfied (HTTP 416).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Unsatisfiable;
+
 /// A single `bytes=` range -> inclusive (start, end), clamped to `size`.
-/// Ok(None): no/unsupported Range header (serve the whole file). Err: unsatisfiable (416).
-pub fn parse_range(header: Option<&str>, size: u64) -> Result<Option<(u64, u64)>, ()> {
+/// Ok(None): no/unsupported Range header (serve the whole file).
+pub fn parse_range(header: Option<&str>, size: u64) -> Result<Option<(u64, u64)>, Unsatisfiable> {
     let Some(h) = header else { return Ok(None) };
     let Some(spec) = h.trim().strip_prefix("bytes=") else { return Ok(None) };
     if spec.contains(',') {
         return Ok(None); // multi-range: not supported, whole file (allowed by RFC 9110)
     }
-    let (a, b) = spec.split_once('-').ok_or(())?;
+    let (a, b) = spec.split_once('-').ok_or(Unsatisfiable)?;
     let (start, end) = match (a.trim(), b.trim()) {
-        ("", "") => return Err(()),
+        ("", "") => return Err(Unsatisfiable),
         ("", n) => {
-            let n: u64 = n.parse().map_err(|_| ())?;
+            let n: u64 = n.parse().map_err(|_| Unsatisfiable)?;
             (size.saturating_sub(n), size.saturating_sub(1))
         }
-        (s, "") => (s.parse().map_err(|_| ())?, size.saturating_sub(1)),
-        (s, e) => (s.parse().map_err(|_| ())?, e.parse::<u64>().map_err(|_| ())?.min(size.saturating_sub(1))),
+        (s, "") => (s.parse().map_err(|_| Unsatisfiable)?, size.saturating_sub(1)),
+        (s, e) => (s.parse().map_err(|_| Unsatisfiable)?, e.parse::<u64>().map_err(|_| Unsatisfiable)?.min(size.saturating_sub(1))),
     };
     if size == 0 || start > end || start >= size {
-        return Err(());
+        return Err(Unsatisfiable);
     }
     Ok(Some((start, end)))
 }
@@ -132,7 +136,7 @@ pub fn serve_file(path: &Path, range: Option<&str>, head: bool) -> io::Result<Re
     let size = f.metadata()?.len();
     let ctype = content_type(path);
     match parse_range(range, size) {
-        Err(()) => {
+        Err(Unsatisfiable) => {
             let mut r = Reply::text(416, "range not satisfiable");
             r.headers.push(("Content-Range".into(), format!("bytes */{size}")));
             Ok(r)
