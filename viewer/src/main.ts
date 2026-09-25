@@ -9,7 +9,7 @@ import { ScoreView } from "./scoreview";
 import { HARM_PRESETS, harmSliderValue, snapHarm } from "./presets";
 import { frameGaps, frameSpans } from "./gaps";
 import { COLORMAPS, colormapLut, cssColor, stemPalette } from "./colormap";
-import { initToken } from "./net";
+import { fetchSameOrigin, initToken } from "./net";
 import { LufsStrip, Pane2D } from "./pane2d";
 import { Player } from "./player";
 import { GRID_COLS, SURFACE_STYLES, Surface, colsPerBin, type SurfaceStyle } from "./surface";
@@ -561,6 +561,25 @@ async function main(): Promise<void> {
     } else if (e.code === "ArrowLeft") seek(player.transport.position() - (e.shiftKey ? 1 : 5));
     else if (e.code === "ArrowRight") seek(player.transport.position() + (e.shiftKey ? 1 : 5));
     else if (e.code === "Home") seek(0);
+  });
+
+  // ---- about & credits (licence texts: licenses/THIRD-PARTY.txt, same origin)
+  const setAbout = (open: boolean): void => {
+    $("aboutview").hidden = !open;
+  };
+  $("aboutbtn").addEventListener("click", () => setAbout(true));
+  $("aboutclose").addEventListener("click", () => setAbout(false));
+  addEventListener("keydown", (e) => {
+    if (e.code === "Escape" && !$("aboutview").hidden) setAbout(false);
+  });
+  $("about-lic").addEventListener("click", () => {
+    const pre = $("about-text");
+    pre.hidden = false;
+    pre.textContent = "loading…";
+    void fetchSameOrigin(new URL("licenses/THIRD-PARTY.txt", location.href).href)
+      .then((r) => (r.ok ? r.text() : `HTTP ${r.status}`))
+      .then((t) => (pre.textContent = t))
+      .catch((e: unknown) => (pre.textContent = String(e)));
   });
 
   // ---- register distribution view (per section / stem: whole piece + now)

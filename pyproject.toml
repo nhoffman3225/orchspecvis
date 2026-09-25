@@ -3,6 +3,8 @@ name = "orchspec"
 version = "0.1.0"
 description = "Score-aware orchestral spectral visualizer (local-only)"
 readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
 authors = [
     { name = "nhoffman3225", email = "291149338+nhoffman3225@users.noreply.github.com" }
 ]

@@ -4,6 +4,7 @@ version = "0.1.0"
 description = "orchspec session bundles: manifest (schema v1-v4), tiles, LOD pyramid, local file serving"
 edition.workspace = true
 publish.workspace = true
+license.workspace = true
 rust-version.workspace = true
 
 [dependencies]

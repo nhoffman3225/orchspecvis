@@ -2,6 +2,7 @@
   "name": "orchspec-desktop",
   "private": true,
   "version": "0.1.0",
+  "license": "MIT",
   "type": "module",
   "scripts": {
     "icon": "tauri icon icon-source.png",

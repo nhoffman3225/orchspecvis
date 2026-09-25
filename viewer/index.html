@@ -17,6 +17,7 @@
         <button id="play" type="button" title="Play/pause (Space)">▶</button>
         <button id="pianobtn" type="button" title="Full-screen piano view (P); Esc to close">🎹 piano</button>
         <button id="regbtn" type="button" title="Register distribution by section (R); Esc to close">📊 registers</button>
+        <button id="aboutbtn" type="button" title="About orchspec and open-source credits">ⓘ credits</button>
         <button id="scorebtn" type="button" title="Engraved score (S); Esc to close" hidden>📜 score</button>
         <span id="time">0:00.00 / 0:00.00</span>
         <span id="barbeat"></span>
@@ -120,6 +121,31 @@
           <button id="scoreclose" type="button">✕ close</button>
         </div>
         <div id="score-host"></div>
+      </div>
+      <div id="aboutview" hidden>
+        <div id="about-bar">
+          <strong>About &amp; credits</strong>
+          <button id="aboutclose" type="button">✕ close</button>
+        </div>
+        <div id="about-body">
+          <h2>orchspec</h2>
+          <p>Score-aware orchestral spectral visualizer. Local-only: nothing leaves this computer.
+            Released under the MIT licence.</p>
+          <h2>Built with open source</h2>
+          <p>Thank you to the people who build and maintain these projects. Shipped in this viewer:</p>
+          <table>
+            <tr><th>project</th><th>licence</th><th>what it does here</th></tr>
+            <tr><td>three.js — threejs.org</td><td>MIT</td><td>WebGL rendering of the spectral surface</td></tr>
+            <tr><td>Verovio — verovio.org</td><td>LGPL-3.0-or-later</td><td>music engraving of the score view
+              (shipped unmodified as a separate, replaceable file)</td></tr>
+          </table>
+          <p>The analysis that produced this bundle is built on librosa, NumPy, SciPy, soundfile /
+            libsndfile, pyloudnorm, pydantic and PyTorch; the tooling on Vite, TypeScript, Vitest,
+            ESLint and Playwright; the desktop app on Tauri and the Rust ecosystem. The full list,
+            with versions and licences, is in CREDITS.md in the source repository.</p>
+          <p><button id="about-lic" type="button">Show full licence texts</button></p>
+          <pre id="about-text" hidden></pre>
+        </div>
       </div>
       <div id="regview" hidden>
         <div id="reg-bar">

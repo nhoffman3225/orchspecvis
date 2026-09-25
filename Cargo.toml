@@ -6,6 +6,7 @@ members = ["rust/orchspec-core", "desktop/src-tauri"]
 [workspace.package]
 edition = "2024"
 publish = false
+license = "MIT"
 rust-version = "1.88"
 
 [profile.release]
