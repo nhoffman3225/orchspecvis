@@ -80,6 +80,24 @@ html, body { margin: 0; height: 100%; background: var(--bg); color: var(--fg); }
 #score-host rect { stroke: currentColor; }
 #score-host g.note.playing, #score-host g.chord.playing { stroke-width: 12; }
 #score-host g.measure:hover { fill: #3a5a8c; color: #3a5a8c; }
+#aboutview {
+  position: fixed; inset: 0; z-index: 20; background: #0b0c10;
+  display: grid; grid-template-rows: auto 1fr;
+}
+#aboutview[hidden] { display: none; }
+#about-bar {
+  display: flex; align-items: center; gap: 12px; padding: 6px 12px;
+  background: var(--panel); border-bottom: 1px solid var(--line); font-size: 12px;
+}
+#about-bar button { margin-left: auto; }
+#about-body { overflow: auto; padding: 16px 24px; max-width: 900px; line-height: 1.5; min-height: 0; }
+#about-body h2 { font-size: 15px; margin: 18px 0 6px; }
+#about-body table { border-collapse: collapse; margin: 8px 0; }
+#about-body th, #about-body td { text-align: left; padding: 4px 12px 4px 0; vertical-align: top;
+  border-bottom: 1px solid var(--line); }
+#about-body th { color: var(--muted); font-weight: normal; }
+#about-text { white-space: pre-wrap; font-size: 11px; background: #11131a; padding: 12px;
+  border: 1px solid var(--line); }
 #regview {
   position: fixed; inset: 0; z-index: 10; background: #0b0c10;
   display: grid; grid-template-rows: auto 1fr;

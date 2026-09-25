@@ -22,3 +22,11 @@ length as the mix), `render.mid`, `score.musicxml`, and `render.yaml`
 (`uv run orchspec session-template` prints one). A single WAV file also works.
 
 See [CLAUDE.md](CLAUDE.md) for commands and invariants and [PLAN.md](PLAN.md) for the roadmap.
+
+## Licence and credits
+
+orchspec is released under the [MIT licence](LICENSE). It is built on a lot of generous
+open-source work — see [CREDITS.md](CREDITS.md) (also shown in the viewer under
+**ⓘ credits**, together with the full licence texts of everything the viewer ships).
+The score view bundles [Verovio](https://www.verovio.org) (LGPL-3.0-or-later) unmodified,
+as a separate, replaceable file.

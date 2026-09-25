@@ -150,6 +150,20 @@ test("register view: sections from stem spectra and from the score", async ({ pa
   expect(g.errors, g.errors.join(" | ")).toEqual([]);
 });
 
+test("credits: shipped projects and full licence texts, same origin", async ({ page, baseURL }) => {
+  const g = guard(page, baseURL!);
+  await page.goto(`/?bundle=${BUNDLE}`);
+  await page.locator("#aboutbtn").click();
+  await expect(page.locator("#about-body")).toContainText("Verovio");
+  await page.locator("#about-lic").click();
+  await expect(page.locator("#about-text")).toContainText("GNU LESSER GENERAL PUBLIC LICENSE");
+  await expect(page.locator("#about-text")).toContainText("orchspec — MIT License");
+  await page.keyboard.press("Escape");
+  await expect(page.locator("#aboutview")).toBeHidden();
+  expect(g.offOrigin).toEqual([]);
+  expect(g.errors, g.errors.join(" | ")).toEqual([]);
+});
+
 test("piano view renders", async ({ page, baseURL }) => {
   const g = guard(page, baseURL!);
   await page.goto(`/?bundle=${BUNDLE}&view=piano&t=3`); // bar 2 starts at ~2.54 s (audio)

@@ -1,0 +1,14 @@
+# Cargo workspace (Phase 3b): the Rust bundle core and the Tauri desktop shell.
+[workspace]
+resolver = "3"
+members = ["rust/orchspec-core", "desktop/src-tauri"]
+
+[workspace.package]
+edition = "2024"
+publish = false
+license = "MIT"
+rust-version = "1.88"
+
+[profile.release]
+lto = "thin"
+codegen-units = 1
