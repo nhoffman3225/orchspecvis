@@ -59,6 +59,24 @@ workers: ${workers.length}; ${alive}
   expect(g.errors, g.errors.join(" | ")).toEqual([]);
 });
 
+test("streams the mix WAV through the AudioWorklet (Range requests), no underruns", async ({ page, baseURL }) => {
+  const g = guard(page, baseURL!);
+  const ranges: string[] = [];
+  page.on("request", (r) => {
+    if (r.url().endsWith("/audio/mix.wav")) ranges.push(r.headers()["range"] ?? "(none)");
+  });
+  await page.goto(`/?bundle=${BUNDLE}&t=2`);
+  await expect(page.locator("html")).toHaveAttribute("data-audio", "stream");
+  await page.locator("#play").click();
+  await expect(page.locator("#time")).toContainText("0:05", { timeout: 10_000 });
+  await page.locator("#play").click();
+  expect(ranges.length).toBeGreaterThan(3);
+  expect(ranges.every((r) => r.startsWith("bytes="))).toBe(true); // never the whole file
+  expect(Number(await page.locator("html").getAttribute("data-underruns"))).toBe(0);
+  expect(g.offOrigin).toEqual([]);
+  expect(g.errors, g.errors.join(" | ")).toEqual([]);
+});
+
 test("piano view renders", async ({ page, baseURL }) => {
   const g = guard(page, baseURL!);
   await page.goto(`/?bundle=${BUNDLE}&view=piano&t=3`); // bar 2 starts at ~2.54 s (audio)

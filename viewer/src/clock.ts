@@ -10,14 +10,15 @@ export interface TimeSource {
   scheduleNow(): number;
 }
 
-export function audioContextTime(ctx: AudioContext): TimeSource {
+/** `lead()`: seconds to schedule starts ahead of currentTime (time for data to arrive). */
+export function audioContextTime(ctx: AudioContext, lead: () => number = () => 0): TimeSource {
   return {
     now(): number {
       const ts = typeof ctx.getOutputTimestamp === "function" ? ctx.getOutputTimestamp() : undefined;
       if (ts && typeof ts.contextTime === "number" && ts.contextTime > 0) return ts.contextTime;
       return Math.max(0, ctx.currentTime - (ctx.outputLatency || ctx.baseLatency || 0));
     },
-    scheduleNow: () => ctx.currentTime,
+    scheduleNow: () => ctx.currentTime + lead(),
   };
 }
 

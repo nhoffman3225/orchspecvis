@@ -70,8 +70,9 @@ async function main(): Promise<void> {
   const f0Data = f0Series ? await loadSeries(base, f0Series) : null;
   const parts = m.score?.parts ?? [];
 
-  const player = new Player(m.duration_seconds);
+  const player = new Player(m.duration_seconds, m.sr);
   void player.load(base, m.audio_path).then(() => {
+    document.documentElement.dataset.audio = player.mode; // stream | decoded | none (tests)
     if (player.audioError) status.textContent = `audio unavailable (${player.audioError}); playhead runs silently`;
   });
 
@@ -688,6 +689,8 @@ async function main(): Promise<void> {
     gapReadout(t);
     pane.heat = keyHeat(t);
     playBtn.textContent = player.transport.isPlaying ? "❚❚" : "▶";
+    const ur = String(player.underruns);
+    if (document.documentElement.dataset.underruns !== ur) document.documentElement.dataset.underruns = ur;
     $("time").textContent = `${fmt(t)} / ${fmt(m.duration_seconds)}`;
     if (m.score) {
       const bb = measureAt(m.score.measures, t);
