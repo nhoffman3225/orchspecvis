@@ -86,6 +86,31 @@ test("streams the mix WAV through the AudioWorklet (Range requests), no underrun
   expect(g.errors, g.errors.join(" | ")).toEqual([]);
 });
 
+test("register view: sections from stem spectra and from the score", async ({ page, baseURL }) => {
+  const g = guard(page, baseURL!);
+  await page.goto(`/?bundle=${BUNDLE}&view=registers&t=4`);
+  await expect(page.locator("#regview")).toBeVisible();
+  await expect(page.locator("html")).toHaveAttribute("data-registers", /^sound:[1-9]/);
+  await page.locator("#reg-src").selectOption("notes");
+  await expect(page.locator("html")).toHaveAttribute("data-registers", /^notes:[1-9]/);
+  await page.locator("#reg-by").selectOption("each");
+  await expect(page.locator("html")).toHaveAttribute("data-registers", "notes:4"); // 4 parts
+  // the timeline is drawn (not blank): some pixels differ from the background
+  const painted = await page.locator("#regcanvas").evaluate((c: HTMLCanvasElement) => {
+    const d = c.getContext("2d")!.getImageData(0, 0, c.width, c.height).data;
+    let n = 0;
+    for (let i = 0; i < d.length; i += 4) if (d[i]! > 60 || d[i + 1]! > 60) n++;
+    return n;
+  });
+  expect(painted).toBeGreaterThan(500);
+  // click the left edge of the timeline -> seek near 0
+  const box = (await page.locator("#regcanvas").boundingBox())!;
+  await page.mouse.click(box.x + 42, box.y + box.height / 2);
+  await expect(page.locator("#reg-time")).toContainText("0:00.");
+  expect(g.offOrigin).toEqual([]);
+  expect(g.errors, g.errors.join(" | ")).toEqual([]);
+});
+
 test("piano view renders", async ({ page, baseURL }) => {
   const g = guard(page, baseURL!);
   await page.goto(`/?bundle=${BUNDLE}&view=piano&t=3`); // bar 2 starts at ~2.54 s (audio)

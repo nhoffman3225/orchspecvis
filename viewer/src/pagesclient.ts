@@ -38,6 +38,11 @@ export class PagesClient {
     return this.call<PageResult>({ op: "page", lods, dom, start, count });
   }
 
+  /** Per-stem register grids ([stem][frame][88] u8) from one coarse level per stem. */
+  registers(lods: Lod[]): Promise<Uint8Array> {
+    return this.call<Uint8Array>({ op: "registers", lods });
+  }
+
   /** smoothPage in the worker (the input is copied, not transferred). */
   smooth(page: Uint8Array, frames: number, sigmaBins: number, sigmaFrames: number): Promise<Uint8Array> {
     if (sigmaBins < 0.05 && sigmaFrames < 0.05) return Promise.resolve(page);

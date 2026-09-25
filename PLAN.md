@@ -164,9 +164,15 @@ carry the `real` marker and never run in CI.
   Acceptance: highlight stays within one beat — met on Beethoven 5 i (626 played bars map
   1:1; m. 48 beat 2.5 highlighted at 0:30); a 20-min fixture is still to do
 3. Register-distribution views
-- [ ] Per-section/stem pitch-energy histograms over sliding windows (from tiles or notes),
-      register "center of mass" and spread over time, per-family stacks
-- [ ] Bundle table `register_hist` [n_stems, 88, n_windows] (f32) or computed in viewer
+- [x] Register view (R, `view=registers`): whole piece (per group a 10-90 % band + centre
+      line, 2 s smoothing, click to seek) + "now" columns (level per semitone). Groups:
+      section (woodwinds/brass/percussion/keyboards/strings/voices, from names like
+      ranges.yaml) or each stem/part. Sources: stem spectra (coarse LOD >= 0.25 s windows,
+      folded to 88 semitones in the pages worker, power-weighted, dB threshold) or the
+      score's notes. Computed in the viewer (no bundle table): Beethoven 5 i, 23 stems in
+      ~0.3 s. Spectra include overtones (brass centre ~1 octave above the notes); the
+      notes source is the register of the written music
+- [ ] Sound source restricted to fundamentals (reuse the fundamentals mask) as a 3rd option
 4. Scale & playback
 - [x] Streaming playback: WAV mixes play through an AudioWorklet fed with 1 s Range chunks
       ~5 s ahead (sample-accurate cue, starts scheduled 80 ms ahead, underruns = silence,
@@ -186,14 +192,20 @@ carry the `real` marker and never run in CI.
       Open: on the windows-latest runner the Verovio wasm never finished starting inside the
       worker (passes locally with Edge and Playwright's Chromium, and on macOS CI)
 
-- [ ] Cubase + BBC SO Pro sessions (moved from 3A)
-
 ### Phase 3b — Rust core + Tauri desktop
 - [ ] rust/orchspec-core: bundle read/write (docs/bundle-format.md), LOD build, xcorr;
       PyO3 bindings; cross-check against Python writer byte-for-byte
 - [ ] desktop/: Tauri 2 app replacing `orchspec serve` (custom protocol, same CSP),
       Windows + macOS builds
 Acceptance: same bundle opens identically in Tauri on Windows and macOS.
+
+### Phase 3c — Cubase (after the desktop app; decision 2026-09-25)
+- [ ] Cubase + BBC SO Pro session import (moved from 3A): stems + MIDI + MusicXML layout,
+      same session contract as Dorico (docs/dorico-session.md)
+- [ ] Investigate an ARA 2 plugin (Celemony ARA, supported by Cubase/Nuendo) so the
+      desktop app can read tracks and the tempo map directly from the Cubase project
+      instead of exported files. Needs: ARA SDK licence terms (believed Apache-2.0 since the SDK went open source; verify),
+      a VST3/ARA plug-in shell (C++ or Rust), IPC to the Tauri app. Scope before building
 
 ### Phase 4 — realism check
 - [ ] Balance model from measured live-orchestra data (per section level/spectral balance)

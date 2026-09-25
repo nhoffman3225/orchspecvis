@@ -16,6 +16,7 @@
       <header id="bar">
         <button id="play" type="button" title="Play/pause (Space)">▶</button>
         <button id="pianobtn" type="button" title="Full-screen piano view (P); Esc to close">🎹 piano</button>
+        <button id="regbtn" type="button" title="Register distribution by section (R); Esc to close">📊 registers</button>
         <button id="scorebtn" type="button" title="Engraved score (S); Esc to close" hidden>📜 score</button>
         <span id="time">0:00.00 / 0:00.00</span>
         <span id="barbeat"></span>
@@ -119,6 +120,27 @@
           <button id="scoreclose" type="button">✕ close</button>
         </div>
         <div id="score-host"></div>
+      </div>
+      <div id="regview" hidden>
+        <div id="reg-bar">
+          <strong>Registers</strong>
+          <span id="reg-time"></span>
+          <label>from <select id="reg-src">
+            <option value="sound">sound (stem spectra, incl. overtones)</option>
+            <option value="notes">notes (score)</option>
+          </select></label>
+          <label>by <select id="reg-by">
+            <option value="family">section</option>
+            <option value="each">stem / part</option>
+          </select></label>
+          <label title="Levels below this are ignored">threshold
+            <input id="reg-thr" type="range" min="-90" max="-10" step="2" value="-50" />
+            <span id="reg-thrval">-50 dB</span></label>
+          <span id="reg-info" class="hint"></span>
+          <span class="hint">bands: 10–90 % of each group's level · line: centre · click to seek · Esc close</span>
+          <button id="regclose" type="button">✕ close</button>
+        </div>
+        <canvas id="regcanvas"></canvas>
       </div>
       <div id="pianoview" hidden>
         <div id="piano-bar">
