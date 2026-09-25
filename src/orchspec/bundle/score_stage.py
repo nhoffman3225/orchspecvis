@@ -78,6 +78,7 @@ class ScorePlan:
     mix_env: np.ndarray | None = None
     env_frame_sec: float = 0.0
     sr: int = 0
+    onset_device: str | None = None  # torch device for onset envelopes (None: librosa)
     stem_envs: dict[int, np.ndarray] = field(default_factory=dict)  # stem index -> env
     measures: list[ScoreMeasure] = field(default_factory=list)
     log: Callable[[str], None] = lambda _m: None
@@ -88,7 +89,7 @@ class ScorePlan:
 
     def add_stem(self, stem_index: int, y: np.ndarray) -> None:
         if self.coarse is not None and stem_index in self.part_stem.values():
-            self.stem_envs[stem_index] = onset_envelope_fine(y, self.sr)[0]
+            self.stem_envs[stem_index] = onset_envelope_fine(y, self.sr, self.onset_device)[0]
 
     def finalize(self) -> None:
         a = self.alignment
@@ -334,6 +335,7 @@ def prepare_score(
     align: bool = True,
     search: float = 1.5,
     log: Callable[[str], None] = lambda _m: None,
+    onset_device: str | None = None,
 ) -> ScorePlan | None:
     """Parse score/MIDI, match parts to stems, and compute the coarse pitch-aware warp
     from the mix. Call add_stem() per stem, then finalize()."""
@@ -376,7 +378,7 @@ def prepare_score(
             act, spec.hop / spec.sr, cols["midi"], score_on, score_off, prior=preroll, search=search
         )
         coarse, g, conf, method = wr.warp, wr.global_offset, wr.confidence, "warp"
-        mix_env, env_fs = onset_envelope_fine(mono, spec.sr)
+        mix_env, env_fs = onset_envelope_fine(mono, spec.sr, onset_device)
         warnings += wr.warnings
     else:
         g, conf, method = preroll, 0.0, "preroll_only"
@@ -430,4 +432,5 @@ def prepare_score(
         env_frame_sec=env_fs,
         sr=spec.sr,
         log=log,
+        onset_device=onset_device,
     )

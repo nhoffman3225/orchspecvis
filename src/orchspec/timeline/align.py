@@ -12,6 +12,7 @@ from __future__ import annotations
 import bisect
 from collections import Counter
 from dataclasses import dataclass, field
+from typing import Any
 
 import librosa
 import numpy as np
@@ -100,13 +101,22 @@ def align_hop(sr: int) -> int:
     return _pow2(0.003 * sr)
 
 
-def onset_envelope_fine(y: np.ndarray, sr: int) -> tuple[np.ndarray, float]:
+def onset_envelope_fine(
+    y: np.ndarray, sr: int, device: str | None = None
+) -> tuple[np.ndarray, float]:
     """Onset strength with a short (~23 ms) window at a ~3 ms hop, centered frames.
 
     Returns (envelope, frame period in seconds). Short windows keep the spectral-flux lag
     small (measured ~8 ms late on synthetic attacks; see PLAN.md).
+
+    `device` ("cuda", "cpu", "mps"): compute with torch instead of librosa — the same
+    steps (Hann STFT, 64-band Slaney mel, power_to_db with top_db 80, lag-1 flux, mean,
+    lag/centering pad), ~10x faster on CPU threads and far more on a GPU; equal to the
+    librosa result within float32 rounding (tests/test_onsets.py).
     """
     hop = align_hop(sr)
+    if device is not None:
+        return _onset_envelope_torch(y, sr, hop, _pow2(0.023 * sr), device), hop / sr
     env = librosa.onset.onset_strength(
         y=y.astype(np.float32),
         sr=sr,
@@ -116,6 +126,42 @@ def onset_envelope_fine(y: np.ndarray, sr: int) -> tuple[np.ndarray, float]:
         center=True,
     )
     return env.astype(np.float64), hop / sr
+
+
+_MEL_CACHE: dict[tuple[int, int, str], Any] = {}  # torch tensors (torch is optional)
+
+
+def _onset_envelope_torch(y: np.ndarray, sr: int, hop: int, n_fft: int, device: str) -> np.ndarray:
+    """librosa.onset.onset_strength(y, sr, hop_length, n_fft, n_mels=64, center=True) in torch."""
+    import torch  # pyright: ignore[reportMissingImports]  (optional gpu extra)
+
+    dev = torch.device(device)
+    key = (sr, n_fft, str(dev))
+    mel = _MEL_CACHE.get(key)
+    if mel is None:
+        fb = librosa.filters.mel(sr=sr, n_fft=n_fft, n_mels=64)  # Slaney, like librosa's default
+        mel = torch.from_numpy(fb).to(dev)
+        _MEL_CACHE[key] = mel
+    with torch.inference_mode():
+        t = torch.from_numpy(np.ascontiguousarray(y, dtype=np.float32)).to(dev)
+        win = torch.hann_window(n_fft, periodic=True, device=dev)  # scipy "hann", fftbins
+        spec = torch.stft(
+            t,
+            n_fft,
+            hop_length=hop,
+            window=win,
+            center=True,
+            pad_mode="constant",
+            return_complex=True,
+        )
+        power = spec.real.square() + spec.imag.square()  # |X|^2 (librosa power=2)
+        s = mel @ power  # (64, T)
+        db = 10.0 * torch.log10(torch.clamp(s, min=1e-10))  # power_to_db: ref 1.0, amin 1e-10
+        db = torch.maximum(db, db.max() - 80.0)  # top_db
+        flux = torch.clamp(db[:, 1:] - db[:, :-1], min=0.0).mean(dim=0)
+        pad = 1 + n_fft // (2 * hop)  # lag + centering compensation
+        env = torch.nn.functional.pad(flux, (pad, 0))[: db.shape[1]]
+        return env.double().cpu().numpy()
 
 
 KERNEL = np.exp(-0.5 * (np.arange(-3, 4) / 1.0) ** 2)  # onset impulse, +-3 frames

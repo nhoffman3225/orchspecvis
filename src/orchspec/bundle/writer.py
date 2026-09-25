@@ -138,7 +138,9 @@ def _energy_level(spec: CQTSpec, min_seconds: float, n_levels: int) -> int:
 
 def _frame_energy_db(db: np.ndarray, level: int) -> np.ndarray:
     """(n_bins, n_frames) calibrated dB -> total power in dB, mean over 2^level frames."""
-    p = (10.0 ** (db.astype(np.float64) / 10.0)).sum(axis=0)
+    # exp in float32 (4x faster than 10**x in float64), summed in float64
+    lin = np.exp(db.astype(np.float32) * np.float32(np.log(10.0) / 10.0))
+    p = lin.sum(axis=0, dtype=np.float64)
     f = 2**level
     n_out = -(-len(p) // f)
     padded = np.concatenate([p, np.full(n_out * f - len(p), p[-1])])
@@ -231,6 +233,8 @@ def _build(
         align=opts.align,
         search=opts.align_search,
         log=log,
+        # onset envelopes on the CQT's torch device (same result as librosa, much faster)
+        onset_device=str(backend.device) if isinstance(backend, TorchBackend) else None,
     )
     tm.add("score", t0)
 

@@ -124,12 +124,13 @@ def write_pyramid(
 
 def read_level(root: Path, lod: Lod, n_bins: int, encoding: TileEncoding = "gzip") -> np.ndarray:
     """Reassemble one level from its tiles -> (n_frames, n_bins) uint8."""
-    parts = [
-        np.frombuffer(decode_tile((root / t.path).read_bytes(), encoding), dtype=np.uint8).reshape(
-            t.n_frames, n_bins
-        )
-        for t in lod.tiles
-    ]
+
+    def one(t: Tile) -> np.ndarray:
+        raw = decode_tile((root / t.path).read_bytes(), encoding)
+        return np.frombuffer(raw, dtype=np.uint8).reshape(t.n_frames, n_bins)
+
+    # zlib releases the GIL: decode tiles in parallel
+    parts = list(_pool().map(one, lod.tiles)) if encoding == "gzip" else [one(t) for t in lod.tiles]
     return np.concatenate(parts, axis=0)
 
 
