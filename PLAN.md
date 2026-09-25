@@ -148,12 +148,18 @@ carry the `real` marker and never run in CI.
   material within ~22 ms, strong per-part drift NOT resolvable from a mix alone
 ### Phase 3 (cont.) — score view, registers, scale
 2. Engraved score view
-- [ ] Verovio (bundled wasm via Vite; LGPL-3.0, approved 2026-09-24) renders the MusicXML;
-      follows the playhead (page/system turns), highlights sounding notes by part color,
-      click a note/measure -> seek; part filter shared with the piano view
-- [ ] Map Verovio element ids <-> bundle notes (part/staff/voice/measure/beat), incl.
-      repeats (pass number)
-  Acceptance: highlight stays within one beat over a 20-min fixture
+- [x] Verovio 6.3 (bundled wasm, lazily loaded 8 MB chunk; LGPL-3.0) renders the bundle's
+      copy of the MusicXML (`score.score_file`); follows the playhead with page turns and
+      scrolling, highlights sounding notes in part colours, click a note/measure -> seek
+      (the repeat pass nearest the playhead); part filter shared with the other views
+- [x] Sync through measures, not note ids: Verovio's timemap lists measures in playback
+      order with repeats expanded ("-rend2"), aligned to score.measures by number (LCS);
+      sounding notes from the timemap's on/off lists (getElementsAtTime only reports notes
+      near onsets); SVG sanitized before insertion (strict CSP kept)
+- [ ] Verovio in a Web Worker (layout of Beethoven 5 i: ~2 s + 0.8 s timemap on the main
+      thread when the score view first opens); hide-empty-staves option
+  Acceptance: highlight stays within one beat — met on Beethoven 5 i (626 played bars map
+  1:1; m. 48 beat 2.5 highlighted at 0:30); a 20-min fixture is still to do
 3. Register-distribution views
 - [ ] Per-section/stem pitch-energy histograms over sliding windows (from tiles or notes),
       register "center of mass" and spread over time, per-family stacks
@@ -307,6 +313,10 @@ Checked on the first real session (Dorico 5 + NotePerformer 5, Beethoven 5 i, 6:
   (integral of input * exp(-(t-s)/tau) over the last 8 tau), not accumulated during
   playback: identical result for play, seek and scrub. "sound" is normalized to the
   hottest key (40 dB range), "notes" linearly to the hottest key (floor 0.5 tau).
+
+- 2026-09-25: Verovio `svgHtml5` turns element ids into `data-id`; orchspec keeps plain
+  ids. Pages hold whole systems (~3 viewports, adjustPageHeight): a whole movement on one
+  page was a 5.4 MB SVG that stalled the browser.
 
 ## API drift
 
