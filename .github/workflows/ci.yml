@@ -18,7 +18,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [windows-latest, macos-latest]
+        # macOS minutes bill at 10x: PRs run Windows only, pushes to main add macOS
+        os: ${{ fromJSON(github.event_name == 'push' && '["windows-latest", "macos-latest"]' || '["windows-latest"]') }}
     runs-on: ${{ matrix.os }}
     timeout-minutes: 20
     steps:
@@ -80,11 +81,17 @@ jobs:
           uv sync --locked --extra dev
           uv run pytest tests/test_score_bundle.py
 
+      - uses: actions/cache@v6.1.0
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('viewer/package-lock.json') }}
+
       - name: Viewer install
         working-directory: viewer
         run: |
           npm ci
-          npx playwright install --with-deps chromium
+          npx playwright install chromium
+          npx playwright install-deps chromium
 
       - name: Viewer E2E (Playwright; no off-origin requests, score + piano views)
         working-directory: viewer

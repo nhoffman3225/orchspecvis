@@ -53,7 +53,7 @@ initial view; also `style=surface|terrain|fabric`, `smooth=<semitones>`, `gaps=<
 (e.g. `&mode=ensemble&style=terrain&smooth=4&gaps=-45`); with a score also `notes=0`,
 `fund=1`, `fundw=25|50|100` (fundamentals-only band in cents), `harm=<dB>` (overtones
 that loud pass too), `heat=off|sound|notes`, `tau=<s>`, `t=<s>` (start position),
-`view=piano|score|registers`, `regsrc=notes`, `regby=each`, `lookahead=<s>`, `keyh=<x>`, `pitch=<lo>-<hi>` (2D pane MIDI range),
+`view=piano|score|registers`, `regsrc=notes`, `regby=each`, `fps=<n>` (frame-rate cap), `lookahead=<s>`, `keyh=<x>`, `pitch=<lo>-<hi>` (2D pane MIDI range),
 `window=<s>` (one of the window choices). Keys: P piano, S score, Space, arrows, Esc. The cross-language test reads viewer/test-data/py-bundle, written by
 `uv run pytest tests/test_bundle_writer.py` (git-ignored) — run pytest before vitest.
 
