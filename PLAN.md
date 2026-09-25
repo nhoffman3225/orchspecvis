@@ -217,7 +217,11 @@ carry the `real` marker and never run in CI.
 - [x] Local build (2026-09-25): rustup stable + VS 2026 C++ workload; release app 14 MB,
       Beethoven 5 i bundle opens with the first spectrogram page in 130 ms and audio
       ready to stream in 150 ms; checked through WebView2's DevTools port with Playwright
-- [ ] Import sessions from the app (today: `orchspec bundle` CLI, then File › Open)
+- [x] Import sessions from the app (2026-09-25): File › Import Session… / --import runs the
+      analysis CLI as a subprocess (no shell) into Documents/orchspec/bundles with a live
+      progress screen (read-only app/import.json), then opens the bundle. Beethoven 5 i:
+      24 s on main (~10 s with the PR #13 speed-ups). Store-Python AppData redirection
+      found and avoided. Next: bundle the analysis (no Python install) for distribution
 - [ ] macOS build + .dmg in CI (macOS minutes are 10x: on main pushes only)
 - [ ] Desktop release notices: ship the licence texts of the Rust crates compiled into the
       app (generated from `cargo metadata`, like scripts/credits.py) alongside the viewer's

@@ -15,6 +15,14 @@ one local bundle folder.
   app origin is refused.
 - **Opening a bundle**: pass the folder as the first argument, or use File › Open Bundle…
   (Ctrl/Cmd+O; also shown at start). The manifest is validated by orchspec-core first.
+- **Importing a session**: File › Import Session… (Ctrl/Cmd+I), or
+  `orchspec-desktop --import <session folder>`. The app runs the Python analysis CLI
+  (`orchspec bundle … --backend auto`) as a subprocess — argument list, no shell, no
+  console window — into `Documents/orchspec/bundles`, shows its progress (the viewer polls
+  the read-only `app/import.json`), then opens the result. The CLI is `$ORCHSPEC_CLI`, else
+  the checkout's `.venv` found above the executable, else `orchspec` on PATH. (Not under
+  AppData: the Microsoft Store build of Python redirects AppData writes into a private
+  package folder the app cannot see.)
 
 ## Build
 
