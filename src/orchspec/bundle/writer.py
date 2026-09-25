@@ -13,6 +13,7 @@ import shutil
 import stat
 import tempfile
 import time
+from collections import deque
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
@@ -74,6 +75,7 @@ class BundleOptions:
     align_search: float = 1.5  # +- seconds around preroll_sec
     f0: str = "auto"  # auto | yin | pyin | off  (per-stem f0 tracks; auto = only without score)
     parallel: bool = True  # with torch: score + mix features in background threads
+    workers: int = 0  # CPU backend: stems analysed in parallel threads (0 = auto)
 
 
 @dataclass
@@ -256,15 +258,17 @@ def _build(
     # librosa within float32 rounding, much faster); librosa with the librosa backend
     onset_device = str(backend.device) if isinstance(backend, TorchBackend) else None
 
+    def cqt(y_mono: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+        if isinstance(backend, TorchBackend):
+            return backend.calibrated_db_u8(y_mono, spec, db_min, db_max)
+        db = calibrated_db(backend.magnitude(y_mono, spec), spec)
+        return db, np.ascontiguousarray(quantize(db, db_min, db_max).T)
+
     def analyse(y_mono: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
         t0 = time.perf_counter()
-        if isinstance(backend, TorchBackend):
-            db, u8 = backend.calibrated_db_u8(y_mono, spec, db_min, db_max)
-        else:
-            db = calibrated_db(backend.magnitude(y_mono, spec), spec)
-            u8 = np.ascontiguousarray(quantize(db, db_min, db_max).T)
+        out = cqt(y_mono)
         tm.add("cqt", t0)
-        return db, u8
+        return out
 
     # ---- mix
     t0 = time.perf_counter()
@@ -375,11 +379,42 @@ def _build(
         else None
     )
 
-    # read the next stem from disk while this one is analysed
-    loader = ThreadPoolExecutor(max_workers=1)
-    load_next = (
-        loader.submit(lambda s: to_mono(s.load()), inputs.stems[0]) if inputs.stems else None
-    )
+    # Stems: with torch, one device analyses them in order while the next is read from
+    # disk. On the CPU backend, worker threads load and analyse several stems at once (the
+    # FFTs release the GIL) and results are taken in stem order, so the bundle is the same;
+    # at most `workers` stems are in flight (memory).
+    cpu = not isinstance(backend, TorchBackend)
+    workers = (opts.workers or min(4, max(1, (os.cpu_count() or 2) // 2))) if cpu else 1
+    loader = ThreadPoolExecutor(max_workers=workers)
+
+    def stem_job(i: int) -> tuple[np.ndarray | None, np.ndarray, np.ndarray, dict[str, np.ndarray]]:
+        """CPU backend: everything per stem that needs the audio; the audio is dropped."""
+        y = to_mono(inputs.stems[i].load())
+        if y.shape[0] != n_samples:
+            raise ValueError(f"stem {inputs.stems[i].id}: {y.shape[0]} samples != mix {n_samples}")
+        db, u8 = cqt(y)
+        extra: dict[str, np.ndarray] = {}
+        if plan is not None and plan.wants_stem(i):
+            extra["env"] = onset_envelope_fine(y, spec.sr, None)[0]
+        if f0_hz is not None:
+            extra["f0"] = f0_track(y, spec.sr, spec.hop, n_frames, method=f0_mode)
+        return None, db, u8, extra
+
+    def load_job(i: int) -> tuple[np.ndarray | None, np.ndarray, np.ndarray, dict[str, np.ndarray]]:
+        """torch: read only; the device analyses in the loop."""
+        return to_mono(inputs.stems[i].load()), np.empty(0), np.empty(0), {}
+
+    job = stem_job if cpu else load_job
+    pending: deque = deque()
+    submitted = 0
+
+    def top_up() -> None:
+        nonlocal submitted
+        while submitted < len(inputs.stems) and len(pending) < workers:
+            pending.append(loader.submit(job, submitted))
+            submitted += 1
+
+    top_up()
     # level-0 u8 kept for the fundamentals step (instead of reading tiles back), within a
     # memory budget; matched stems only
     keep: dict[int | None, np.ndarray] = {None: mix_u8}
@@ -389,14 +424,13 @@ def _build(
     stem_envs: dict[int, np.ndarray] = {}
     for i, st in enumerate(inputs.stems):
         t0 = time.perf_counter()
-        assert load_next is not None
-        y = load_next.result()
-        if i + 1 < len(inputs.stems):
-            load_next = loader.submit(lambda s: to_mono(s.load()), inputs.stems[i + 1])
-        tm.add("load", t0)
-        if y.shape[0] != n_samples:
-            raise ValueError(f"stem {st.id}: {y.shape[0]} samples != mix {n_samples}")
-        db, u8 = analyse(y)
+        y, db, u8, extra = pending.popleft().result()
+        top_up()
+        tm.add("cqt" if cpu else "load", t0)  # CPU: waiting on the analysis workers
+        if y is not None:  # torch: analyse here
+            if y.shape[0] != n_samples:
+                raise ValueError(f"stem {st.id}: {y.shape[0]} samples != mix {n_samples}")
+            db, u8 = analyse(y)
         t0 = time.perf_counter()
         levels = pyramid(u8, opts.tile_frames)
         prefix = f"tiles/stem-{st.id}"
@@ -410,12 +444,19 @@ def _build(
         assert acc is not None
         acc.add(i, levels)
         energy[i] = _frame_energy_db(db, e_level)
-        if plan is not None:
-            plan.add_stem(i, y)
-        elif overlap and want_envs:
-            stem_envs[i] = onset_envelope_fine(y, spec.sr, onset_device)[0]
-        if f0_hz is not None:
-            f0_hz[i] = f0_track(y, spec.sr, spec.hop, n_frames, method=f0_mode)
+        if y is None:  # CPU: computed by the worker
+            if plan is not None and "env" in extra:
+                plan.add_stem_env(i, extra["env"])
+            if f0_hz is not None:
+                f0_hz[i] = extra["f0"]
+        else:
+            if plan is not None:
+                plan.add_stem(i, y)
+            elif overlap and want_envs:
+                stem_envs[i] = onset_envelope_fine(y, spec.sr, onset_device)[0]
+            if f0_hz is not None:
+                f0_hz[i] = f0_track(y, spec.sr, spec.hop, n_frames, method=f0_mode)
+            del y
         tm.add("tiles", t0)
         stems.append(Stem(id=st.id, index=i, name=st.name, source_file=st.source_file, lods=slods))
         log(f"stem {i + 1}/{len(inputs.stems)}: {st.id}")

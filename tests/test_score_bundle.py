@@ -222,3 +222,27 @@ def test_score_pdf_in_bundle(bundle) -> None:  # type: ignore[no-untyped-def]
     assert [b.number for b in pdf.bars] == ["1", "2", "3", "5", "6", "7"]
     assert (root / pdf.pages[0].path).read_bytes()[1:4] == b"PNG"
     assert all(0 <= b.x0 < b.x1 <= pdf.pages[0].width for b in pdf.bars)
+
+
+def test_cpu_workers_build_equals_single_thread(tmp_path: Path) -> None:
+    """On the CPU backend stems are analysed in parallel threads; results are taken in
+    stem order, so the bundle equals the one-thread build."""
+    sess = fx.make(tmp_path / "score-session")
+    inputs = inputs_from_session(load_session(sess))
+    roots = []
+    for w in (1, 3):
+        out = tmp_path / f"w{w}.bundle"
+        build_bundle(inputs, out, BundleOptions(k=3, tile_frames=256, workers=w))
+        roots.append(out)
+    a, b = roots
+    files = sorted(p.relative_to(a) for p in a.rglob("*") if p.is_file())
+    assert files == sorted(p.relative_to(b) for p in b.rglob("*") if p.is_file())
+    for rel in files:
+        if rel.name == "manifest.json":  # created_at differs
+            ma = Manifest.model_validate_json((a / rel).read_text(encoding="utf-8"))
+            mb = Manifest.model_validate_json((b / rel).read_text(encoding="utf-8"))
+            assert ma.model_copy(update={"created_at": ""}) == mb.model_copy(
+                update={"created_at": ""}
+            )
+        else:
+            assert (a / rel).read_bytes() == (b / rel).read_bytes(), rel
