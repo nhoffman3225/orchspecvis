@@ -28,8 +28,10 @@ against measured live-orchestra balance.
 Runtime: librosa, soundfile, numpy, pyloudnorm, pydantic, typer, fastapi (+ uvicorn as
 its server), pyyaml, defusedxml. Extra `gpu`: torch (cu130 index on non-darwin).
 Extra `dev`: ruff, pyright, pytest, pytest-socket, hypothesis, httpx (FastAPI TestClient).
-Viewer: three, vite, typescript, vitest, eslint (+ typescript-eslint), @types/three.
-Deferred until approved: pyarrow (Parquet side tables), verovio, Playwright.
+Viewer: three, vite, typescript, vitest, eslint (+ typescript-eslint), @types/three,
+@eslint/js, @types/node. Approved 2026-09-24: verovio (LGPL-3.0, bundled wasm, Phase 3
+score view), @playwright/test (dev, E2E). Python additions approved in use: uvicorn, httpx.
+Deferred until approved: pyarrow (Parquet side tables).
 
 ## Phases
 
@@ -119,12 +121,51 @@ time (target < 2 min CUDA) + peak VRAM.
 Acceptance (met 2026-09-24, tests/test_score_bundle.py + viewer screenshots): synthetic MusicXML+MIDI+rendered audio fixture aligns within +-1 frame;
 fundamentals view keeps only the notated fundamentals on a synthetic harmonic fixture.
 
-### Phase 3 — alignment & score view
-- [ ] Verovio (bundled wasm) score rendering, highlight at playhead
-- [ ] MusicXML<->MIDI<->audio alignment (DTW on chroma/CQT where offsets drift)
-- [ ] Register-distribution views (per section/stem pitch histograms over time windows)
-- [ ] Streaming audio playback (AudioWorklet chunks) for 20-min sessions
-Acceptance: highlighting stays within one beat on a 20-min fixture.
+### Phase 3A — Dorico sessions & drift-aware alignment  (branch `phase-3-alignment`)
+Decision 2026-09-24: Dorico + NotePerformer 5 first; Cubase + BBCSO moves after Phase 3.
+Real sessions stay LOCAL (git-ignored session/, tests/fixtures/real/); tests that use them
+carry the `real` marker and never run in CI.
+0. Real-session validation (gate; needs a Dorico + NP5 session in session/, see
+   docs/dorico-session.md):
+- [x] `orchspec report <bundle>`: alignment, pitch agreement/shift, part<->stem matches,
+      notes and weak-fundamental rate per part, warnings (Markdown + JSON)
+- [x] `real`-marked local tests that bundle + report every folder in session/
+- [x] Bundle the Dorico session (Beethoven 5 i, 2026-09-25); assumptions resolved below
+- [x] `orchspec import-dorico`: Dorico 5 export ("<Project> - <Flow>.wav" +
+      "<Project> - <Flow> <Player>.wav") -> session layout via hard links, stems in
+      MusicXML part order
+1. Drift-aware alignment
+- [x] Synthetic drift fixture: 3 % gradual slow-down, +-40 ms rubato (4 s period),
+      per-part latency (+50 ms clarinet, -20 ms piano) — tests/fixtures/make_score_session.py
+- [x] Pitch-aware coarse warp (onset-weighted pitch flux vs note template; sequential
+      anchor tracking) instead of full DTW; per-note onset snapping against each part's
+      OWN stem, 3 passes, adaptive windows; self-calibrated detector lag
+- [x] Per-part latency (reported relative to the typical part) and per-part snap rate
+- [x] Schema v3: `score.alignment.warp`, `.snapped`, `parts[].latency_sec/.snapped`
+- [ ] Missing/extra notes and pickup-bar fixtures; viewer display of alignment quality
+  Acceptance (met 2026-09-25): every note within 10.7 ms (1 frame @ 48 kHz) on the drift
+  fixture with stems (max 5.7 ms, median < 1 ms); mix-only sessions: constant-latency
+  material within ~22 ms, strong per-part drift NOT resolvable from a mix alone
+### Phase 3 (cont.) — score view, registers, scale
+2. Engraved score view
+- [ ] Verovio (bundled wasm via Vite; LGPL-3.0, approved 2026-09-24) renders the MusicXML;
+      follows the playhead (page/system turns), highlights sounding notes by part color,
+      click a note/measure -> seek; part filter shared with the piano view
+- [ ] Map Verovio element ids <-> bundle notes (part/staff/voice/measure/beat), incl.
+      repeats (pass number)
+  Acceptance: highlight stays within one beat over a 20-min fixture
+3. Register-distribution views
+- [ ] Per-section/stem pitch-energy histograms over sliding windows (from tiles or notes),
+      register "center of mass" and spread over time, per-family stacks
+- [ ] Bundle table `register_hist` [n_stems, 88, n_windows] (f32) or computed in viewer
+4. Scale & playback
+- [ ] Streaming playback (AudioWorklet + chunked decode) so 20-min stereo does not need
+      ~460 MB of decoded audio
+- [ ] Compressed tiles (gzip + DecompressionStream) and/or stems from LOD 1 (schema v3)
+- [ ] Viewer page assembly, smoothing, stem sums in a Web Worker
+- [ ] Playwright E2E smoke + network check (@playwright/test approved 2026-09-24)
+
+- [ ] Cubase + BBC SO Pro sessions (moved from 3A)
 
 ### Phase 3b — Rust core + Tauri desktop
 - [ ] rust/orchspec-core: bundle read/write (docs/bundle-format.md), LOD build, xcorr;
@@ -147,6 +188,22 @@ Acceptance: synthetic "overbalanced brass" fixture is flagged.
       the 2D pane) or on the GPU (texture array), AudioWorklet streaming playback
 
 ## Unverified assumptions
+
+Checked on the first real session (Dorico 5 + NotePerformer 5, Beethoven 5 i, 6:13,
+18 parts / 23 player stems, 2026-09-25; `orchspec report`):
+- CONFIRMED: Dorico MIDI export is at sounding pitch (99.9 % of MusicXML notes match).
+- CONFIRMED: MusicXML transposition handling (Bb clarinets, Eb/C horns, C trumpets): every
+  note inside its instrument's sounding range.
+- CONFIRMED: MIDI export unrolls repeats like the MusicXML (626 played bars = 502 +
+  124-bar exposition repeat; pitch agreement would collapse otherwise).
+- CONFIRMED: per-player NotePerformer stems are dry/separated (>= 40 dB, strings 40-46 dB).
+- REVISED: time origin — the audio export starts ~0.51 s before score beat 1 (not ~25 ms);
+  measured automatically, preroll_sec can stay 0. Part latencies vs the common warp
+  -29..+18 ms (flutes/strings early, horns/trumpets late).
+- NEW: weak fundamentals are common in NotePerformer's bassoons (30-51 % of notes),
+  2nd trumpet (43 %), viola (35 %), 2nd horn (26 %).
+- Players absent from a flow (piccolo, trombones, contrabassoon in mvt i) export silent
+  stems with no score part; they are kept but unmatched.
 
 - (Phase 2) MusicXML `<pitch>` is written pitch and `<octave-shift>` is display-only;
   sounding = written + chromatic + 12*octave-change; `<double>` sounds an extra octave.

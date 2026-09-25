@@ -22,6 +22,9 @@ uv run orchspec bundle <input.wav | session_dir> -o out/<name>.bundle [--k 3] [-
 uv run orchspec serve out/<name>.bundle          # 127.0.0.1, random port, prints tokenized URL
 uv run orchspec session-template [session_dir]   # print (or write) a render.yaml template
 uv run orchspec validate <session_dir | file.wav>
+uv run orchspec import-dorico "session/<name>" [--dry-run]   # Dorico export -> session layout
+uv run orchspec report out/<name>.bundle     # assumption checks -> report.md/.json
+uv run pytest -m real -s                     # LOCAL ONLY: bundle+report every session/ folder
 uv run python tests/fixtures/make_demo_session.py  # 30 s, 4-stem demo in session/demo
 uv run python -m tests.fixtures.make_score_session  # score+MIDI+stems demo in session/score-demo
 uv run orchspec bundle <session> -o out/ [--offset S] [--no-align] [--f0 auto|yin|pyin|off]
@@ -60,7 +63,9 @@ src/orchspec/
   dsp/              cqt.py (CQTSpec + backends), tiles.py, features.py
   bundle/           schema.py (pydantic manifest v1)
   score/            musicxml.py (safe parser), repeats.py, match.py (part<->stem), ranges.py
-  timeline/         midi.py (bounded SMF reader), align.py (tempo maps, offset xcorr)
+  timeline/         midi.py (bounded SMF reader), align.py (tempo maps, pitch-aware warp,
+                    per-stem onset snapping, detector self-calibration)
+  io/dorico.py      Dorico export importer; report.py: `orchspec report`
   dsp/fundamentals.py  per-note fundamental level/weak flag, yin/pyin f0 tracks
   bundle/score_stage.py  score/MIDI -> audio-timed notes table for the bundle
   server.py         read-only FastAPI for `orchspec serve`

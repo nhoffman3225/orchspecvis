@@ -98,5 +98,13 @@ def test_name_matching() -> None:
         ["Violin I", "Horn in F 1", "Timpani"], ["03_Timp", "01_Violins I", "02_Horn 1"]
     )
     assert [(x.stem_index, x.method) for x in m] == [(1, "name"), (2, "name"), (0, "order")]
+    # Dorico spellings: key in parentheses, instrument changes joined with "&"
+    assert normalize("Clarinet (B Flat) 1") == normalize("Clarinet (Bb) 1") == "clarinet 1"
+    assert normalize("Horn (E♭) 2") == "horn 2"
+    m3 = match_parts_to_stems(
+        ["Horn (E Flat) 1", "Horn (E Flat) 2", "Trumpet (C) 1"],
+        ["Trumpet (C) 1", "Horn (Eb) 2 & Horn (C) 2", "Horn (Eb) 1 & Horn (C) 1"],
+    )
+    assert [x.stem_index for x in m3] == [2, 1, 0]
     m2 = match_parts_to_stems(["Flute", "Oboe"], ["01_Tuba"])
     assert [x.method for x in m2] == ["none", "none"]

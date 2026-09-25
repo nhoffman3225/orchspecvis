@@ -1,4 +1,4 @@
-# Session bundle format — schema version 2
+# Session bundle format — schema version 3
 
 A bundle is a directory (conventionally `<name>.bundle/`). It is the only contract
 between the analysis core and any viewer. This document is normative; the reference
@@ -112,13 +112,22 @@ are **audio seconds**; `alignment.offset_sec` records how score/MIDI time was sh
 | `f0_db` | measured level at the fundamental (dB re full-scale sine), from the part's stem when matched, else the mix |
 | `f0_ok` | 1.0 when the fundamental is within 12 dB of the strongest of harmonics 2-4 and above -80 dB, else 0.0 (weak/missing fundamental) |
 
-Readers must accept schema_version 1 (no score) and 2.
+Schema v3 adds, all optional:
+- `score.alignment.warp`: `[[score_s, audio_s], ...]`, monotonic, the common
+  score/MIDI-seconds -> audio-seconds map (method `warp`); outside its range it continues
+  with the end slope. Each part's notes additionally carry that part's latency.
+- `score.alignment.snapped`: fraction of notes whose onset was snapped to an audio onset.
+- `score.parts[].latency_sec` (seconds, relative to the typical part) and
+  `score.parts[].snapped` (fraction).
+Note times in the notes table are final audio times either way.
+
+Readers must accept schema_version 1 (no score), 2 and 3.
 
 ## manifest.json fields
 
 | field | type | notes |
 | --- | --- | --- |
-| `schema_version` | int | `2` (`1` still accepted) |
+| `schema_version` | int | `3` (`1`, `2` still accepted) |
 | `created_by` | string | e.g. `orchspec 0.1.0` |
 | `created_at` | string | ISO 8601 UTC |
 | `sr`, `hop`, `n_samples` | int | mix sample rate, CQT hop, mix length |

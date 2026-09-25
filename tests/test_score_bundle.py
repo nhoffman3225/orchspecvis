@@ -38,7 +38,7 @@ def _notes(root: Path, m: Manifest) -> dict[str, np.ndarray]:
 def test_manifest_v2_score_section(bundle) -> None:  # type: ignore[no-untyped-def]
     root, _ = bundle
     m2 = Manifest.model_validate_json((root / "manifest.json").read_text(encoding="utf-8"))
-    assert m2.schema_version == 2 and m2.score is not None
+    assert m2.schema_version == 3 and m2.score is not None
     s = m2.score
     assert s.kind == "musicxml" and s.source_files == ["score.musicxml", "render.mid"]
     assert [p.stem_match for p in s.parts] == ["name"] * 4
@@ -46,22 +46,54 @@ def test_manifest_v2_score_section(bundle) -> None:  # type: ignore[no-untyped-d
     assert [p.range_id for p in s.parts] == ["flute", "clarinet_bb", "double_bass", "piano"]
     assert (s.parts[2].range_low, s.parts[2].range_high) == (24, 67)
     assert [x.number for x in s.measures] == ["1", "2", "3", "2", "4", "5"]
-    assert s.alignment.method == "xcorr" and s.alignment.time_source == "midi"
+    assert s.alignment.method == "warp" and s.alignment.time_source == "midi"
+    assert s.alignment.snapped == 1.0 and len(s.alignment.warp) > 5
     assert s.alignment.pitch_agreement == 1.0
     assert s.notes.n == len(fx.truth_notes())
 
 
+FRAME_48K = 512 / 48_000  # PLAN acceptance: +-1 frame at hop 512 @ 48 kHz
+
+
+def _check_notes(root: Path, m: Manifest, drift) -> None:  # type: ignore[no-untyped-def]
+    cols = _notes(root, m)
+    for t in fx.audio_notes(drift):
+        cand = np.flatnonzero((cols["part"] == t["part"]) & (cols["midi"] == t["midi"]))
+        i = cand[np.argmin(np.abs(cols["onset_s"][cand] - t["audio_on"]))]
+        assert abs(cols["onset_s"][i] - t["audio_on"]) < FRAME_48K, (t, cols["onset_s"][i])
+        assert abs(cols["offset_s"][i] - t["audio_off"]) < 3 * FRAME_48K, t
+
+
 def test_every_note_within_one_frame(bundle) -> None:  # type: ignore[no-untyped-def]
     root, m = bundle
-    cols = _notes(root, m)
-    frame = m.hop / m.sr
-    truth = sorted(fx.truth_notes(), key=lambda t: (t["onset_s"], t["part"], t["midi"]))
-    order = np.lexsort((cols["midi"], cols["part"], cols["onset_s"]))
-    for t, i in zip(truth, order, strict=True):
-        assert cols["part"][i] == t["part"] and cols["midi"][i] == t["midi"]
-        assert abs(cols["onset_s"][i] - (t["onset_s"] + fx.OFFSET)) < frame
-        assert abs(cols["offset_s"][i] - (t["offset_s"] + fx.OFFSET)) < frame
-    assert abs(m.score.alignment.offset_sec - fx.OFFSET) < frame  # type: ignore[union-attr]
+    _check_notes(root, m, None)
+
+
+@pytest.fixture(scope="module")
+def drift_bundle(tmp_path_factory: pytest.TempPathFactory) -> tuple[Path, Manifest]:
+    sess = fx.make(tmp_path_factory.mktemp("sess") / "drift-session", drift=fx.DRIFT)
+    out = tmp_path_factory.mktemp("out") / "drift.bundle"
+    rep = build_bundle(
+        inputs_from_session(load_session(sess)), out, BundleOptions(k=3, tile_frames=256)
+    )
+    return out, rep.manifest
+
+
+def test_drift_every_note_within_one_frame(drift_bundle) -> None:  # type: ignore[no-untyped-def]
+    """Acceptance (Phase 3A): gradual slow-down, +-40 ms rubato and per-part latency."""
+    root, m = drift_bundle
+    _check_notes(root, m, fx.DRIFT)
+
+
+def test_drift_part_latency(drift_bundle) -> None:  # type: ignore[no-untyped-def]
+    _, m = drift_bundle
+    assert m.score is not None
+    lat = [p.latency_sec for p in m.score.parts]
+    truth = fx.DRIFT.part_latency
+    # reported relative to the typical part (median), so compare differences
+    for i in range(len(truth)):
+        assert lat[i] is not None
+        assert (lat[i] - lat[0]) == pytest.approx(truth[i] - truth[0], abs=0.006), lat
 
 
 def test_measures_in_audio_seconds(bundle) -> None:  # type: ignore[no-untyped-def]
@@ -106,3 +138,35 @@ def test_manual_offset_and_f0_tracks_without_score(tmp_path: Path) -> None:
 
 def m_sr(rep) -> int:  # type: ignore[no-untyped-def]
     return rep.manifest.sr
+
+
+def test_report_on_synthetic_session(bundle, tmp_path: Path) -> None:  # type: ignore[no-untyped-def]
+    from orchspec.report import build_report, to_markdown
+
+    root, _ = bundle
+    rep = build_report(root)
+    status = {c.name: c.status for c in rep.checks}
+    assert status["midi_sounding_pitch"] == "PASS"
+    assert status["time_origin"] == "PASS"
+    assert status["notes_inside_audio"] == "PASS"
+    assert status["notes_in_instrument_range"] == "PASS"
+    assert status["stem_separation"] == "PASS"  # synthetic stems are perfectly dry
+    bass = next(r for r in rep.parts if r.name == "Double Bass")
+    assert bass.weak_f0_pct == 100 and bass.stem_match == "name"
+    assert all(r.weak_f0_pct == 0 for r in rep.parts if r.name != "Double Bass")
+    md = to_markdown(rep)
+    assert "| midi_sounding_pitch | PASS |" in md and "Double Bass" in md
+
+
+def test_cli_report(bundle, tmp_path: Path) -> None:  # type: ignore[no-untyped-def]
+    from typer.testing import CliRunner
+
+    from orchspec.cli import app
+
+    root, _ = bundle
+    copy = tmp_path / "copy.bundle"
+    shutil.copytree(root, copy)
+    r = CliRunner().invoke(app, ["report", str(copy)])
+    assert r.exit_code == 0, r.output
+    assert "[PASS] midi_sounding_pitch" in r.output
+    assert (copy / "report.md").is_file() and (copy / "report.json").is_file()

@@ -19,14 +19,19 @@ from orchspec.bundle.schema import (
 )
 from orchspec.dsp.cqt import CQTSpec
 from orchspec.dsp.fundamentals import note_fundamental_levels
+from orchspec.dsp.tiles import dequantize, read_level
 from orchspec.score.match import match_parts_to_stems
 from orchspec.score.musicxml import parse_musicxml
 from orchspec.score.ranges import find_range
 from orchspec.timeline.align import (
-    estimate_offset,
+    Warp,
+    align_notes,
+    detector_bias,
+    estimate_warp,
     onset_envelope_fine,
     pitch_agreement,
     quarter_clock,
+    semitone_activity,
 )
 from orchspec.timeline.midi import MidiFile, parse_midi
 
@@ -43,41 +48,134 @@ class PartMeta:
     transpose_octave: int = 0
 
 
-AlignMethod = Literal["xcorr", "manual", "preroll_only"]
+AlignMethod = Literal["warp", "xcorr", "manual", "preroll_only"]
 
 
 @dataclass
 class ScorePlan:
+    """Score/MIDI notes on their way into the bundle.
+
+    Created after the mix is analysed (coarse, pitch-aware warp); stems add their onset
+    envelopes while they are analysed; finalize() computes onset-accurate times per note
+    (snapping each part to its own stem); fundamentals are then measured from the written
+    tiles, so no stem CQT has to stay in memory.
+    """
+
     kind: Literal["musicxml", "midi"]
     source_files: list[str]
     parts: list[ScorePart]
-    measures: list[ScoreMeasure]
+    measure_src: list[tuple[str, float, float, int, int, int]]  # number, start, end (score s)
     alignment: Alignment
-    cols: dict[str, np.ndarray]  # NOTE_COLUMNS -> float arrays (audio seconds)
+    cols: dict[str, np.ndarray]  # NOTE_COLUMNS; onset_s/offset_s become audio seconds
+    score_on: np.ndarray  # score/MIDI seconds per note
+    score_off: np.ndarray
     part_stem: dict[int, int] = field(default_factory=dict)  # part index -> stem index
+    coarse: Warp | None = None  # None -> constant offset (manual / preroll / --no-align)
+    mix_env: np.ndarray | None = None
+    env_frame_sec: float = 0.0
+    sr: int = 0
+    stem_envs: dict[int, np.ndarray] = field(default_factory=dict)  # stem index -> env
+    measures: list[ScoreMeasure] = field(default_factory=list)
+    log: Callable[[str], None] = lambda _m: None
 
     @property
     def n(self) -> int:
         return len(self.cols["midi"])
 
-    def measure_fundamentals(self, db: np.ndarray, spec: CQTSpec, stem_index: int | None) -> None:
-        """Fill f0_db / f0_ok for notes of parts matched to `stem_index`, or for unmatched
-        parts when stem_index is None (measured on the mix)."""
-        parts = (
-            [p for p, s in self.part_stem.items() if s == stem_index]
-            if stem_index is not None
-            else [p.index for p in self.parts if p.index not in self.part_stem]
-        )
-        if not parts:
-            return
-        sel = np.isin(self.cols["part"].astype(np.int64), parts)
-        if not sel.any():
-            return
-        lvl, ok = note_fundamental_levels(
-            db, spec, self.cols["midi"][sel], self.cols["onset_s"][sel], self.cols["offset_s"][sel]
-        )
-        self.cols["f0_db"][sel] = lvl
-        self.cols["f0_ok"][sel] = ok
+    def add_stem(self, stem_index: int, y: np.ndarray) -> None:
+        if self.coarse is not None and stem_index in self.part_stem.values():
+            self.stem_envs[stem_index] = onset_envelope_fine(y, self.sr)[0]
+
+    def finalize(self) -> None:
+        a = self.alignment
+        if self.coarse is None:
+            off = a.offset_sec
+            self.cols["onset_s"] = self.score_on + off
+            self.cols["offset_s"] = self.score_off + off
+            warp = Warp(np.array([0.0]), np.array([off]))
+        else:
+            assert self.mix_env is not None
+            envs = {p: self.stem_envs[s] for p, s in self.part_stem.items() if s in self.stem_envs}
+            na = align_notes(
+                self.coarse,
+                self.cols["part"].astype(np.int64),
+                self.score_on,
+                self.score_off,
+                envs,
+                self.mix_env,
+                self.env_frame_sec,
+                bias=detector_bias(self.sr),
+            )
+            self.cols["onset_s"] = na.onsets
+            self.cols["offset_s"] = na.offsets
+            warp = na.warp
+            self.parts = [
+                p.model_copy(
+                    update={
+                        "latency_sec": na.latency.get(p.index),
+                        "snapped": na.part_snapped.get(p.index),
+                    }
+                )
+                for p in self.parts
+            ]
+            self.alignment = a.model_copy(
+                update={
+                    "warp": warp.pairs(),
+                    "snapped": na.snapped,
+                    "offset_sec": float(warp(0.0)),
+                }
+            )
+            lat = ", ".join(
+                f"{p.name} {1000 * (p.latency_sec or 0):+.0f} ms"
+                for p in self.parts
+                if p.latency_sec is not None
+            )
+            self.log(
+                f"alignment: warp over {len(warp.src)} events, {na.snapped:.0%} of notes "
+                f"snapped to onsets; part latency: {lat}"
+            )
+        self.measures = [
+            ScoreMeasure(
+                play_index=i,
+                number=num,
+                start_s=float(warp(st)),
+                end_s=float(warp(en)),
+                beats=bt,
+                beat_type=btt,
+                pass_no=pn,
+            )
+            for i, (num, st, en, bt, btt, pn) in enumerate(self.measure_src)
+        ]
+
+    def measure_fundamentals_from_tiles(
+        self,
+        root: Path,
+        spec: CQTSpec,
+        mix_lod0: object,
+        stem_lod0: dict[int, object],
+        db_min: float,
+        db_max: float,
+    ) -> None:
+        """f0_db / f0_ok per note, from the part's stem tiles (mix tiles when unmatched)."""
+        groups: dict[int | None, list[int]] = {}
+        for p in self.parts:
+            s = self.part_stem.get(p.index)
+            groups.setdefault(s if s in stem_lod0 else None, []).append(p.index)
+        for s, parts in groups.items():
+            sel = np.isin(self.cols["part"].astype(np.int64), parts)
+            if not sel.any():
+                continue
+            lod = stem_lod0[s] if s is not None else mix_lod0
+            db = dequantize(read_level(root, lod, spec.n_bins), db_min, db_max).T  # type: ignore[arg-type]
+            lvl, ok = note_fundamental_levels(
+                db,
+                spec,
+                self.cols["midi"][sel],
+                self.cols["onset_s"][sel],
+                self.cols["offset_s"][sel],
+            )
+            self.cols["f0_db"][sel] = lvl
+            self.cols["f0_ok"][sel] = ok
 
     def write(self, root: Path, rel: str = "score/notes.f32") -> ScoreInfo:
         (root / rel).parent.mkdir(parents=True, exist_ok=True)
@@ -90,7 +188,7 @@ class ScorePlan:
         return ScoreInfo(
             kind=self.kind,
             source_files=self.source_files,
-            parts=self.parts,  # type: ignore[arg-type]
+            parts=self.parts,
             measures=self.measures,
             alignment=self.alignment,
             notes=NotesTable(path=rel, n=self.n, columns=list(NOTE_COLUMNS)),
@@ -205,7 +303,8 @@ def prepare_score(
     score_path: Path | None,
     midi_path: Path | None,
     mono: np.ndarray,
-    sr: int,
+    mix_db: np.ndarray,
+    spec: CQTSpec,
     preroll: float,
     stem_names: list[str],
     stem_ids: list[str],
@@ -214,6 +313,8 @@ def prepare_score(
     search: float = 1.5,
     log: Callable[[str], None] = lambda _m: None,
 ) -> ScorePlan | None:
+    """Parse score/MIDI, match parts to stems, and compute the coarse pitch-aware warp
+    from the mix. Call add_stem() per stem, then finalize()."""
     if score_path is None and midi_path is None:
         return None
     midi = parse_midi(midi_path) if midi_path is not None else None
@@ -240,25 +341,31 @@ def prepare_score(
             if check.shift_mode is not None
             else f"only {check.agreement:.0%} of MusicXML notes match render.mid"
         )
+    score_on = np.asarray(cols["onset_s"], dtype=np.float64).copy()
+    score_off = np.asarray(cols["offset_s"], dtype=np.float64).copy()
+    coarse: Warp | None = None
+    mix_env: np.ndarray | None = None
+    env_fs = 0.0
     if offset is not None:
-        est_offset, conf, method = offset, 1.0, "manual"
-    elif align and len(cols["onset_s"]):
-        env, fsec = onset_envelope_fine(mono, sr)
-        est = estimate_offset(env, fsec, np.asarray(cols["onset_s"]), prior=preroll, search=search)
-        est_offset, conf, method = est.offset_sec, est.confidence, est.method
-        warnings += est.warnings
+        g, conf, method = offset, 1.0, "manual"
+    elif align and len(score_on):
+        act = semitone_activity(mix_db, spec.k)
+        wr = estimate_warp(
+            act, spec.hop / spec.sr, cols["midi"], score_on, score_off, prior=preroll, search=search
+        )
+        coarse, g, conf, method = wr.warp, wr.global_offset, wr.confidence, "warp"
+        mix_env, env_fs = onset_envelope_fine(mono, spec.sr)
+        warnings += wr.warnings
     else:
-        est_offset, conf, method = preroll, 0.0, "preroll_only"
+        g, conf, method = preroll, 0.0, "preroll_only"
     log(
-        f"alignment: offset {est_offset:.3f} s ({method}, preroll {preroll:.3f} s, "
+        f"alignment: global offset {g:.3f} s ({method}, preroll {preroll:.3f} s, "
         f"confidence {conf:.2f})"
     )
     for w in warnings:
         log(f"warning: {w}")
 
-    cols["onset_s"] = cols["onset_s"] + est_offset
-    cols["offset_s"] = cols["offset_s"] + est_offset
-    cols["f0_db"][:] = -120.0  # filled by measure_fundamentals
+    cols["f0_db"][:] = -120.0  # filled by measure_fundamentals_from_tiles
     matches = match_parts_to_stems([p.name for p in parts], stem_names)
     part_models = []
     part_stem: dict[int, int] = {}
@@ -275,24 +382,12 @@ def prepare_score(
                 }
             )
         )
-    measures_m = [
-        ScoreMeasure(
-            play_index=i,
-            number=num,
-            start_s=a + est_offset,
-            end_s=z + est_offset,
-            beats=b,
-            beat_type=bt,
-            pass_no=pn,
-        )
-        for i, (num, a, z, b, bt, pn) in enumerate(measures)
-    ]
     alignment = Alignment(
         method=cast(AlignMethod, method),
-        offset_sec=est_offset,
-        preroll_sec=preroll,  # type: ignore[arg-type]
+        offset_sec=g,
+        preroll_sec=preroll,
         confidence=conf,
-        time_source=source,  # type: ignore[arg-type]
+        time_source=cast(Literal["midi", "score_tempo"], source),
         pitch_agreement=None if check is None else check.agreement,
         pitch_shift_mode=None if check is None else check.shift_mode,
         warnings=warnings,
@@ -301,8 +396,15 @@ def prepare_score(
         kind=kind,
         source_files=files,
         parts=part_models,
-        measures=measures_m,
+        measure_src=measures,
         alignment=alignment,
         cols=cols,
+        score_on=score_on,
+        score_off=score_off,
         part_stem=part_stem,
+        coarse=coarse,
+        mix_env=mix_env,
+        env_frame_sec=env_fs,
+        sr=spec.sr,
+        log=log,
     )
