@@ -137,7 +137,15 @@ pub fn find_cli(start: &Path, env: Option<&str>, resources: Option<&Path>) -> Cl
     Cli::exe(PathBuf::from(if cfg!(windows) { "orchspec.exe" } else { "orchspec" }))
 }
 
-/// A session folder must contain mix.wav (docs: session contract).
+const AUDIO: &[&str] = &["wav", "flac", "aif", "aiff"]; // io/audio.py AUDIO_SUFFIXES
+
+fn is_audio(p: &Path) -> bool {
+    p.is_file() && p.extension().is_some_and(|e| AUDIO.iter().any(|a| e.eq_ignore_ascii_case(a)))
+}
+
+/// A session folder has a mix (mix.wav) or a stems/ folder of audio files (the analysis
+/// then sums the stems into the mix; docs: session contract).
 pub fn looks_like_session(dir: &Path) -> bool {
     dir.join("mix.wav").is_file()
+        || std::fs::read_dir(dir.join("stems")).is_ok_and(|rd| rd.flatten().any(|e| is_audio(&e.path())))
 }
