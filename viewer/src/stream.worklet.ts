@@ -14,7 +14,7 @@ declare class AudioWorkletProcessor {
 declare function registerProcessor(name: string, ctor: new () => AudioWorkletProcessor): void;
 
 export type StreamMessage =
-  | { type: "cue"; gen: number; srcFrame: number; ctxFrame: number }
+  | { type: "cue"; gen: number; srcFrame: number; ctxFrame: number; endFrame: number }
   | { type: "stop"; gen: number }
   | ({ type: "chunk" } & Chunk);
 
@@ -38,7 +38,7 @@ class StreamProcessor extends AudioWorkletProcessor {
       this.feeder = ev.data.feeder;
       this.feeder.onmessage = (e: MessageEvent<StreamMessage>) => {
         const m = e.data;
-        if (m.type === "cue") this.q.cue(m.gen, m.srcFrame, m.ctxFrame);
+        if (m.type === "cue") this.q.cue(m.gen, m.srcFrame, m.ctxFrame, m.endFrame);
         else if (m.type === "stop") this.q.stop(m.gen);
         else this.q.push(m);
       };
