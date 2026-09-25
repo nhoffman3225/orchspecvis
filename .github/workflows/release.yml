@@ -73,7 +73,11 @@ jobs:
         shell: bash
         run: |
           mkdir -p dist
-          v="${GITHUB_REF_NAME#v}"
+          # tag v0.2.0 -> 0.2.0; PRs and manual runs -> dev-<commit>
+          case "$GITHUB_REF" in
+            refs/tags/v*) v="${GITHUB_REF_NAME#v}" ;;
+            *) v="dev-${GITHUB_SHA::7}" ;;
+          esac
           for f in target/release/bundle/nsis/*-setup.exe target/release/bundle/dmg/*.dmg; do
             [ -f "$f" ] || continue
             ext="${f##*.}"
