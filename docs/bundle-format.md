@@ -132,14 +132,25 @@ Schema v3 adds, all optional:
   a played measure comes from (repeats undone).
 Note times in the notes table are final audio times either way.
 
-Schema v4 adds `tile_encoding` (see Spectrogram tiles). Readers must accept
-schema_version 1 (no score), 2, 3 and 4; `tile_encoding` other than `raw` requires v4.
+Schema v4 adds `tile_encoding` (see Spectrogram tiles).
+
+Schema v5 adds `score.reductions` (optional list, written when a MusicXML score is
+given): engravable proofreading reductions made by `score/reduce.py` — `mode` `chords`
+(one chord per bar: every distinct pitch in the bar, all parts on one grand staff, no
+rhythm or ties), `section-chords` (the same per section), `tutti` (full rhythm, voices
+and ties, one grand staff) or `sections` (full rhythm per section), `musicxml`
+(the reduction, concert pitch with the score's spelling, same bars and repeats as the
+score) and `map` (JSON: `notes` maps each reduced note's `id` to `parts` (part indices),
+`midi`, `name` and `group`; plus `groups` and `parts` names).
+
+Readers must accept schema_version 1 (no score) to 5; `tile_encoding` other than `raw`
+requires v4, `score.reductions` requires v5.
 
 ## manifest.json fields
 
 | field | type | notes |
 | --- | --- | --- |
-| `schema_version` | int | `4` (`1`, `2`, `3` still accepted) |
+| `schema_version` | int | `5` (`1` to `4` still accepted) |
 | `created_by` | string | e.g. `orchspec 0.1.0` |
 | `created_at` | string | ISO 8601 UTC |
 | `sr`, `hop`, `n_samples` | int | mix sample rate, CQT hop, mix length |

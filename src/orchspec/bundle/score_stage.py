@@ -14,6 +14,7 @@ from orchspec.bundle.schema import (
     NOTE_COLUMNS,
     Alignment,
     NotesTable,
+    Reduction,
     ScoreInfo,
     ScoreMeasure,
     ScorePart,
@@ -25,6 +26,7 @@ from orchspec.dsp.tiles import dequantize, read_level
 from orchspec.score.match import match_parts_to_stems
 from orchspec.score.musicxml import parse_musicxml
 from orchspec.score.ranges import find_range
+from orchspec.score.reduce import write_reductions
 from orchspec.timeline.align import (
     Warp,
     align_notes,
@@ -216,6 +218,15 @@ class ScorePlan:
             else np.zeros((len(NOTE_COLUMNS), 0), "<f4")
         )
         (root / rel).write_bytes(np.ascontiguousarray(table, dtype="<f4").tobytes())
+        reductions: list[Reduction] = []
+        if self.score_path is not None:
+            try:  # a proofreading aid: never fail the bundle over it
+                reductions = [
+                    Reduction(mode=mode, musicxml=x, map=j)  # type: ignore[arg-type]
+                    for mode, x, j in write_reductions(self.score_path, root)
+                ]
+            except Exception as e:
+                self.log(f"warning: score reduction skipped ({e})")
         return ScoreInfo(
             kind=self.kind,
             source_files=self.source_files,
@@ -224,6 +235,7 @@ class ScorePlan:
             alignment=self.alignment,
             notes=NotesTable(path=rel, n=self.n, columns=list(NOTE_COLUMNS)),
             score_file=score_file,
+            reductions=reductions,
         )
 
 

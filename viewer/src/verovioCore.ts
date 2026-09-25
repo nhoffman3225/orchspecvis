@@ -62,10 +62,10 @@ export function layout(tk: VerovioToolkit, o: LayoutOptions, data?: string | Arr
         page = tk.getPageWithElement(nid);
         pageOf.set(nid, page);
       }
-      measures.push({ id: e.measureOn, n: tk.getElementAttr(nid).n ?? "", ms: e.tstamp, page });
+      measures.push({ id: e.measureOn, n: tk.getElementAttr(nid).n ?? "", ms: e.tstamp, q: e.qstamp, page });
     }
     if (e.on?.length || e.off?.length) {
-      events.push({ tstamp: e.tstamp, on: e.on?.map(notatedId), off: e.off?.map(notatedId) });
+      events.push({ tstamp: e.tstamp, qstamp: e.qstamp, on: e.on?.map(notatedId), off: e.off?.map(notatedId) });
     }
   }
   return {

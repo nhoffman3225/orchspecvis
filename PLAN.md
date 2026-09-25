@@ -184,6 +184,18 @@ carry the `real` marker and never run in CI.
       ~0.3 s. Spectra include overtones (brass centre ~1 octave above the notes); the
       notes source is the register of the written music
 - [ ] Sound source restricted to fundamentals (reuse the fundamentals mask) as a 3rd option
+- [x] Tutti proofreading (2026-09-25): schema v5 `score.reductions` written by
+      score/reduce.py — concert pitch in the score's own spelling (each part's <transpose>
+      applied), bars/keys/repeats kept: one chord per bar (default; no rhythm or ties) and
+      per section, plus full-rhythm reductions (voices by rhythm, unisons merged). Engraved
+      by Verovio in the tutti view (T), coloured by section or part (darkened to ink);
+      click a chord/bar, Alt+click same beat position, drag a box, Shift adds; the
+      selection condenses into one chord and its pitch-class set (stemless scale, most
+      common spelling, ascending from the lowest note) plus pitches with their parts and a
+      keyboard strip. The canvas reduction remains for MIDI-only bundles. Dorico 6.2
+      MusicXML export writes 18 separate one-staff parts (no condensing information)
+- [ ] PDF import (Dorico condensed layout as page images): needs pdf.js (approval) and a
+      bar->page-position map (manual anchors or barline detection)
 4. Scale & playback
 - [x] Streaming playback: WAV mixes play through an AudioWorklet fed with 1 s Range chunks
       ~5 s ahead (sample-accurate cue, starts scheduled 80 ms ahead, underruns = silence,

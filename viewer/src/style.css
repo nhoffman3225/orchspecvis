@@ -74,25 +74,25 @@ html, body { margin: 0; height: 100%; background: var(--bg); color: var(--fg); }
   border-radius: 4px; font: inherit; padding: 2px 8px; }
 #score-bar .hint:last-of-type { margin-left: auto; }
 #score-time { color: #e6c07b; font-variant-numeric: tabular-nums; min-width: 220px; }
-#score-host {
+:is(#score-host, #tutti-score) {
   position: relative;
   overflow: auto; background: #f3efe6; color: #1b1b1b; padding: 12px; min-height: 0;
   cursor: pointer;
 }
 /* Verovio's own <style> is stripped (CSP); these are its rules, scoped here */
-#score-host svg { display: block; margin: 0 auto; color: #1b1b1b; fill: #1b1b1b; }
-#score-host g.ending, #score-host g.fing, #score-host g.reh, #score-host g.tempo { font-weight: bold; }
-#score-host g.dir, #score-host g.dynam, #score-host g.mNum { font-style: italic; }
-#score-host g.label { font-weight: normal; }
-#score-host ellipse, #score-host path, #score-host polygon, #score-host polyline,
-#score-host rect { stroke: currentColor; }
-#score-host .score-line {
+:is(#score-host, #tutti-score) svg { display: block; margin: 0 auto; color: #1b1b1b; fill: #1b1b1b; }
+:is(#score-host, #tutti-score) g.ending, :is(#score-host, #tutti-score) g.fing, :is(#score-host, #tutti-score) g.reh, :is(#score-host, #tutti-score) g.tempo { font-weight: bold; }
+:is(#score-host, #tutti-score) g.dir, :is(#score-host, #tutti-score) g.dynam, :is(#score-host, #tutti-score) g.mNum { font-style: italic; }
+:is(#score-host, #tutti-score) g.label { font-weight: normal; }
+:is(#score-host, #tutti-score) ellipse, :is(#score-host, #tutti-score) path, :is(#score-host, #tutti-score) polygon, :is(#score-host, #tutti-score) polyline,
+:is(#score-host, #tutti-score) rect { stroke: currentColor; }
+:is(#score-host, #tutti-score) .score-line {
   position: absolute; left: 0; top: 0; width: 2px; margin-left: -1px; pointer-events: none;
   background: rgba(214, 60, 60, 0.85); box-shadow: 0 0 6px rgba(214, 60, 60, 0.6);
 }
-#score-host .score-line[hidden] { display: none; }
-#score-host g.note.playing, #score-host g.chord.playing { stroke-width: 12; }
-#score-host g.measure:hover { fill: #3a5a8c; color: #3a5a8c; }
+:is(#score-host, #tutti-score) .score-line[hidden] { display: none; }
+:is(#score-host, #tutti-score) g.note.playing, :is(#score-host, #tutti-score) g.chord.playing { stroke-width: 12; }
+:is(#score-host, #tutti-score) g.measure:hover { fill: #3a5a8c; color: #3a5a8c; }
 #tuttiview {
   position: fixed; inset: 0; z-index: 10; background: #0b0c10;
   display: grid; grid-template-rows: auto 1fr;
@@ -105,12 +105,26 @@ html, body { margin: 0; height: 100%; background: var(--bg); color: var(--fg); }
 #tutti-bar label { display: inline-flex; align-items: center; gap: 4px; color: var(--muted); }
 #tutti-bar .hint { margin-left: auto; }
 #tutti-time { color: #e6c07b; font-variant-numeric: tabular-nums; min-width: 190px; }
-#tutti-body { display: grid; grid-template-columns: 1fr 260px; min-height: 0; }
+#tutti-body { display: grid; grid-template-columns: 1fr 300px; min-height: 0; }
+#tutti-main { display: grid; grid-template-rows: 1fr auto; min-height: 0; position: relative; }
+#tutti-main > [hidden] { display: none; }
 #tutticanvas { width: 100%; height: 100%; display: block; cursor: crosshair; touch-action: none; }
-#tutti-sel {
+#tutti-kb { width: 100%; height: 72px; display: block; }
+#tutti-info { position: absolute; left: 12px; bottom: 80px; }
+#tutti-score { touch-action: none; }
+#tutti-side {
   overflow-y: auto; border-left: 1px solid var(--line); background: var(--panel);
   padding: 8px 10px; font-size: 12px;
 }
+#tutti-chord, #tutti-scale { background: #f3efe6; border-radius: 4px; margin-bottom: 8px; }
+#tutti-chord:empty, #tutti-scale:empty { display: none; }
+#tutti-chord svg, #tutti-scale svg { display: block; margin: 0 auto; max-width: 100%; height: auto;
+  color: #1b1b1b; fill: #1b1b1b; }
+#tutti-chord path, #tutti-scale path, #tutti-chord rect, #tutti-scale rect { stroke: currentColor; }
+.score-box { position: absolute; left: 0; top: 0; border: 1px dashed #d63c3c;
+  background: rgba(214, 60, 60, 0.08); pointer-events: none; }
+.score-box[hidden] { display: none; }
+#tutti-score g.note.sel { stroke: #d63c3c; stroke-width: 28; }
 #tutti-sel h3 { font-size: 12px; margin: 0 0 6px; font-weight: 600; }
 #tutti-sel table { border-collapse: collapse; width: 100%; }
 #tutti-sel td { padding: 2px 4px; vertical-align: top; border-bottom: 1px solid var(--line); }

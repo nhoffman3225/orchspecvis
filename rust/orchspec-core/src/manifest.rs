@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 use std::fmt;
 
 pub const MANIFEST_NAME: &str = "manifest.json";
-pub const SUPPORTED_VERSIONS: [u32; 4] = [1, 2, 3, 4];
+pub const SUPPORTED_VERSIONS: [u32; 5] = [1, 2, 3, 4, 5];
 pub const NONE_STEM: u32 = 255;
 pub const NOTE_COLUMNS: [&str; 11] = [
     "part", "staff", "voice", "midi", "onset_s", "offset_s", "measure", "beat", "velocity", "f0_db", "f0_ok",
@@ -281,6 +281,17 @@ pub struct ScoreInfo {
     pub alignment: Alignment,
     #[serde(default)]
     pub score_file: Option<String>,
+    /// v5: engravable reductions (score/reduce.py) and their note maps.
+    #[serde(default)]
+    pub reductions: Vec<Reduction>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Reduction {
+    pub mode: String, // chords | section-chords | tutti | sections
+    pub musicxml: String,
+    pub map: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -440,6 +451,14 @@ impl Manifest {
             check_rel_path(&sc.notes.path)?;
             if let Some(f) = &sc.score_file {
                 check_rel_path(f)?;
+            }
+            if !sc.reductions.is_empty() && self.schema_version < 5 {
+                return fail("score reductions require schema_version 5");
+            }
+            for r in &sc.reductions {
+                one_of("score.reductions.mode", &r.mode, &["chords", "section-chords", "tutti", "sections"])?;
+                check_rel_path(&r.musicxml)?;
+                check_rel_path(&r.map)?;
             }
             if sc.parts.iter().enumerate().any(|(i, p)| p.index as usize != i) {
                 return fail("score part indices must be 0..n-1 in order");

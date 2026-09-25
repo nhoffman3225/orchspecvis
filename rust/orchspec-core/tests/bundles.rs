@@ -69,7 +69,7 @@ fn check_bundle(root: &Path) -> Manifest {
 fn tiny_bundle_matches_python() {
     let m = check_bundle(&repo().join("viewer/public/tiny-bundle"));
     assert_eq!(m.tile_encoding, TileEncoding::Raw);
-    assert_eq!(m.schema_version, 4);
+    assert_eq!(m.schema_version, 5);
 }
 
 #[test]
@@ -107,7 +107,7 @@ fn rejects_what_python_rejects() {
         ("absolute", |d| d["audio_path"] = "/etc/passwd".into()),
         ("drive", |d| d["audio_path"] = "C:/x.wav".into()),
         ("unknown field", |d| d["surprise"] = 1.into()),
-        ("version", |d| d["schema_version"] = 5.into()),
+        ("version", |d| d["schema_version"] = 6.into()),
         ("gzip before v4", |d| {
             d["schema_version"] = 3.into();
             d["tile_encoding"] = "gzip".into();

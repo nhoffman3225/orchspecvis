@@ -12,6 +12,7 @@ export interface VrvMeasure {
   id: string; // Verovio measure id (possibly an expansion id like "abc-rend2")
   n: string; // notated measure number
   ms: number; // Verovio time of the measure start
+  q?: number; // quarter-note position of the measure start (playback order)
 }
 
 /** LCS alignment by measure number: result[i] = index into `theirs` or -1. */
@@ -108,6 +109,7 @@ export function sanitizeSvg(svg: string): string {
 
 export interface TimemapEvent {
   tstamp: number;
+  qstamp?: number; // quarter notes from the start (playback order)
   on?: string[];
   off?: string[];
 }

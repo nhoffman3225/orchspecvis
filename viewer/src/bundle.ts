@@ -4,7 +4,7 @@
 
 import { fetchSameOrigin } from "./net";
 
-export const SUPPORTED_VERSIONS = [1, 2, 3, 4] as const;
+export const SUPPORTED_VERSIONS = [1, 2, 3, 4, 5] as const;
 export const NOTE_COLUMNS = [
   "part", "staff", "voice", "midi", "onset_s", "offset_s", "measure", "beat", "velocity",
   "f0_db", "f0_ok",
@@ -103,9 +103,16 @@ export interface ScoreInfo {
   notes: { path: string; n: number; columns: string[]; dtype: "f32le"; layout: "column_major" };
   alignment: Alignment;
   score_file: string | null;
+  reductions: Reduction[]; // v5
+}
+/** v5: engravable reduction of the score and its note map (JSON). */
+export interface Reduction {
+  mode: "chords" | "section-chords" | "tutti" | "sections";
+  musicxml: string;
+  map: string;
 }
 export interface Manifest {
-  schema_version: 1 | 2 | 3 | 4;
+  schema_version: 1 | 2 | 3 | 4 | 5;
   created_by: string;
   created_at: string;
   sr: number;
@@ -304,7 +311,7 @@ function parseScoreMeasure(v: unknown, i: number, w0: string): ScoreMeasure {
 function parseScore(v: unknown): ScoreInfo {
   const w = "manifest.score";
   const o = obj(v, w, ["kind", "source_files", "parts", "measures", "notes", "alignment"],
-    ["score_file"]);
+    ["score_file", "reductions"]);
   const no = obj(o.notes, `${w}.notes`, ["path", "n", "columns"], ["dtype", "layout"]);
   const columns = strList(no.columns, `${w}.notes.columns`);
   if (columns.join(",") !== NOTE_COLUMNS.join(",")) {
@@ -328,6 +335,15 @@ function parseScore(v: unknown): ScoreInfo {
       layout: "column_major",
     },
     score_file: o.score_file == null ? null : checkRelPath(o.score_file, `${w}.score_file`),
+    reductions: o.reductions == null ? [] : arr(o.reductions, `${w}.reductions`).map((rv, i) => {
+      const rw = `${w}.reductions[${i}]`;
+      const r = obj(rv, rw, ["mode", "musicxml", "map"], []);
+      return {
+        mode: oneOf(r.mode, `${rw}.mode`, ["chords", "section-chords", "tutti", "sections"] as const),
+        musicxml: checkRelPath(r.musicxml, `${rw}.musicxml`),
+        map: checkRelPath(r.map, `${rw}.map`),
+      };
+    }),
     alignment: {
       method: oneOf(ao.method, `${aw}.method`, ["warp", "xcorr", "manual", "preroll_only"] as const),
       offset_sec: num(ao.offset_sec, `${aw}.offset_sec`),
@@ -364,7 +380,7 @@ export function parseManifest(json: unknown): Manifest {
   const off = o.offsets === undefined ? {} : obj(o.offsets, "manifest.offsets", [], ["preroll_sec"]);
 
   const m: Manifest = {
-    schema_version: o.schema_version as 1 | 2 | 3 | 4,
+    schema_version: o.schema_version as 1 | 2 | 3 | 4 | 5,
     created_by: str(o.created_by, "manifest.created_by"),
     created_at: str(o.created_at, "manifest.created_at"),
     sr: int(o.sr, "manifest.sr", 1),
@@ -435,6 +451,7 @@ export function parseManifest(json: unknown): Manifest {
     score: o.score == null ? null : parseScore(o.score),
   };
   if (m.score && m.schema_version < 2) fail("manifest.score", "requires schema_version 2");
+  if (m.score?.reductions.length && m.schema_version < 5) fail("manifest.score.reductions", "requires schema_version 5");
   if (m.tile_encoding !== "raw" && m.schema_version < 4) {
     fail("manifest.tile_encoding", "requires schema_version 4");
   }

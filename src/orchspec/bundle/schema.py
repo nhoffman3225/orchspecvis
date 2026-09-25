@@ -16,7 +16,7 @@ from typing import Annotated, Literal
 
 from pydantic import AfterValidator, BaseModel, ConfigDict, Field, model_validator
 
-SCHEMA_VERSION = 4  # v2: `score`; v3: alignment warp + part latency; v4: gzip tiles
+SCHEMA_VERSION = 5  # v2: `score`; v3: warp + part latency; v4: gzip tiles; v5: reductions
 TileEncoding = Literal["raw", "gzip"]
 MANIFEST_NAME = "manifest.json"
 NONE_STEM = 255  # value in dominant-stem tiles meaning "no stem above the floor"
@@ -196,6 +196,16 @@ class NotesTable(_Model):
     layout: Literal["column_major"] = "column_major"
 
 
+class Reduction(_Model):
+    """v5: an engravable reduction of the score (score/reduce.py) and its note map."""
+
+    # chords: one chord per bar on one grand staff; section-chords: per section;
+    # tutti / sections: full rhythm (voices, ties) on one grand staff / per section
+    mode: Literal["chords", "section-chords", "tutti", "sections"]
+    musicxml: RelPath
+    map: RelPath  # JSON: {"notes": {note id: {"parts", "midi", "name", "group"}}, ...}
+
+
 class ScoreInfo(_Model):
     kind: Literal["musicxml", "midi"]
     source_files: list[str]
@@ -204,6 +214,7 @@ class ScoreInfo(_Model):
     notes: NotesTable
     alignment: Alignment
     score_file: RelPath | None = None  # v3: copy of the MusicXML/.mxl for engraving
+    reductions: list[Reduction] = []  # v5
 
     @model_validator(mode="after")
     def _consistent(self) -> ScoreInfo:
@@ -217,7 +228,7 @@ class ScoreInfo(_Model):
 
 
 class Manifest(_Model):
-    schema_version: Literal[1, 2, 3, 4] = SCHEMA_VERSION
+    schema_version: Literal[1, 2, 3, 4, 5] = SCHEMA_VERSION
     created_by: str
     created_at: str  # ISO 8601 UTC
 
@@ -281,6 +292,8 @@ class Manifest(_Model):
         if self.score is not None:
             if self.schema_version < 2:
                 raise ValueError("a score section requires schema_version 2")
+            if self.score.reductions and self.schema_version < 5:
+                raise ValueError("score reductions require schema_version 5")
             known = set(ids)
             for p in self.score.parts:
                 if p.stem_id is not None and p.stem_id not in known:
