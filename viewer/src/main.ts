@@ -5,6 +5,8 @@ import { loadManifest, loadNotes, loadSeries, midiName } from "./bundle";
 import { NoteIndex, applyMask, frameSeconds, measureAt, overtones, rasterizeF0, rasterizeNotes } from "./notes";
 import { heatFromNotes, heatFromPage, keyLevelsAt, normalizeHeat } from "./heat";
 import { PianoView, notesFromF0 } from "./piano";
+import { TuttiView } from "./tuttiview";
+import type { SelectionSummary } from "./tutti";
 import { ScoreView } from "./scoreview";
 import { HARM_PRESETS, harmSliderValue, snapHarm } from "./presets";
 import { frameGaps, frameSpans } from "./gaps";
@@ -641,6 +643,89 @@ async function main(): Promise<void> {
       .catch((e: unknown) => (pre.textContent = String(e)));
   });
 
+  // ---- tutti reduction (proofreading): all notes on a grand staff / short score
+  let tuttiOpen = false;
+  let tutti: TuttiView | null = null;
+  const renderSelection = (sum: SelectionSummary | null, sel: number[]): void => {
+    const box = $("tutti-sel");
+    box.replaceChildren();
+    if (!sum || !notes) {
+      const p = document.createElement("p");
+      p.className = "hint";
+      p.textContent = "Select notes to see their pitches, doublings and parts.";
+      box.append(p);
+      return;
+    }
+    const h = document.createElement("h3");
+    const first = sel[0]!;
+    const same = sel.every((i) => Math.abs(notes.onset_s[i]! - notes.onset_s[first]!) <= 0.03);
+    const where = same && m.score
+      ? ` · m. ${m.score.measures[notes.measure[first]!]?.number ?? "?"} beat ${notes.beat[first]!.toFixed(2).replace(/\.?0+$/, "")}`
+      : "";
+    h.textContent = `${sum.notes} notes · ${sum.parts} parts${where}`;
+    const table = document.createElement("table");
+    for (const r of sum.rows) {
+      const tr = document.createElement("tr");
+      const td1 = document.createElement("td");
+      td1.className = "pitch";
+      td1.textContent = r.count > 1 ? `${r.name} ×${r.count}` : r.name;
+      const td2 = document.createElement("td");
+      for (const pi of r.parts) {
+        const chip = document.createElement("span");
+        chip.className = "chip";
+        const dot = document.createElement("i");
+        dot.style.setProperty("--c", partColor(pi));
+        chip.append(dot, parts[pi]?.abbreviation || parts[pi]?.name || `part ${pi + 1}`);
+        td2.append(chip);
+      }
+      tr.append(td1, td2);
+      table.append(tr);
+    }
+    const pcs = document.createElement("div");
+    pcs.className = "pcs";
+    pcs.textContent = "pitch classes: " + sum.pitchClasses.map((p) => `${p.name} ${p.count}`).join(" · ");
+    box.append(h, table, pcs);
+    document.documentElement.dataset.tuttiSel = String(sum.notes); // tests
+  };
+  if (notes && nix && m.score) {
+    $("tuttibtn").hidden = false;
+    tutti = new TuttiView($<HTMLCanvasElement>("tutticanvas"), {
+      notes, index: nix, parts, measures: m.score.measures, partColor,
+      visible: (p) => partsVisible.has(p),
+      onSeek: (s) => seek(s),
+      onSelect: renderSelection,
+    });
+    const tm = $<HTMLSelectElement>("tutti-mode");
+    if (params.get("tutti") === "sections") tm.value = "sections";
+    tutti.mode = tm.value as "grand" | "sections";
+    tm.addEventListener("change", () => void (tutti!.mode = tm.value as "grand" | "sections"));
+    const tw = $<HTMLInputElement>("tutti-win");
+    tw.addEventListener("input", () => {
+      tutti!.windowSec = Number(tw.value);
+      $("tutti-winval").textContent = `${tw.value} s`;
+    });
+    $<HTMLInputElement>("tutti-follow").addEventListener("change", (e) => {
+      tutti!.follow = (e.target as HTMLInputElement).checked;
+    });
+  }
+  function setTutti(open: boolean): void {
+    if (open && !tutti) return;
+    tuttiOpen = open;
+    $("tuttiview").hidden = !open;
+    if (open) {
+      setPiano(false);
+      setScore(false);
+      setRegisters(false);
+    }
+  }
+  $("tuttibtn").addEventListener("click", () => setTutti(true));
+  $("tutticlose").addEventListener("click", () => setTutti(false));
+  addEventListener("keydown", (e) => {
+    if (e.target instanceof HTMLInputElement || e.target instanceof HTMLSelectElement) return;
+    if (e.code === "KeyT") setTutti(!tuttiOpen);
+    else if (e.code === "Escape" && tuttiOpen && !tutti?.clearSelection()) setTutti(false);
+  });
+
   // ---- register distribution view (per section / stem: whole piece + now)
   const regView = new RegisterView($<HTMLCanvasElement>("regcanvas"), (s) => seek(s));
   let regOpen = false;
@@ -706,6 +791,7 @@ async function main(): Promise<void> {
     regOpen = open;
     $("regview").hidden = !open;
     if (open) {
+      if (tuttiOpen) setTutti(false);
       setPiano(false);
       setScore(false);
       rebuildRegisters();
@@ -751,6 +837,7 @@ async function main(): Promise<void> {
   const setPiano = (open: boolean): void => {
     pianoOpen = open;
     pianoEl.hidden = !open;
+    if (open && tuttiOpen) setTutti(false);
     if (open && regOpen) setRegisters(false);
   };
   setPiano(pianoOpen);
@@ -799,6 +886,7 @@ async function main(): Promise<void> {
     scoreOpen = open;
     $("scoreview").hidden = !open;
     if (open) {
+      if (tuttiOpen) setTutti(false);
       if (regOpen) setRegisters(false);
       setPiano(false);
       void scoreView!.load().catch((e: unknown) => {
@@ -863,6 +951,7 @@ async function main(): Promise<void> {
   });
   if (params.get("view") === "score") setScore(true);
   if (params.get("view") === "registers") setRegisters(true);
+  if (params.get("view") === "tutti") setTutti(true);
   for (const f of afterSetup) f();
 
   // ---- frame loop
@@ -891,7 +980,12 @@ async function main(): Promise<void> {
       const txt = bb ? `m. ${bb.number}${bb.pass > 1 ? ` (pass ${bb.pass})` : ""} · beat ${bb.beat.toFixed(1)}` : "";
       if ($("barbeat").textContent !== txt) $("barbeat").textContent = txt;
     }
-    if (regOpen) {
+    if (tuttiOpen && tutti) {
+      tutti.draw(t);
+      const bbt = m.score ? measureAt(m.score.measures, t) : null;
+      const tt = `${fmt(t)}${bbt ? ` · m. ${bbt.number} · beat ${bbt.beat.toFixed(1)}` : ""}`;
+      if ($("tutti-time").textContent !== tt) $("tutti-time").textContent = tt;
+    } else if (regOpen) {
       regView.draw(t);
       const rt = `${fmt(t)} / ${fmt(m.duration_seconds)}`;
       if ($("reg-time").textContent !== rt) $("reg-time").textContent = rt;
