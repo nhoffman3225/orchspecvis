@@ -84,7 +84,8 @@ jobs:
             cp "$f" "dist/orchspec-${v}-${{ runner.os }}-${{ matrix.variant }}.${ext}"
           done
           ls -la dist
-          (cd dist && shasum -a 256 * > "SHA256SUMS-${{ matrix.variant }}.txt")
+          sum() { if command -v sha256sum >/dev/null; then sha256sum "$@"; else shasum -a 256 "$@"; fi; }
+          (cd dist && sum * > "SHA256SUMS-${{ matrix.variant }}.txt")
 
       - uses: actions/upload-artifact@v7
         with:
