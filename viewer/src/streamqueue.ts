@@ -17,11 +17,14 @@ export class StreamQueue {
   private playing = false;
   private srcAt = 0; // source frame ...
   private ctxAt = 0; // ... that plays at this context frame
+  private endAt = Infinity; // source length: silence after it is expected, not an underrun
   private chunks: Chunk[] = [];
   underruns = 0; // render quanta with missing data while playing
+  received = 0; // chunks accepted (diagnostics)
 
-  cue(gen: number, srcFrame: number, ctxFrame: number): void {
+  cue(gen: number, srcFrame: number, ctxFrame: number, endFrame = Infinity): void {
     this.gen = gen;
+    this.endAt = endFrame;
     this.playing = true;
     this.srcAt = srcFrame;
     this.ctxAt = ctxFrame;
@@ -34,6 +37,15 @@ export class StreamQueue {
     this.chunks = [];
   }
 
+  /** Diagnostics: "src <frame> buffered <first>-<end> chunks <n>". */
+  describe(ctxFrame: number): string {
+    const src = this.srcAt + (ctxFrame - this.ctxAt);
+    const a = this.chunks[0]?.start ?? -1;
+    const last = this.chunks[this.chunks.length - 1];
+    const b = last ? last.start + (last.data[0]?.length ?? 0) : -1;
+    return `src ${src} buffered ${a}-${b} held ${this.chunks.length} received ${this.received}`;
+  }
+
   /** The source frame playing at `ctxFrame` while playing (for the feeder's read-ahead). */
   position(ctxFrame: number): { gen: number; srcFrame: number } | null {
     if (!this.playing) return null;
@@ -43,6 +55,7 @@ export class StreamQueue {
   push(c: Chunk): void {
     if (c.gen !== this.gen) return; // stale (sent before a seek)
     this.chunks.push(c);
+    this.received++;
     this.chunks.sort((a, b) => a.start - b.start);
   }
 
@@ -69,7 +82,7 @@ export class StreamQueue {
       filled += b - a;
     }
     // before the cue point (scheduled start) silence is expected, not an underrun
-    const expected = Math.max(0, Math.min(len, src0 + len - this.srcAt));
+    const expected = Math.max(0, Math.min(src0 + len, this.endAt) - Math.max(src0, this.srcAt));
     if (filled < expected) this.underruns++;
   }
 }
