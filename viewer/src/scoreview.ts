@@ -405,7 +405,7 @@ export class ScoreView {
       if (!el) continue;
       const part = fixed ? null : this.partOf(el);
       if (part !== null && !this.deps.visible(part)) continue;
-      const color = fixed ? "#d63c3c" : part === null ? "#e6c07b" : this.deps.partColor(part);
+      const color = fixed ? "#d63c3c" : part === null ? "#ffd23f" : this.deps.partColor(part);
       el.classList.add("playing");
       el.setAttribute("fill", color); // presentation attributes (allowed by the CSP)
       el.setAttribute("color", color);

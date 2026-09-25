@@ -281,7 +281,7 @@ export class TuttiView {
         }
         const n = stack.get(key)!;
         if (first && n > 1) {
-          g.fillStyle = "#e6c07b";
+          g.fillStyle = "#ffd23f";
           g.font = "10px system-ui, sans-serif";
           g.fillText(`×${n}`, x + gap * 0.8, y - gap * 0.5);
         }
@@ -305,7 +305,7 @@ export class TuttiView {
     // box selection
     if (this.drag) {
       const d = this.drag;
-      g.strokeStyle = "#e6c07b";
+      g.strokeStyle = "#ffd23f";
       g.setLineDash([4, 3]);
       g.strokeRect(Math.min(d.x0, d.x1), Math.min(d.y0, d.y1), Math.abs(d.x1 - d.x0), Math.abs(d.y1 - d.y0));
       g.setLineDash([]);
@@ -322,7 +322,7 @@ export class TuttiView {
         if (k.black !== black) continue;
         const kh2 = black ? kh * 0.6 : kh;
         const part = now.get(k.midi);
-        g.fillStyle = sel.has(k.midi) ? "#e6c07b"
+        g.fillStyle = sel.has(k.midi) ? "#ffd23f"
           : part !== undefined ? this.deps.partColor(part) : black ? "#15171c" : "#d8d9dd";
         g.fillRect(k.x + 0.5, y0, k.w - 1, kh2);
         if (!black) {
