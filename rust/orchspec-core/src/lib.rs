@@ -3,11 +3,13 @@
 //! - [`manifest`]: bundle manifest, schema v1-v4, validated like `schema.py` / `bundle.ts`
 //! - [`tiles`]: tile read/write (raw, gzip), LOD pyramid (max-pool), like `dsp/tiles.py`
 //! - [`serve`]: read-only local file serving used by the desktop app's custom protocol
+//! - [`session_import`]: importing a session from the desktop app (CLI progress, locating it)
 //!
 //! No network code: bundles are local folders.
 
 pub mod manifest;
 pub mod serve;
+pub mod session_import;
 pub mod tiles;
 
 pub use manifest::{Manifest, ManifestError, TileEncoding};

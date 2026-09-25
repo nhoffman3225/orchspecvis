@@ -5,12 +5,14 @@ import { guard } from "./guard";
 
 // Written by `uv run pytest tests/test_score_bundle.py` (git-ignored)
 const BUNDLE = "/test-data/py-score-bundle/";
+// 15 fps: WebGL runs in software here; full-rate redraws starve slow CI runners
+const Q = `bundle=${BUNDLE}&fps=15`;
 const HAVE = existsSync(fileURLToPath(new URL("../test-data/py-score-bundle/manifest.json", import.meta.url)));
 test.skip(!HAVE, "run `uv run pytest tests/test_score_bundle.py` first to create the test bundle");
 
 test("loads a score bundle; no off-origin requests (local-only)", async ({ page, baseURL }) => {
   const g = guard(page, baseURL!);
-  await page.goto(`/?bundle=${BUNDLE}`);
+  await page.goto(`/?${Q}`);
   await expect(page.locator("#status")).toContainText("frames");
   await expect(page.locator("#status")).toContainText("4 parts");
   await expect(page.locator("#title")).toContainText("4 stems");
@@ -21,7 +23,7 @@ test("loads a score bundle; no off-origin requests (local-only)", async ({ page,
 
 test("score view engraves in a worker, highlights sounding notes, seeks on click", async ({ page, baseURL }) => {
   const g = guard(page, baseURL!);
-  await page.goto(`/?bundle=${BUNDLE}&view=score&t=1.6`);
+  await page.goto(`/?${Q}&view=score&t=1.6`);
   const host = page.locator("#score-host");
   try {
     await expect(host.locator("svg").first()).toBeVisible({ timeout: 45_000 });
@@ -74,7 +76,7 @@ workers: ${workers.length}; ${alive}
 
 test("pages are assembled, summed and smoothed in the worker (ensemble)", async ({ page, baseURL }) => {
   const g = guard(page, baseURL!);
-  await page.goto(`/?bundle=${BUNDLE}&mode=ensemble&smooth=4`);
+  await page.goto(`/?${Q}&mode=ensemble&smooth=4`);
   // slow on CI (software WebGL renders every frame while the worker assembles pages)
   test.setTimeout(120_000);
   await expect(page.locator("html")).toHaveAttribute("data-page", /^ensemble:\d+:\d+$/, { timeout: 90_000 });
@@ -90,7 +92,7 @@ test("streams the mix WAV through the AudioWorklet (Range requests), no underrun
   page.on("request", (r) => {
     if (r.url().endsWith("/audio/mix.wav")) ranges.push(r.headers()["range"] ?? "(none)");
   });
-  await page.goto(`/?bundle=${BUNDLE}&t=2`);
+  await page.goto(`/?${Q}&t=2`);
   await expect(page.locator("html")).toHaveAttribute("data-audio", "stream");
   const audioTime = (): Promise<number> =>
     page.evaluate(() => (globalThis as { orchspecAudioTime?: () => number }).orchspecAudioTime?.() ?? 0);
@@ -140,7 +142,7 @@ test("streams the mix WAV through the AudioWorklet (Range requests), no underrun
 
 test("register view: sections from stem spectra and from the score", async ({ page, baseURL }) => {
   const g = guard(page, baseURL!);
-  await page.goto(`/?bundle=${BUNDLE}&view=registers&t=4`);
+  await page.goto(`/?${Q}&view=registers&t=4`);
   await expect(page.locator("#regview")).toBeVisible();
   await expect(page.locator("html")).toHaveAttribute("data-registers", /^sound:[1-9]/);
   await page.locator("#reg-src").selectOption("notes");
@@ -165,7 +167,7 @@ test("register view: sections from stem spectra and from the score", async ({ pa
 
 test("credits: shipped projects and full licence texts, same origin", async ({ page, baseURL }) => {
   const g = guard(page, baseURL!);
-  await page.goto(`/?bundle=${BUNDLE}`);
+  await page.goto(`/?${Q}`);
   await page.locator("#aboutbtn").click();
   await expect(page.locator("#about-body")).toContainText("Verovio");
   await page.locator("#about-lic").click();
@@ -228,7 +230,7 @@ test("tutti: engraved chord-per-bar reduction; a bar condenses into a chord and 
 
 test("piano view renders", async ({ page, baseURL }) => {
   const g = guard(page, baseURL!);
-  await page.goto(`/?bundle=${BUNDLE}&view=piano&t=3`); // bar 2 starts at ~2.54 s (audio)
+  await page.goto(`/?${Q}&view=piano&t=3`); // bar 2 starts at ~2.54 s (audio)
   await expect(page.locator("#pianoview")).toBeVisible();
   await expect(page.locator("#piano-time")).toContainText("m. 2");
   expect(g.offOrigin).toEqual([]);

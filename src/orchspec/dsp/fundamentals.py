@@ -31,31 +31,61 @@ def _band_level(db: np.ndarray, center: float, f0: int, f1: int) -> np.ndarray:
 def note_fundamental_levels(
     db: np.ndarray, spec: CQTSpec, midi: np.ndarray, onset_s: np.ndarray, offset_s: np.ndarray
 ) -> tuple[np.ndarray, np.ndarray]:
-    """db: calibrated (n_bins, n_frames). Returns (f0_db, f0_ok) per note, float32."""
+    """db: calibrated (n_bins, n_frames). Returns (f0_db, f0_ok) per note, float32.
+
+    Vectorized: a 3-bin max over the whole spectrogram once, then per-note medians over
+    each note's frames computed in length-sorted batches (padding masked with NaN).
+    Equal to the per-note loop (_band_level + np.median; tests/test_fundamentals.py).
+    """
     n = len(midi)
     f0_db = np.full(n, FLOOR_DB, dtype=np.float32)
     ok = np.zeros(n, dtype=np.float32)
+    if n == 0:
+        return f0_db, ok
+    nb, nf = db.shape
     fps = spec.sr / spec.hop
-    for i in range(n):
-        dur = offset_s[i] - onset_s[i]
-        t0 = onset_s[i] + max(0.1 * dur, 0.03)
-        a, b = int(np.ceil(t0 * fps)), int(np.floor(offset_s[i] * fps)) + 1
-        a, b = max(0, a), min(db.shape[1], b)
-        if b <= a:
-            a = max(0, min(db.shape[1] - 1, round(onset_s[i] * fps)))
-            b = a + 1
-        base = (midi[i] - A0_MIDI) * spec.k
-        if base < -0.5 or base > spec.n_bins - 0.5:
-            continue
-        lvl = float(np.median(_band_level(db, base, a, b)))
-        harm = [
-            float(np.median(_band_level(db, base + 12 * spec.k * np.log2(h), a, b)))
-            for h in (2, 3, 4)
-            if base + 12 * spec.k * np.log2(h) < spec.n_bins - 0.5
-        ]
-        f0_db[i] = max(lvl, FLOOR_DB)
-        strongest = max(harm) if harm else -np.inf
-        ok[i] = float(lvl > FLOOR_DB and lvl >= strongest - WEAK_DB)
+    on = np.asarray(onset_s, dtype=np.float64)
+    off = np.asarray(offset_s, dtype=np.float64)
+    t0 = on + np.maximum(0.1 * (off - on), 0.03)
+    a = np.maximum(0, np.ceil(t0 * fps).astype(np.int64))
+    b = np.minimum(nf, np.floor(off * fps).astype(np.int64) + 1)
+    empty = b <= a
+    a[empty] = np.clip(np.round(on[empty] * fps).astype(np.int64), 0, nf - 1)
+    b[empty] = a[empty] + 1
+    base = (np.asarray(midi, dtype=np.float64) - A0_MIDI) * spec.k
+    valid = (base >= -0.5) & (base <= nb - 0.5)
+    # bm[c] = max over bins c-1..c+1 (clipped to the spectrogram), for c = 0..nb
+    pad = np.full((1, nf), -np.inf, dtype=db.dtype)
+    padded = np.vstack([pad, db, pad, pad])
+    bm = np.maximum(np.maximum(padded[:-2], padded[1:-1]), padded[2:])[: nb + 1]
+
+    def medians(center: np.ndarray, sel: np.ndarray) -> np.ndarray:
+        out = np.full(n, -np.inf)
+        idx = np.flatnonzero(sel)
+        if not len(idx):
+            return out
+        rows = np.round(center[idx]).astype(np.int64)  # half to even, like round()
+        lens = b[idx] - a[idx]
+        order = np.argsort(lens, kind="stable")
+        i = 0
+        while i < len(order):  # 512 notes of similar length per batch: little padding
+            j = i + 512
+            chunk = order[i:j]
+            lmax = int(lens[chunk].max())
+            cols = a[idx[chunk], None] + np.arange(lmax)[None, :]
+            vals = bm[rows[chunk, None], np.minimum(cols, nf - 1)]  # float32 like the loop
+            vals[np.arange(lmax)[None, :] >= lens[chunk, None]] = np.nan
+            out[idx[chunk]] = np.nanmedian(vals, axis=1)
+            i = j
+        return out
+
+    lvl = medians(base, valid)
+    strongest = np.full(n, -np.inf)
+    for h in (2, 3, 4):
+        c = base + 12 * spec.k * np.log2(h)
+        strongest = np.maximum(strongest, medians(c, valid & (c < nb - 0.5)))
+    f0_db[valid] = np.maximum(lvl[valid], FLOOR_DB)
+    ok[valid] = ((lvl > FLOOR_DB) & (lvl >= strongest - WEAK_DB))[valid]
     return f0_db, ok
 
 

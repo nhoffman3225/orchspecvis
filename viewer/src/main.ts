@@ -13,6 +13,7 @@ import { HARM_PRESETS, harmSliderValue, snapHarm } from "./presets";
 import { frameGaps, frameSpans } from "./gaps";
 import { COLORMAPS, colormapLut, cssColor, stemPalette } from "./colormap";
 import { fetchSameOrigin, initToken } from "./net";
+import { runImportScreen } from "./importview";
 import { LufsStrip, Pane2D } from "./pane2d";
 import { Player } from "./player";
 import { GRID_COLS, SURFACE_STYLES, Surface, colsPerBin, type SurfaceStyle } from "./surface";
@@ -35,6 +36,7 @@ function fmt(t: number): string {
 async function main(): Promise<void> {
   initToken(location.search);
   const params = new URLSearchParams(location.search);
+  if (params.has("import")) return runImportScreen(document.body); // desktop app: import progress
   let base = params.get("bundle") ?? (import.meta.env.DEV ? "./tiny-bundle/" : "./bundle/");
   if (!base.endsWith("/")) base += "/";
   const m = await loadManifest(base);
@@ -1137,7 +1139,14 @@ async function main(): Promise<void> {
   resize();
 
   let lastStatus = "";
-  renderer.setAnimationLoop(() => {
+  // `?fps=N` caps the frame rate (battery; software-GL E2E runs on CI). Default: display rate.
+  const maxFps = Number(params.get("fps")) || 0;
+  let lastFrame = 0;
+  renderer.setAnimationLoop((now: number) => {
+    if (maxFps > 0) {
+      if (now - lastFrame < 1000 / maxFps - 1) return;
+      lastFrame = now;
+    }
     const t = player.tick();
     updateView(t);
     gapReadout(t);

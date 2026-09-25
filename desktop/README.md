@@ -15,21 +15,39 @@ one local bundle folder.
   app origin is refused.
 - **Opening a bundle**: pass the folder as the first argument, or use File › Open Bundle…
   (Ctrl/Cmd+O; also shown at start). The manifest is validated by orchspec-core first.
+- **Importing a session**: File › Import Session… (Ctrl/Cmd+I), or
+  `orchspec-desktop --import <session folder>`. The app runs the Python analysis CLI
+  (`orchspec bundle … --backend auto`) as a subprocess — argument list, no shell, no
+  console window — into `Documents/orchspec/bundles`, shows its progress (the viewer polls
+  the read-only `app/import.json`), then opens the result. The CLI is `$ORCHSPEC_CLI`, else
+  the checkout's `.venv` found above the executable, else `orchspec` on PATH. (Not under
+  AppData: the Microsoft Store build of Python redirects AppData writes into a private
+  package folder the app cannot see.)
 
 ## Build
 
-Prerequisites: Rust (stable, ≥ 1.88), Node 24; on Windows the **MSVC C++ build tools**
-(Visual Studio Build Tools, "Desktop development with C++") — without them Rust cannot
-link; WebView2 ships with Windows 11. On macOS: Xcode command line tools.
+Prerequisites: Rust via rustup (`rustup default stable`, ≥ 1.88; includes rustfmt and
+clippy), Node 24, and on Windows Visual Studio (Community or Build Tools) with the
+**Desktop development with C++** workload — it brings the MSVC linker and the Windows
+SDK that Rust links against. WebView2 ships with Windows 11. On macOS: Xcode command line
+tools.
 
 ```bash
 npm --prefix ../viewer ci
 npm ci
-npm run dev          # builds the viewer, runs the app (debug)
-npm run build        # release app + installer (NSIS on Windows, .app/.dmg on macOS)
+npm run build        # release app: ../target/release/orchspec-desktop.exe (~14 MB)
+npm run dev          # debug build + run
+npm run installer    # release + NSIS installer (the Tauri CLI downloads NSIS the first time)
 ```
 
-Run with a bundle: `cargo run -p orchspec-desktop -- "out/Beethoven 5.bundle"` (from the
-repo root, after building the viewer).
+Open a bundle: pass the folder (`orchspec-desktop.exe "out/Beethoven 5.bundle"`), or use
+File › Open Bundle… (Ctrl/Cmd+O; also shown at start). Bundles are made with
+`uv run orchspec bundle <session> -o out/ --backend torch` (Beethoven 5 i: ~10 s).
 
-Icons: `npm run icon` regenerates `src-tauri/icons/` from `icon-source.png`.
+The viewer build is embedded at compile time (`tauri` feature `custom-protocol`), so
+rebuild the app after viewer changes. Icons: `npm run icon` regenerates
+`src-tauri/icons/` from `icon-source.png`.
+
+Checking the running app from a script: start it with
+`WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS=--remote-debugging-port=9333` (DevTools protocol
+on 127.0.0.1 only) and attach Playwright with `chromium.connectOverCDP`.

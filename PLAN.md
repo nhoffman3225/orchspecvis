@@ -204,13 +204,32 @@ carry the `real` marker and never run in CI.
 - [x] Compressed tiles (schema v4, `tile_encoding: gzip`, zlib level 3, mtime 0,
       threaded): Beethoven 5 i bundle 583 -> 302 MB; viewer gunzips via DecompressionStream
 - [ ] Stems stored from LOD 1 (further size cut; needs schema + viewer upsampling)
+- [x] Bundle build profile (2026-09-25, Beethoven 5 i): the "tiles" stage was mostly the
+      per-stem onset envelopes for alignment (librosa mel STFT at a 3 ms hop, ~10 s), not
+      tile writing (~1.4 s). Onset envelopes now run in torch on the CQT's device (same
+      steps; equal to librosa within 2.4e-6 relative, note onsets within 0.03 ms), frame
+      energy uses float32 exp, gzip tiles decode in a thread pool. Build 33 s -> 13.4 s
+      (tiles 13.9 -> 2.7 s, score 6.9 -> 5.0 s). A Rust tile writer would save ~1 s: not
+      pursued for now
+- [x] Build under 10 s (2026-09-25, Beethoven 5 i, 6:13, 23 stems, RTX GPU): global pitch
+      warp as an FFT cross-correlation (was 93M gathers), anchors on sorted slices;
+      vectorized note fundamentals (from in-memory level-0 tiles, no read-back); spectral
+      centroid in torch; stems read one ahead; tiles compress/write in the background;
+      torch imported in a thread during start-up; with torch, score preparation and mix
+      features run in background threads during the stem loop (identical bytes to the
+      in-order build, tested). Fresh import 33 s -> 9.6-9.8 s wall (3.2 s of it is Python
+      start-up: torch + librosa imports); every stage's output identical to before
 - [x] Page assembly, stem sums and smoothing in a Web Worker (pages.worker.ts; transferred
       buffers, generation-guarded): Beethoven 5 i ensemble page (23 stems) in ~1 s
 - [x] Playwright E2E (@playwright/test 1.63): app load, score view (worker engraving,
       highlight, click-to-seek), piano view; every test fails on any off-origin request or
       page error; in CI (Chromium). Local runs: PW_CHANNEL=msedge; opt-in real-session spec
       via E2E_URL (Beethoven 5 i: engraved + highlighted in 6.9 s)
-- [x] CI minutes: E2E runs once on ubuntu-latest (own job); the Windows + macOS matrix runs
+- [x] CI minutes, round 2 (2026-09-25; private repo billing: Linux 1x, Windows 2x, macOS
+      10x, rounded up per job): macOS only on pushes to main (PRs: Windows + Linux);
+      desktop workflow only for Rust/desktop changes, clippy on PRs and a full build on
+      main, no incremental/debug info; Playwright browsers cached; E2E renders at `fps=15`
+- CI minutes: E2E runs once on ubuntu-latest (own job); the Windows + macOS matrix runs
       pytest and viewer lint/unit/build only; job timeouts; superseded PR runs cancelled.
       Open: on the windows-latest runner the Verovio wasm never finished starting inside the
       worker (passes locally with Edge and Playwright's Chromium, and on macOS CI)
@@ -226,14 +245,20 @@ carry the `real` marker and never run in CI.
 - [x] desktop/: Tauri 2 shell — one custom protocol for viewer + bundle (same origin, same
       CSP), File › Open Bundle (native dialog) or CLI arg, no IPC permissions, navigation
       locked to the app origin, no updater
-- [ ] Local build: needs MSVC Build Tools on this machine (CI builds it on windows-latest)
+- [x] Local build (2026-09-25): rustup stable + VS 2026 C++ workload; release app 14 MB,
+      Beethoven 5 i bundle opens with the first spectrogram page in 130 ms and audio
+      ready to stream in 150 ms; checked through WebView2's DevTools port with Playwright
+- [x] Import sessions from the app (2026-09-25): File › Import Session… / --import runs the
+      analysis CLI as a subprocess (no shell) into Documents/orchspec/bundles with a live
+      progress screen (read-only app/import.json), then opens the bundle. Beethoven 5 i:
+      24 s on main (~10 s with the PR #13 speed-ups). Store-Python AppData redirection
+      found and avoided. Next: bundle the analysis (no Python install) for distribution
 - [ ] macOS build + .dmg in CI (macOS minutes are 10x: on main pushes only)
 - [ ] Desktop release notices: ship the licence texts of the Rust crates compiled into the
       app (generated from `cargo metadata`, like scripts/credits.py) alongside the viewer's
       licenses/THIRD-PARTY.txt; 5 MPL-2.0 crates are used unmodified (file-level copyleft)
 - [ ] xcorr / alignment in Rust; PyO3 bindings (+ maturin) once the Python writer uses it
-- [ ] rustfmt/clippy locally (CI runs clippy -D warnings; rustfmt check once rustfmt is
-      available locally)
+- [x] rustfmt + clippy locally and in CI (rust-core job: fmt --check, test, clippy)
 Acceptance: same bundle opens identically in Tauri on Windows and macOS.
 
 ### Phase 3c — Cubase (after the desktop app; decision 2026-09-25)

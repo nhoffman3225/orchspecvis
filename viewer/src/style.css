@@ -181,3 +181,14 @@ html, body { margin: 0; height: 100%; background: var(--bg); color: var(--fg); }
 #piano { width: 100%; height: 100%; display: block; }
 #gapinfo { color: #7fb6ff; font-variant-numeric: tabular-nums; }
 #gapval { min-width: 44px; font-variant-numeric: tabular-nums; }
+
+/* desktop app: session import progress */
+#importview { max-width: 760px; margin: 12vh auto 0; padding: 0 24px; font-size: 13px; }
+#importview h2 { font-size: 18px; font-weight: 600; margin: 0 0 14px; }
+#importview .import-bar { height: 8px; border-radius: 4px; background: var(--line); overflow: hidden; }
+#importview .import-bar > div { height: 100%; width: 2%; background: #e6c07b; transition: width 0.3s; }
+#importview.failed .import-bar > div { background: #d63c3c; }
+#importview .import-phase { margin: 10px 0; color: var(--fg); }
+#importview pre { background: var(--panel); border: 1px solid var(--line); border-radius: 4px;
+  padding: 10px 12px; font-size: 11px; color: var(--muted); white-space: pre-wrap; min-height: 12em; }
+body:has(> #importview) { display: block; overflow: hidden; }

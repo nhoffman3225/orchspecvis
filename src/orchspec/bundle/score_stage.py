@@ -80,6 +80,7 @@ class ScorePlan:
     mix_env: np.ndarray | None = None
     env_frame_sec: float = 0.0
     sr: int = 0
+    onset_device: str | None = None  # torch device for onset envelopes (None: librosa)
     stem_envs: dict[int, np.ndarray] = field(default_factory=dict)  # stem index -> env
     measures: list[ScoreMeasure] = field(default_factory=list)
     log: Callable[[str], None] = lambda _m: None
@@ -88,9 +89,18 @@ class ScorePlan:
     def n(self) -> int:
         return len(self.cols["midi"])
 
+    def wants_stem(self, stem_index: int) -> bool:
+        """Whether snapping uses this stem's onset envelope."""
+        return self.coarse is not None and stem_index in self.part_stem.values()
+
     def add_stem(self, stem_index: int, y: np.ndarray) -> None:
-        if self.coarse is not None and stem_index in self.part_stem.values():
-            self.stem_envs[stem_index] = onset_envelope_fine(y, self.sr)[0]
+        if self.wants_stem(stem_index):
+            self.stem_envs[stem_index] = onset_envelope_fine(y, self.sr, self.onset_device)[0]
+
+    def add_stem_env(self, stem_index: int, env: np.ndarray) -> None:
+        """A precomputed onset_envelope_fine() of the stem (kept only if wanted)."""
+        if self.wants_stem(stem_index):
+            self.stem_envs[stem_index] = env
 
     def finalize(self) -> None:
         a = self.alignment
@@ -163,8 +173,13 @@ class ScorePlan:
         db_min: float,
         db_max: float,
         encoding: TileEncoding = "gzip",
+        arrays: dict[int | None, np.ndarray] | None = None,
     ) -> None:
-        """f0_db / f0_ok per note, from the part's stem tiles (mix tiles when unmatched)."""
+        """f0_db / f0_ok per note, from the part's stem tiles (mix tiles when unmatched).
+
+        `arrays`: level-0 u8 (frames x bins) already in memory, by stem index (None = mix);
+        used instead of reading the tiles back.
+        """
         groups: dict[int | None, list[int]] = {}
         for p in self.parts:
             s = self.part_stem.get(p.index)
@@ -173,8 +188,11 @@ class ScorePlan:
             sel = np.isin(self.cols["part"].astype(np.int64), parts)
             if not sel.any():
                 continue
-            lod = stem_lod0[s] if s is not None else mix_lod0
-            db = dequantize(read_level(root, lod, spec.n_bins, encoding), db_min, db_max).T  # type: ignore[arg-type]
+            u8 = (arrays or {}).get(s)
+            if u8 is None:
+                lod = stem_lod0[s] if s is not None else mix_lod0
+                u8 = read_level(root, lod, spec.n_bins, encoding)  # type: ignore[arg-type]
+            db = dequantize(u8, db_min, db_max).T
             lvl, ok = note_fundamental_levels(
                 db,
                 spec,
@@ -346,6 +364,7 @@ def prepare_score(
     align: bool = True,
     search: float = 1.5,
     log: Callable[[str], None] = lambda _m: None,
+    onset_device: str | None = None,
 ) -> ScorePlan | None:
     """Parse score/MIDI, match parts to stems, and compute the coarse pitch-aware warp
     from the mix. Call add_stem() per stem, then finalize()."""
@@ -388,7 +407,7 @@ def prepare_score(
             act, spec.hop / spec.sr, cols["midi"], score_on, score_off, prior=preroll, search=search
         )
         coarse, g, conf, method = wr.warp, wr.global_offset, wr.confidence, "warp"
-        mix_env, env_fs = onset_envelope_fine(mono, spec.sr)
+        mix_env, env_fs = onset_envelope_fine(mono, spec.sr, onset_device)
         warnings += wr.warnings
     else:
         g, conf, method = preroll, 0.0, "preroll_only"
@@ -442,4 +461,5 @@ def prepare_score(
         env_frame_sec=env_fs,
         sr=spec.sr,
         log=log,
+        onset_device=onset_device,
     )

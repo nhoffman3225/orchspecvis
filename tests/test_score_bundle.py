@@ -185,3 +185,29 @@ def test_cli_report(bundle, tmp_path: Path) -> None:  # type: ignore[no-untyped-
     assert r.exit_code == 0, r.output
     assert "[PASS] midi_sounding_pitch" in r.output
     assert (copy / "report.md").is_file() and (copy / "report.json").is_file()
+
+
+def test_parallel_build_equals_sequential(tmp_path: Path) -> None:
+    """With torch, score preparation and mix features run in background threads during the
+    stem loop; the bundle must be identical to the in-order build."""
+    pytest.importorskip("torch")
+    sess = fx.make(tmp_path / "score-session")
+    inputs = inputs_from_session(load_session(sess))
+    roots = []
+    for par in (True, False):
+        out = tmp_path / f"par-{par}.bundle"
+        opts = BundleOptions(k=3, tile_frames=256, backend="torch", device="cpu", parallel=par)
+        build_bundle(inputs, out, opts)
+        roots.append(out)
+    a, b = roots
+    files = sorted(p.relative_to(a) for p in a.rglob("*") if p.is_file())
+    assert files == sorted(p.relative_to(b) for p in b.rglob("*") if p.is_file())
+    for rel in files:
+        if rel.name == "manifest.json":  # created_at differs
+            ma = Manifest.model_validate_json((a / rel).read_text(encoding="utf-8"))
+            mb = Manifest.model_validate_json((b / rel).read_text(encoding="utf-8"))
+            assert ma.model_copy(update={"created_at": ""}) == mb.model_copy(
+                update={"created_at": ""}
+            )
+        else:
+            assert (a / rel).read_bytes() == (b / rel).read_bytes(), rel
