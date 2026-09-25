@@ -59,6 +59,15 @@ workers: ${workers.length}; ${alive}
   expect(g.errors, g.errors.join(" | ")).toEqual([]);
 });
 
+test("pages are assembled, summed and smoothed in the worker (ensemble)", async ({ page, baseURL }) => {
+  const g = guard(page, baseURL!);
+  await page.goto(`/?bundle=${BUNDLE}&mode=ensemble&smooth=4`);
+  await expect(page.locator("html")).toHaveAttribute("data-page", /^ensemble:\d+:\d+$/);
+  await expect(page.locator("html")).toHaveAttribute("data-smoothed", "true");
+  expect(g.offOrigin).toEqual([]);
+  expect(g.errors, g.errors.join(" | ")).toEqual([]);
+});
+
 test("streams the mix WAV through the AudioWorklet (Range requests), no underruns", async ({ page, baseURL }) => {
   const g = guard(page, baseURL!);
   const ranges: string[] = [];

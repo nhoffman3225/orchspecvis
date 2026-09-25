@@ -7,13 +7,14 @@ import { heatFromNotes, heatFromPage, keyLevelsAt, normalizeHeat } from "./heat"
 import { PianoView, notesFromF0 } from "./piano";
 import { ScoreView } from "./scoreview";
 import { HARM_PRESETS, harmSliderValue, snapHarm } from "./presets";
-import { frameGaps, frameSpans, smoothPage } from "./gaps";
+import { frameGaps, frameSpans } from "./gaps";
 import { COLORMAPS, colormapLut, cssColor, stemPalette } from "./colormap";
 import { initToken } from "./net";
 import { LufsStrip, Pane2D } from "./pane2d";
 import { Player } from "./player";
 import { GRID_COLS, SURFACE_STYLES, Surface, colsPerBin, type SurfaceStyle } from "./surface";
-import { TileCache, assemblePage, bundleTileLoader, chooseLevel, lodsFor, sumPages, type TrackId } from "./tiles";
+import { chooseLevel, lodsFor, type TrackId } from "./tiles";
+import { PagesClient } from "./pagesclient";
 
 type Mode = "mix" | "ensemble" | "stems" | "dominant";
 
@@ -31,7 +32,7 @@ async function main(): Promise<void> {
   let base = params.get("bundle") ?? (import.meta.env.DEV ? "./tiny-bundle/" : "./bundle/");
   if (!base.endsWith("/")) base += "/";
   const m = await loadManifest(base);
-  const cache = new TileCache(bundleTileLoader(base, m));
+  const pagesWorker = new PagesClient(base, m); // tile fetch/assembly, stem sums, smoothing
   $("title").textContent = `${m.source.name} · ${m.stems.length} stems · k=${m.cqt.k} · ${m.cqt.backend}`;
 
   // ---- renderer (the one and only WebGL context)
@@ -193,7 +194,7 @@ async function main(): Promise<void> {
       cb.addEventListener("change", () => {
         if (cb.checked) partsVisible.add(p.index);
         else partsVisible.delete(p.index);
-        rebuildDisplay();
+        void rebuildDisplay();
       });
       const sw = document.createElement("span");
       sw.className = "sw";
@@ -219,7 +220,7 @@ async function main(): Promise<void> {
       plist.querySelectorAll<HTMLInputElement>("input").forEach((cb) => (cb.checked = on));
       partsVisible.clear();
       if (on) parts.forEach((p) => partsVisible.add(p.index));
-      rebuildDisplay();
+      void rebuildDisplay();
     };
     $("parts-all").addEventListener("click", () => setAllParts(true));
     $("parts-none").addEventListener("click", () => setAllParts(false));
@@ -235,10 +236,10 @@ async function main(): Promise<void> {
   }
   notesBox.addEventListener("change", () => {
     if (pane.score) pane.score.showNotes = notesBox.checked;
-    rebuildDisplay();
+    void rebuildDisplay();
   });
-  fundBox.addEventListener("change", () => rebuildDisplay());
-  fundW.addEventListener("change", () => rebuildDisplay());
+  fundBox.addEventListener("change", () => void rebuildDisplay());
+  fundW.addEventListener("change", () => void rebuildDisplay());
   // overtones back in when loud enough (only meaningful with fundamentals on)
   // slider: 0 = off, 1 = 0 dB, 2 = -1 dB, ... 97 = -96 dB (right lets quieter harmonics in)
   const MAX_HARMONIC = 16;
@@ -260,7 +261,7 @@ async function main(): Promise<void> {
     harm.value = presetSel.value;
     presetSel.value = "";
     syncHarm();
-    rebuildDisplay();
+    void rebuildDisplay();
   });
   const syncHarm = (): void => {
     harm.disabled = !fundBox.checked || fundBox.disabled;
@@ -270,7 +271,7 @@ async function main(): Promise<void> {
   harm.addEventListener("input", () => {
     harm.value = String(snapHarm(Number(harm.value)));
     syncHarm();
-    rebuildDisplay();
+    void rebuildDisplay();
   });
   fundBox.addEventListener("change", syncHarm);
   syncHarm();
@@ -304,20 +305,21 @@ async function main(): Promise<void> {
   async function loadPage(level: number, start: number): Promise<void> {
     const gen = ++pageGen;
     const tracks = heightTracks();
-    const pages = await Promise.all(
-      tracks.map((t) => assemblePage(cache, lodsFor(m, t)[level]!, m.n_bins, start, pageFrames)),
+    const { height, dom } = await pagesWorker.page(
+      tracks.map((t) => lodsFor(m, t)[level]!),
+      ui.mode === "dominant" && m.dominant ? m.dominant.lods[level]! : null,
+      start,
+      pageFrames,
     );
-    const height = pages.length ? sumPages(pages, m.db_min, m.db_max) : new Uint8Array(pageFrames * m.n_bins);
-    const dom = ui.mode === "dominant" && m.dominant
-      ? await assemblePage(cache, m.dominant.lods[level]!, m.n_bins, start, pageFrames, m.dominant.none_value)
-      : null;
     if (gen !== pageGen) return; // superseded
     raw = { height, dom, start, level, winFrames: secToF0(ui.winSeconds) / 2 ** level };
-    rebuildDisplay();
+    await rebuildDisplay();
+    if (gen !== pageGen) return;
     surface.setMode(ui.mode === "dominant" ? "dominant" : "db");
     const pal = palette();
     surface.setPalette(pal);
     page = { level, start, key: pageKey(), ready: true };
+    document.documentElement.dataset.page = `${ui.mode}:${level}:${start}`; // tests
   }
 
   // ---- spectral gaps of whatever is displayed (mix, full ensemble, or selected stems)
@@ -328,8 +330,11 @@ async function main(): Promise<void> {
   const smooth = $<HTMLInputElement>("smooth");
   const pSmooth = params.get("smooth");
   if (pSmooth !== null && Number.isFinite(Number(pSmooth))) smooth.value = pSmooth;
-  function rebuildDisplay(): void {
+  let displayGen = 0;
+  async function rebuildDisplay(): Promise<void> {
     if (!raw) return;
+    const gen = ++displayGen;
+    const r = raw;
     const semis = Number(smooth.value);
     $("smoothval").textContent = semis > 0 ? `${semis} st` : "off";
     // sigma = half the chosen width; time sigma covers the same world distance as pitch
@@ -369,12 +374,14 @@ async function main(): Promise<void> {
       }
     }
     heatSrc = { data: src, level: raw.level, start: raw.start };
-    const height = smoothPage(src, m.n_bins, pageFrames, sigmaB, sigmaF, m.db_min, m.db_max);
-    surface.setPage(height, raw.dom, raw.start);
+    const height = await pagesWorker.smooth(src, pageFrames, sigmaB, sigmaF);
+    if (gen !== displayGen) return; // a newer rebuild (slider, page) superseded this one
+    surface.setPage(height, r.dom, r.start);
     surface.setNotes(notes && nix && notesBox.checked
-      ? rasterizeNotes(notes, inPage, m, raw.level, raw.start, pageFrames, k / 2, visiblePart)
+      ? rasterizeNotes(notes, inPage, m, r.level, r.start, pageFrames, k / 2, visiblePart)
       : null);
-    last = { height, dom: raw.dom, start: raw.start, level: raw.level };
+    last = { height, dom: r.dom, start: r.start, level: r.level };
+    document.documentElement.dataset.smoothed = String(height !== src); // tests
     applyGaps();
   }
   // the filtered (fundamentals/harmonics) but unsmoothed page drives the "sound" heat map
@@ -398,7 +405,7 @@ async function main(): Promise<void> {
     smoothPending = true;
     requestAnimationFrame(() => {
       smoothPending = false;
-      rebuildDisplay();
+      void rebuildDisplay();
     });
   });
   const gapsBox = $<HTMLInputElement>("gaps");
@@ -528,7 +535,7 @@ async function main(): Promise<void> {
     // terrain/fabric read best smoothed; nudge the slider up if it is still at 0
     if (styleSel.value !== "surface" && Number(smooth.value) === 0) {
       smooth.value = "3";
-      rebuildDisplay();
+      void rebuildDisplay();
     }
     applyStyle();
   });
@@ -714,7 +721,7 @@ async function main(): Promise<void> {
     strip.draw();
     const s = player.audioError
       ? status.textContent ?? ""
-      : `${scoreStatus}${m.n_frames} frames × ${m.n_bins} bins · level ${page.level} · ${cache.size} tiles cached${player.hasAudio ? "" : " · loading audio…"}`;
+      : `${scoreStatus}${m.n_frames} frames × ${m.n_bins} bins · level ${page.level}${player.hasAudio ? "" : " · loading audio…"}`;
     if (s !== lastStatus) status.textContent = lastStatus = s;
   });
 }
