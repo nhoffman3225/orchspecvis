@@ -11,6 +11,13 @@ updates:
     directory: "/viewer"
     schedule: { interval: weekly }
     groups: { viewer: { update-types: [minor, patch] } }
+    ignore:
+      # `typescript` stays 6.x for typescript-eslint's JS API; TS 7 is `typescript-7` (PLAN)
+      - dependency-name: typescript
+        update-types: [version-update:semver-major]
+      # types track the Node runtime (24); bump together with CI's node-version
+      - dependency-name: "@types/node"
+        update-types: [version-update:semver-major]
   - package-ecosystem: npm
     directory: "/desktop"
     schedule: { interval: weekly }
