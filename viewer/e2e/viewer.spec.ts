@@ -80,6 +80,15 @@ test("streams the mix WAV through the AudioWorklet (Range requests), no underrun
   await page.goto(`/?bundle=${BUNDLE}&t=2`);
   await expect(page.locator("html")).toHaveAttribute("data-audio", "stream");
   await page.locator("#play").click();
+  // a busy main thread must not starve the audio (the feeder worker talks to the worklet
+  // directly): block it in 300 ms bursts for ~2.4 s while playing
+  await page.evaluate(async () => {
+    for (let k = 0; k < 6; k++) {
+      const end = performance.now() + 300;
+      while (performance.now() < end) { /* busy */ }
+      await new Promise((r) => setTimeout(r, 100));
+    }
+  });
   const secs = async (): Promise<number> => {
     const [mm, ss] = ((await page.locator("#time").textContent()) ?? "0:0").split(" / ")[0]!.split(":");
     return Number(mm) * 60 + Number(ss);
