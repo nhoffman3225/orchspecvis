@@ -98,7 +98,10 @@ pub fn parse_range(header: Option<&str>, size: u64) -> Result<Option<(u64, u64)>
             (size.saturating_sub(n), size.saturating_sub(1))
         }
         (s, "") => (s.parse().map_err(|_| Unsatisfiable)?, size.saturating_sub(1)),
-        (s, e) => (s.parse().map_err(|_| Unsatisfiable)?, e.parse::<u64>().map_err(|_| Unsatisfiable)?.min(size.saturating_sub(1))),
+        (s, e) => (
+            s.parse().map_err(|_| Unsatisfiable)?,
+            e.parse::<u64>().map_err(|_| Unsatisfiable)?.min(size.saturating_sub(1)),
+        ),
     };
     if size == 0 || start > end || start >= size {
         return Err(Unsatisfiable);

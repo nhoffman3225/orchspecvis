@@ -9,8 +9,7 @@ pub const MANIFEST_NAME: &str = "manifest.json";
 pub const SUPPORTED_VERSIONS: [u32; 4] = [1, 2, 3, 4];
 pub const NONE_STEM: u32 = 255;
 pub const NOTE_COLUMNS: [&str; 11] = [
-    "part", "staff", "voice", "midi", "onset_s", "offset_s", "measure", "beat", "velocity",
-    "f0_db", "f0_ok",
+    "part", "staff", "voice", "midi", "onset_s", "offset_s", "measure", "beat", "velocity", "f0_db", "f0_ok",
 ];
 
 #[derive(Debug, Clone, PartialEq)]
@@ -416,8 +415,8 @@ impl Manifest {
             if s.index >= NONE_STEM {
                 return fail("stem index must be < 255");
             }
-            let ok = !s.id.is_empty()
-                && s.id.bytes().all(|b| b.is_ascii_alphanumeric() || b"_.-".contains(&b));
+            let ok =
+                !s.id.is_empty() && s.id.bytes().all(|b| b.is_ascii_alphanumeric() || b"_.-".contains(&b));
             if !ok {
                 return fail(format!("stem id {:?} has invalid characters", s.id));
             }
@@ -451,7 +450,11 @@ impl Manifest {
             if sc.notes.columns.iter().map(String::as_str).ne(NOTE_COLUMNS) {
                 return fail(format!("notes columns must be {NOTE_COLUMNS:?}"));
             }
-            one_of("score.alignment.method", &sc.alignment.method, &["warp", "xcorr", "manual", "preroll_only"])?;
+            one_of(
+                "score.alignment.method",
+                &sc.alignment.method,
+                &["warp", "xcorr", "manual", "preroll_only"],
+            )?;
             one_of("score.alignment.time_source", &sc.alignment.time_source, &["midi", "score_tempo"])?;
             for p in &sc.parts {
                 one_of("stem_match", &p.stem_match, &["name", "fuzzy", "order", "none"])?;

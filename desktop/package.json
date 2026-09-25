@@ -7,7 +7,8 @@
   "scripts": {
     "icon": "tauri icon icon-source.png",
     "dev": "npm --prefix ../viewer run build && tauri dev",
-    "build": "npm --prefix ../viewer run build && tauri build"
+    "build": "npm --prefix ../viewer run build && tauri build --no-bundle",
+    "installer": "npm --prefix ../viewer run build && tauri build"
   },
   "devDependencies": {
     "@tauri-apps/cli": "2.11.5"

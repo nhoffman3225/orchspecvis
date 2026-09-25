@@ -122,7 +122,8 @@ jobs:
           uv sync --locked --extra dev
           uv run pytest tests/test_score_bundle.py
 
-      - name: cargo test / clippy (orchspec-core)
+      - name: cargo fmt / test / clippy (orchspec-core)
         run: |
+          cargo fmt --all -- --check
           cargo test -p orchspec-core --locked
           cargo clippy -p orchspec-core --locked --all-targets -- -D warnings

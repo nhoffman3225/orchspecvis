@@ -63,7 +63,12 @@ fn pick_bundle(app: &AppHandle) {
     app.dialog().file().set_title("Open an orchspec bundle folder").pick_folder(move |picked| {
         let Some(path) = picked.and_then(|p| p.into_path().ok()) else { return };
         if let Err(e) = open_bundle(&handle, path) {
-            handle.dialog().message(e).title("Not an orchspec bundle").kind(MessageDialogKind::Error).show(|_| {});
+            handle
+                .dialog()
+                .message(e)
+                .title("Not an orchspec bundle")
+                .kind(MessageDialogKind::Error)
+                .show(|_| {});
         }
     });
 }
@@ -81,19 +86,25 @@ fn main() {
                 let assets = app.asset_resolver();
                 let viewer = |rel: &str| assets.get(rel.to_string()).map(|a| a.bytes().to_vec());
                 let range = request.headers().get("range").and_then(|v| v.to_str().ok());
-                let reply = route(request.method().as_str(), request.uri().path(), range, root.as_deref(), &viewer);
+                let reply =
+                    route(request.method().as_str(), request.uri().path(), range, root.as_deref(), &viewer);
                 responder.respond(to_response(reply));
             });
         })
         .menu(|app| {
             let open = MenuItem::with_id(app, "open", "Open Bundle…", true, Some("CmdOrCtrl+O"))?;
             let reload = MenuItem::with_id(app, "reload", "Reload", true, Some("CmdOrCtrl+R"))?;
-            let file = Submenu::with_items(app, "File", true, &[
-                &open,
-                &reload,
-                &PredefinedMenuItem::separator(app)?,
-                &PredefinedMenuItem::quit(app, None)?,
-            ])?;
+            let file = Submenu::with_items(
+                app,
+                "File",
+                true,
+                &[
+                    &open,
+                    &reload,
+                    &PredefinedMenuItem::separator(app)?,
+                    &PredefinedMenuItem::quit(app, None)?,
+                ],
+            )?;
             Menu::with_items(app, &[&file])
         })
         .on_menu_event(|app, ev| match ev.id().as_ref() {
@@ -116,7 +127,12 @@ fn main() {
             match cli_bundle.clone() {
                 Some(dir) => {
                     if let Err(e) = open_bundle(&handle, dir) {
-                        handle.dialog().message(e).title("Not an orchspec bundle").kind(MessageDialogKind::Error).show(|_| {});
+                        handle
+                            .dialog()
+                            .message(e)
+                            .title("Not an orchspec bundle")
+                            .kind(MessageDialogKind::Error)
+                            .show(|_| {});
                     }
                 }
                 None => pick_bundle(&handle),
