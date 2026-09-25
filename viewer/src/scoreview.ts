@@ -5,7 +5,7 @@
 import { bundleUrl, type Manifest } from "./bundle";
 import { fetchSameOrigin } from "./net";
 import { ScoreClock, SoundingTracker } from "./scoremap";
-import type { LayoutOptions, LayoutResult } from "./verovioCore";
+import { notatedId, type LayoutOptions, type LayoutResult } from "./verovioCore";
 import type { ScoreRequest } from "./verovio.worker";
 
 export interface ScoreViewDeps {
@@ -32,7 +32,12 @@ export class ScoreView {
   private litKey = "";
   private staffToPart: number[] = []; // staff number n (1-based) -> part, index n-1
   private loading: Promise<void> | null = null;
+  // playhead line: onset events (Verovio ms + note ids) and their x on the current page
+  private onsets: { ms: number; ids: string[] }[] = [];
+  private xCache = new Map<number, number | null>();
+  private line = document.createElement("div");
   scale = 38;
+  private lastMs: number | null = null; // Verovio time at the last update
   follow = true;
   condense = false;
 
@@ -47,6 +52,8 @@ export class ScoreView {
       for (let s = 0; s < Math.max(1, p.staves); s++) this.staffToPart.push(p.index);
     }
     host.addEventListener("click", (e) => void this.onClick(e));
+    this.line.className = "score-line";
+    this.line.hidden = true;
   }
 
   private call<T>(req: Req): Promise<T> {
@@ -113,6 +120,8 @@ export class ScoreView {
     this.lay = lay;
     this.clock = new ScoreClock(this.m.score?.measures ?? [], lay.measures, lay.endMs);
     this.sounding = new SoundingTracker(lay.events);
+    this.onsets = lay.events.filter((e) => e.on?.length).map((e) => ({ ms: e.tstamp, ids: e.on! }));
+    this.xCache.clear();
     this.page = 0;
     this.litKey = "";
     // sync diagnostics (read by the E2E tests and handy in devtools)
@@ -125,9 +134,12 @@ export class ScoreView {
   /** Re-layout after a size, zoom or condense change (in the worker). */
   async relayout(): Promise<void> {
     if (!this.lay) return;
+    // keep the reader's place: the bar at the playhead, else the first bar on screen
+    const anchor = this.lastMs ?? this.lay.measures.find((m) => m.page === this.page)?.ms ?? 0;
     this.info.textContent = "re-engraving…";
     this.accept(await this.call<LayoutResult>({ op: "relayout", opts: this.opts() }));
     this.info.textContent = "";
+    await this.show(this.pageAt(anchor));
   }
 
   pageLabel(): string {
@@ -149,6 +161,8 @@ export class ScoreView {
         const p = this.wantPage;
         const svg = await this.call<string>({ op: "render", page: p });
         this.host.innerHTML = svg; // sanitized in the worker (sanitizeSvg)
+        this.host.append(this.line); // innerHTML removed it
+        this.xCache.clear();
         this.page = p;
         this.lit = [];
         this.litKey = "";
@@ -177,6 +191,7 @@ export class ScoreView {
   update(t: number): void {
     if (!this.lay || !this.clock) return;
     const ms = this.clock.audioToVrv(t);
+    this.lastMs = Number.isFinite(ms) ? ms : null;
     if (!Number.isFinite(ms)) {
       this.host.dataset.state = "no-sync"; // no measure anchors: score and bundle disagree
       return;
@@ -184,6 +199,7 @@ export class ScoreView {
     if (this.host.dataset.state !== "sync") this.host.dataset.state = "sync";
     const target = this.follow ? this.pageAt(ms) : this.page || 1;
     if (target !== this.page) void this.show(target);
+    this.placeLine(ms);
     if (this.rendering) return;
     const ids = this.sounding ? this.sounding.at(ms) : [];
     const key = `${this.page}|${ids.join(",")}`;
@@ -207,6 +223,78 @@ export class ScoreView {
       this.lit.push(el);
     }
     if (this.follow && this.lit[0]) this.keepVisible(this.lit[0]);
+  }
+
+  /** Box of an element in host-content coordinates (stable while scrolling). */
+  private box(el: Element): { left: number; top: number; right: number; bottom: number } {
+    const r = el.getBoundingClientRect();
+    const h = this.host.getBoundingClientRect();
+    const dx = this.host.scrollLeft - h.left, dy = this.host.scrollTop - h.top;
+    return { left: r.left + dx, top: r.top + dy, right: r.right + dx, bottom: r.bottom + dy };
+  }
+
+  /** x of onset event i on this page: left edge of its first notehead, or null. */
+  private xOf(i: number): number | null {
+    let x = this.xCache.get(i);
+    if (x !== undefined) return x;
+    x = null;
+    for (const id of this.onsets[i]?.ids ?? []) {
+      const el = this.host.querySelector(`[id="${CSS.escape(id)}"]`);
+      if (!el) continue;
+      x = this.box(el.querySelector(".notehead") ?? el).left;
+      break;
+    }
+    this.xCache.set(i, x);
+    return x;
+  }
+
+  /**
+   * Vertical playhead through the current system: interpolated between the engraved
+   * positions of the surrounding note onsets (so it follows the score's own spacing),
+   * falling back to the bar's width when the next onset is on another system or page.
+   */
+  private placeLine(ms: number): void {
+    const lay = this.lay;
+    const hide = (): void => void (this.line.hidden = true);
+    if (!lay || this.rendering) return hide();
+    const ms0 = lay.measures;
+    let lo = 0, hi = ms0.length - 1, mi = -1;
+    while (lo <= hi) {
+      const mid = (lo + hi) >> 1;
+      if (ms0[mid]!.ms <= ms) {
+        mi = mid;
+        lo = mid + 1;
+      } else hi = mid - 1;
+    }
+    const meas = ms0[mi];
+    if (!meas || meas.page !== this.page) return hide();
+    const mel = this.host.querySelector(`[id="${CSS.escape(notatedId(meas.id))}"]`);
+    if (!mel) return hide();
+    const mb = this.box(mel);
+    const mEnd = ms0[mi + 1]?.ms ?? lay.endMs;
+    let x = mb.left + ((ms - meas.ms) / Math.max(1, mEnd - meas.ms)) * (mb.right - mb.left);
+    // onset events around ms
+    lo = 0;
+    hi = this.onsets.length - 1;
+    let ei = -1;
+    while (lo <= hi) {
+      const mid = (lo + hi) >> 1;
+      if (this.onsets[mid]!.ms <= ms) {
+        ei = mid;
+        lo = mid + 1;
+      } else hi = mid - 1;
+    }
+    const x0 = ei >= 0 ? this.xOf(ei) : null;
+    if (x0 !== null && x0 >= mb.left - 2 && x0 <= mb.right) {
+      const t0 = this.onsets[ei]!.ms;
+      const t1 = this.onsets[ei + 1]?.ms ?? mEnd;
+      let x1 = ei + 1 < this.onsets.length ? this.xOf(ei + 1) : null;
+      if (x1 === null || x1 <= x0 || x1 > mb.right + (mb.right - mb.left)) x1 = mb.right; // next system/page
+      x = x0 + ((ms - t0) / Math.max(1, t1 - t0)) * (x1 - x0);
+    }
+    this.line.hidden = false;
+    this.line.style.transform = `translate(${x.toFixed(1)}px, ${mb.top.toFixed(1)}px)`;
+    this.line.style.height = `${(mb.bottom - mb.top).toFixed(1)}px`;
   }
 
   /** Part of a note via its staff's MEI @n (data-n), robust to hidden (condensed) staves. */

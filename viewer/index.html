@@ -60,11 +60,11 @@
         <label title="Heat map on the keyboard: recent activity per key, fading with time constant τ. sound = measured energy at the key (follows the audio's decay); notes = how much the score plays there.">
           key heat <select id="heat">
             <option value="off">off</option>
-            <option value="sound" selected>sound</option>
-            <option value="notes">notes</option>
+            <option value="sound">sound</option>
+            <option value="notes" selected>notes</option>
           </select>
-          τ <input id="tau" type="range" min="0.2" max="6" step="0.1" value="1.5" />
-          <span id="tauval">1.5 s</span>
+          τ <input id="tau" type="range" min="0.2" max="10" step="0.1" value="3" />
+          <span id="tauval">3.0 s</span>
         </label>
         <label title="Spectral gaps: quiet pitch regions inside the ensemble's sounding span">
           <input id="gaps" type="checkbox" /> gaps ≤
@@ -82,6 +82,7 @@
       <main id="main">
         <div id="view3d"><canvas id="gl"></canvas></div>
         <aside id="stems" hidden>
+          <div id="sections" title="Select by section (from part and stem names). Click: only this section; Ctrl/Shift+click: add or remove it."></div>
           <div class="stems-head">
             <strong>Stems</strong>
             <button id="stems-all" type="button">all</button>
@@ -111,8 +112,9 @@
           <button id="score-prev" type="button" title="previous page (PgUp)">◀</button>
           <span id="score-page"></span>
           <button id="score-next" type="button" title="next page (PgDn)">▶</button>
-          <button id="score-zoomout" type="button" title="smaller">−</button>
-          <button id="score-zoomin" type="button" title="larger">+</button>
+          <button id="score-zoomout" type="button" title="smaller (−, Ctrl+wheel)">−</button>
+          <span id="score-zoom" title="Ctrl+wheel or +/− to zoom">38 %</span>
+          <button id="score-zoomin" type="button" title="larger (+, Ctrl+wheel)">+</button>
           <label><input id="score-follow" type="checkbox" checked /> follow</label>
           <label title="Hide staves that only rest in a system (like a printed orchestral score)">
             <input id="score-condense" type="checkbox" /> hide empty staves</label>

@@ -35,6 +35,13 @@ html, body { margin: 0; height: 100%; background: var(--bg); color: var(--fg); }
 }
 #stems[hidden] { display: none; }
 .stems-head { display: flex; gap: 6px; align-items: center; margin-bottom: 6px; }
+#sections { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 8px; }
+#sections[hidden] { display: none; }
+#sections button {
+  font: inherit; font-size: 11px; padding: 1px 7px; border-radius: 10px; cursor: pointer;
+  background: transparent; color: var(--fg); border: 1px solid var(--fam, var(--line));
+}
+#sections button.on { background: var(--fam); color: #0b0c10; }
 .stems-head strong { flex: 1; }
 #stem-list, #part-list { list-style: none; margin: 0; padding: 0; }
 #stem-list li, #part-list li { display: flex; align-items: center; gap: 6px; padding: 2px 0; white-space: nowrap; }
@@ -68,6 +75,7 @@ html, body { margin: 0; height: 100%; background: var(--bg); color: var(--fg); }
 #score-bar .hint:last-of-type { margin-left: auto; }
 #score-time { color: #e6c07b; font-variant-numeric: tabular-nums; min-width: 220px; }
 #score-host {
+  position: relative;
   overflow: auto; background: #f3efe6; color: #1b1b1b; padding: 12px; min-height: 0;
   cursor: pointer;
 }
@@ -78,6 +86,11 @@ html, body { margin: 0; height: 100%; background: var(--bg); color: var(--fg); }
 #score-host g.label { font-weight: normal; }
 #score-host ellipse, #score-host path, #score-host polygon, #score-host polyline,
 #score-host rect { stroke: currentColor; }
+#score-host .score-line {
+  position: absolute; left: 0; top: 0; width: 2px; margin-left: -1px; pointer-events: none;
+  background: rgba(214, 60, 60, 0.85); box-shadow: 0 0 6px rgba(214, 60, 60, 0.6);
+}
+#score-host .score-line[hidden] { display: none; }
 #score-host g.note.playing, #score-host g.chord.playing { stroke-width: 12; }
 #score-host g.measure:hover { fill: #3a5a8c; color: #3a5a8c; }
 #aboutview {
