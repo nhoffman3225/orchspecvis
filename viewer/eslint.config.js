@@ -7,7 +7,7 @@ const noNetUrl = {
 };
 
 export default tseslint.config(
-  { ignores: ["dist/", "node_modules/", "public/", "test-data/"] },
+  { ignores: ["dist/", "node_modules/", "public/", "test-data/", "test-results/", "playwright-report/"] },
   js.configs.recommended,
   ...tseslint.configs.recommended,
   {

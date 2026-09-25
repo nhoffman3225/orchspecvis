@@ -50,3 +50,9 @@ jobs:
           npm run lint
           npm test
           npm run build
+
+      - name: Viewer E2E (Playwright; no off-origin requests, score + piano views)
+        working-directory: viewer
+        run: |
+          npx playwright install chromium
+          npx playwright test
