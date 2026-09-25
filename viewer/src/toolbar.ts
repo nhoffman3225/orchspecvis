@@ -31,15 +31,21 @@ export function setGroupOpen(grp: HTMLElement, open: boolean): void {
   if (body) body.inert = !open;
 }
 
-/** Wires every foldable group under `root`; `open` forces all open (e.g. ?tools=open). */
+/** Wires every foldable group under `root`; `open` forces all open (e.g. ?tools=open).
+ * Opening a group closes the others (an accordion keeps the toolbar short); Shift+click
+ * opens it alongside them. */
 export function initFolds(root: HTMLElement, open = false): void {
-  for (const grp of root.querySelectorAll<HTMLElement>(".grp.fold[data-fold]")) {
-    const name = grp.dataset.fold!;
-    setGroupOpen(grp, open || (remembered(name) ?? false));
-    grp.querySelector<HTMLButtonElement>(":scope > button.cap")?.addEventListener("click", () => {
+  const groups = [...root.querySelectorAll<HTMLElement>(".grp.fold[data-fold]")];
+  const set = (grp: HTMLElement, on: boolean): void => {
+    setGroupOpen(grp, on);
+    remember(grp.dataset.fold!, on);
+  };
+  for (const grp of groups) {
+    setGroupOpen(grp, open || (remembered(grp.dataset.fold!) ?? false));
+    grp.querySelector<HTMLButtonElement>(":scope > button.cap")?.addEventListener("click", (e) => {
       const next = !grp.classList.contains("open");
-      setGroupOpen(grp, next);
-      remember(name, next);
+      if (next && !e.shiftKey) for (const g of groups) if (g !== grp && g.classList.contains("open")) set(g, false);
+      set(grp, next);
     });
   }
 }

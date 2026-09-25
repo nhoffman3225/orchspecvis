@@ -145,7 +145,7 @@ async function main(): Promise<void> {
   }
 
   const cmapSel = $<HTMLSelectElement>("cmap");
-  for (const c of COLORMAPS) cmapSel.add(new Option(c, c));
+  for (const c of COLORMAPS) cmapSel.add(new Option(c[0]!.toUpperCase() + c.slice(1), c));
   cmapSel.value = ui.cmap;
 
   const modeSel = $<HTMLSelectElement>("mode");
@@ -343,6 +343,7 @@ async function main(): Promise<void> {
   });
   const syncHarm = (): void => {
     harm.disabled = !fundBox.checked || fundBox.disabled;
+    presetSel.disabled = harm.disabled; // presets set the slider: same state
     const hd = harmDb();
     $("harmval").textContent = hd === null ? "off" : `${hd === 0 ? "0" : hd} dB`;
   };
@@ -933,7 +934,7 @@ async function main(): Promise<void> {
     const fams = names.map(familyOf);
     const present = FAMILIES.filter((f) => fams.includes(f));
     return { groupOf: fams.map((f) => present.indexOf(f)),
-      groups: present.map((f: Family) => ({ label: f, color: FAMILY_COLORS[f] })) };
+      groups: present.map((f: Family) => ({ label: f[0]!.toUpperCase() + f.slice(1), color: FAMILY_COLORS[f] })) };
   };
   function buildRegisters(): Promise<void> {
     return busy.while("registers", buildRegistersNow());

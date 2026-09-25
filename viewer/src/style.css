@@ -22,6 +22,8 @@
   --shadow: 2px 2px 0 var(--ink);
 }
 html, body { margin: 0; height: 100%; background: var(--bg); color: var(--fg); }
+/* `hidden` always wins over the display rules of labels, bars and panels */
+[hidden] { display: none !important; }
 #app {
   position: fixed; inset: 0;
   display: grid;
@@ -421,3 +423,8 @@ input[type="range"], input[type="checkbox"] { accent-color: var(--yellow); }
   letter-spacing: 0.05em; font-size: 11px; color: var(--orange); }
 kbd { font-family: var(--mono); font-size: 11px; background: var(--raise); border: 2px solid var(--edge);
   box-shadow: 2px 2px 0 var(--ink); padding: 0 5px; }
+
+/* disabled controls look disabled */
+:is(button, select, input):disabled, label:has(> input:disabled:only-of-type) {
+  opacity: 0.4; cursor: not-allowed; box-shadow: none;
+}

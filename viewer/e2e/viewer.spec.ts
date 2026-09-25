@@ -209,6 +209,7 @@ test("tutti: chord per bar / per beat; a bar condenses into a chord and its pitc
   const host = page.locator("#tutti-score");
   await expect(host.locator("svg").first()).toBeVisible({ timeout: 90_000 });
   await expect(page.locator("#tutti-mode")).toHaveValue("chords");
+  await expect(page.locator("#tutti-win")).toBeHidden(); // canvas-only control stays hidden
   await expect(host.locator("g.note[fill]").first()).toBeAttached(); // coloured by section
   const bars = host.locator("g.measure");
   const box = (await bars.nth(1).boundingBox())!;
@@ -325,7 +326,18 @@ test("toolbar groups fold open; hover tips; the help view lists every control", 
   await expect(page.locator("#mode")).toBeInViewport();
   await page.goto(`/?${Q}`); // remembered
   await expect(cap).toHaveAttribute("aria-expanded", "true");
+  // accordion: opening Surface folds Spectrum; Shift+click keeps others open
+  const surface = page.locator('.grp[data-fold="surface"] button.cap');
+  await surface.click();
+  await expect(surface).toHaveAttribute("aria-expanded", "true");
+  await expect(cap).toHaveAttribute("aria-expanded", "false");
+  await cap.click({ modifiers: ["Shift"] });
+  await expect(cap).toHaveAttribute("aria-expanded", "true");
+  await expect(surface).toHaveAttribute("aria-expanded", "true");
+  // the harmonics presets follow the slider: disabled while fundamentals are off
+  await expect(page.locator("#harmpreset")).toBeDisabled();
   // hover help instead of the browser's title tooltip
+  await page.waitForTimeout(400); // let the groups finish sliding open
   await page.locator("#mode").hover();
   await expect(page.locator("#hovertip")).toBeVisible();
   await expect(page.locator("#hovertip")).toContainText("What the spectrum shows");

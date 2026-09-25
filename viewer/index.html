@@ -9,6 +9,7 @@
     <meta name="referrer" content="no-referrer" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>orchspec</title>
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect x='3' y='3' width='26' height='26' fill='%23000'/%3E%3Crect x='1' y='1' width='26' height='26' fill='%23ffd23f' stroke='%23000' stroke-width='2'/%3E%3Cpath d='M5 21 L10 11 L14 18 L18 7 L23 16' fill='none' stroke='%23000' stroke-width='3'/%3E%3Ccircle cx='23' cy='22' r='3' fill='%23ff5fa2' stroke='%23000' stroke-width='1.5'/%3E%3C/svg%3E" />
     <link rel="stylesheet" href="/src/style.css" />
   </head>
   <body>
@@ -30,7 +31,7 @@
           <button id="aboutbtn" type="button" title="About orchspec and open-source credits">ⓘ Credits</button>
         </div>
         <div class="grp fold" role="group" aria-label="Spectrum" data-fold="spectrum">
-          <button class="cap" type="button" aria-expanded="false" aria-controls="grp-spectrum" title="Show or hide the Spectrum settings">Spectrum</button>
+          <button class="cap" type="button" aria-expanded="false" aria-controls="grp-spectrum" title="Show the Spectrum settings (Shift+click keeps other groups open)">Spectrum</button>
           <div class="grp-body" id="grp-spectrum">
             <label title="How many seconds of music the 3D view and the 2D pane show">Window <select id="window"></select> <span class="spin" data-busy="page" hidden></span></label>
             <label title="What the spectrum shows: the mix; all stems summed; only the stems ticked in the list; or the mix coloured by the loudest stem at each point">View
@@ -54,7 +55,7 @@
           </div>
         </div>
         <div class="grp fold" role="group" aria-label="Surface" data-fold="surface">
-          <button class="cap" type="button" aria-expanded="false" aria-controls="grp-surface" title="Show or hide the Surface settings">Surface</button>
+          <button class="cap" type="button" aria-expanded="false" aria-controls="grp-surface" title="Show the Surface settings (Shift+click keeps other groups open)">Surface</button>
           <div class="grp-body" id="grp-surface">
             <label title="Floor level of the 3D surface">Floor <input id="floor" type="range" min="0" max="0.9" step="0.01" value="0.3" /></label>
             <label title="Vertical scale of the 3D surface">Height <input id="height" type="range" min="0.05" max="3" step="0.01" value="0.45" /></label>
@@ -62,8 +63,8 @@
             <label title="Octave guide lines at each C"><input id="grid" type="checkbox" checked /> C Lines</label>
           </div>
         </div>
-        <div class="grp fold" role="group" aria-label="Score overlay" data-fold="score">
-          <button class="cap" type="button" aria-expanded="false" aria-controls="grp-score" title="Show or hide the Score settings">Score</button>
+        <div class="grp fold" role="group" aria-label="Score Overlay" data-fold="score">
+          <button class="cap" type="button" aria-expanded="false" aria-controls="grp-score" title="Show the Score overlay settings (Shift+click keeps other groups open)">Score</button>
           <div class="grp-body" id="grp-score">
             <label title="Outline the score's notes (colored by part; dashed = weak fundamental)">
               <input id="notes" type="checkbox" checked /> Notes</label>
@@ -91,7 +92,7 @@
           </div>
         </div>
         <div class="grp fold" role="group" aria-label="Keyboard" data-fold="keys">
-          <button class="cap" type="button" aria-expanded="false" aria-controls="grp-keys" title="Show or hide the Keys settings">Keys</button>
+          <button class="cap" type="button" aria-expanded="false" aria-controls="grp-keys" title="Show the keyboard heat settings (Shift+click keeps other groups open)">Keys</button>
           <div class="grp-body" id="grp-keys">
             <label title="Heat map on the keyboard: recent activity per key, fading with time constant τ. sound = measured energy at the key (follows the audio's decay); notes = how much the score plays there.">
               Key Heat <select id="heat">
@@ -156,7 +157,7 @@
             <input id="score-condense" type="checkbox" /> Hide Empty Staves</label>
           <span id="score-info" class="hint"></span>
           <span class="hint">click a note to jump there · Space play/pause · Esc close</span>
-          <button id="scoreclose" type="button">✕ Close</button>
+          <button id="scoreclose" type="button" title="Close the score (Esc)">✕ Close</button>
         </div>
         <div id="score-host"></div>
         <div id="score-pdf" hidden></div>
@@ -181,7 +182,7 @@
             <span id="tutti-winval">8 s</span></label>
           <label title="Scroll with the music"><input id="tutti-follow" type="checkbox" checked /> Follow</label>
           <span class="hint" title="click: a chord or bar · Alt+click: every note on the same beat position · drag: box · Shift/Ctrl: add · double-click: seek · Esc: clear, then close">click · Alt+click · drag · Shift adds · ⓘ</span>
-          <button id="tutticlose" type="button">✕ Close</button>
+          <button id="tutticlose" type="button" title="Close the tutti view (Esc)">✕ Close</button>
         </div>
         <div id="tutti-body">
           <div id="tutti-main">
@@ -202,7 +203,7 @@
         <div id="help-bar">
           <strong>Help</strong>
           <span class="hint">Hover any control for what it does · the full guide is docs/user-guide.md</span>
-          <button id="helpclose" type="button">✕ Close</button>
+          <button id="helpclose" type="button" title="Close help (Esc)">✕ Close</button>
         </div>
         <div id="help-body">
           <section class="help-cols">
@@ -239,17 +240,17 @@
       </div>
       <div id="aboutview" hidden>
         <div id="about-bar">
-          <strong>About &amp; credits</strong>
-          <button id="aboutclose" type="button">✕ Close</button>
+          <strong>About &amp; Credits</strong>
+          <button id="aboutclose" type="button" title="Close (Esc)">✕ Close</button>
         </div>
         <div id="about-body">
           <h2>orchspec</h2>
           <p>Score-aware orchestral spectral visualizer. Local-only: nothing leaves this computer.
             Released under the MIT licence.</p>
-          <h2>Built with open source</h2>
+          <h2>Built with Open Source</h2>
           <p>Thank you to the people who build and maintain these projects. Shipped in this viewer:</p>
           <table>
-            <tr><th>project</th><th>licence</th><th>what it does here</th></tr>
+            <tr><th>Project</th><th>Licence</th><th>What It Does Here</th></tr>
             <tr><td>three.js — threejs.org</td><td>MIT</td><td>WebGL rendering of the spectral surface</td></tr>
             <tr><td>Verovio — verovio.org</td><td>LGPL-3.0-or-later</td><td>music engraving of the score view
               (shipped unmodified as a separate, replaceable file)</td></tr>
@@ -258,7 +259,7 @@
             libsndfile, pyloudnorm, pydantic and PyTorch; the tooling on Vite, TypeScript, Vitest,
             ESLint and Playwright; the desktop app on Tauri and the Rust ecosystem. The full list,
             with versions and licences, is in CREDITS.md in the source repository.</p>
-          <p><button id="about-lic" type="button">Show full licence texts</button></p>
+          <p><button id="about-lic" type="button">Show Full Licence Texts</button></p>
           <pre id="about-text" hidden></pre>
         </div>
       </div>
@@ -291,7 +292,7 @@
           <span class="spin" data-busy="registers" hidden></span>
           <span id="reg-info" class="hint"></span>
           <span class="hint">bands: 10–90 % of each group's level · line: centre · click to seek · Esc close</span>
-          <button id="regclose" type="button">✕ Close</button>
+          <button id="regclose" type="button" title="Close the registers view (Esc)">✕ Close</button>
         </div>
         <canvas id="regcanvas"></canvas>
       </div>
@@ -306,7 +307,7 @@
             <input id="keyh" type="range" min="0.5" max="2.5" step="0.1" value="1" /></label>
           <label title="Show the measured spectrum above the keys"><input id="pspec" type="checkbox" checked /> Live Spectrum</label>
           <span class="hint">wheel: stretch time · Space play/pause · ←/→ seek · Esc close</span>
-          <button id="pianoclose" type="button">✕ Close</button>
+          <button id="pianoclose" type="button" title="Close the piano view (Esc)">✕ Close</button>
         </div>
         <canvas id="piano"></canvas>
       </div>
