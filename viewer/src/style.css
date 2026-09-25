@@ -15,10 +15,27 @@ html, body { margin: 0; height: 100%; background: var(--bg); color: var(--fg); }
   grid-template-rows: auto minmax(120px, 1fr) 5px var(--pane-h, 32vh) 64px auto;
 }
 #bar {
-  display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px;
-  padding: 6px 10px; background: var(--panel); border-bottom: 1px solid var(--line);
+  display: flex; flex-wrap: wrap; align-items: center; gap: 4px 0;
+  padding: 4px 6px; background: var(--panel); border-bottom: 1px solid var(--line);
   font-size: 12px;
 }
+/* toolbar groups: a small caption and a divider, wrapping as whole groups first */
+#bar .grp {
+  display: inline-flex; flex-wrap: wrap; align-items: center; gap: 4px 10px;
+  padding: 2px 12px; border-left: 1px solid var(--line);
+}
+#bar .grp:first-child { border-left: 0; padding-left: 4px; }
+#bar .cap {
+  font-size: 10px; letter-spacing: 0.06em; text-transform: uppercase; color: #5f6878;
+  user-select: none;
+}
+#bar input[type="range"] { width: 88px; accent-color: #8fb3e6; }
+#bar .ico { font-size: 12px; }
+#bar button:hover, #bar select:hover { border-color: #3a4150; }
+#bar button:focus-visible, #bar select:focus-visible, #bar input:focus-visible {
+  outline: 1px solid #e6c07b; outline-offset: 1px;
+}
+#aboutbtn { margin-left: 8px; }
 #bar label { display: inline-flex; align-items: center; gap: 4px; color: var(--muted); }
 #bar select, #bar button, #stems button {
   background: #1d2028; color: var(--fg); border: 1px solid var(--line); border-radius: 4px;
