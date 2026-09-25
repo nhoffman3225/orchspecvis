@@ -15,6 +15,14 @@ export interface ScoreViewDeps {
   now: () => number;
 }
 
+/** Options for engraving something other than the bundle's score (e.g. a reduction). */
+export interface ScoreViewOptions {
+  file?: string; // bundle-relative MusicXML (default: score.score_file)
+  noteColor?: (id: string) => string | null; // persistent notehead colour
+  selectable?: boolean; // click/box selection (double-click seeks)
+  onSelect?: (ids: string[]) => void;
+}
+
 type Pending = { resolve: (v: unknown) => void; reject: (e: Error) => void };
 type Req = ScoreRequest extends infer R ? (R extends { id: number } ? Omit<R, "id"> : never) : never;
 
@@ -40,6 +48,14 @@ export class ScoreView {
   private lastMs: number | null = null; // Verovio time at the last update
   follow = true;
   condense = false;
+  active = true; // several views may share a host; only the active one reacts
+  // selection (selectable views)
+  private selected = new Set<string>();
+  private idToEvent = new Map<string, number>();
+  private box0: { x: number; y: number } | null = null;
+  private boxEl = document.createElement("div");
+  private dragged = false;
+  private lastSounding: string[] = [];
 
   constructor(
     private host: HTMLElement,
@@ -47,13 +63,174 @@ export class ScoreView {
     private base: string,
     private m: Manifest,
     private deps: ScoreViewDeps,
+    private vo: ScoreViewOptions = {},
   ) {
     for (const p of m.score?.parts ?? []) {
       for (let s = 0; s < Math.max(1, p.staves); s++) this.staffToPart.push(p.index);
     }
-    host.addEventListener("click", (e) => void this.onClick(e));
     this.line.className = "score-line";
     this.line.hidden = true;
+    this.boxEl.className = "score-box";
+    this.boxEl.hidden = true;
+    if (vo.selectable) {
+      host.addEventListener("pointerdown", (e) => this.active && this.onDown(e));
+      host.addEventListener("pointermove", (e) => this.active && this.onMove(e));
+      host.addEventListener("pointerup", (e) => this.active && this.onUp(e));
+      host.addEventListener("dblclick", (e) => this.active && void this.onClick(e));
+    } else {
+      host.addEventListener("click", (e) => this.active && void this.onClick(e));
+    }
+  }
+
+  /** Force a re-render of the current page (after switching which view owns the host). */
+  reset(): void {
+    this.page = 0;
+    this.litKey = "";
+  }
+
+  /** Engrave a small MusicXML snippet (sanitized SVG), independent of this view's score. */
+  engrave(xml: string, scale = 36): Promise<string> {
+    return this.call<string>({ op: "engrave", xml, scale });
+  }
+
+  get soundingIds(): string[] {
+    return this.lastSounding;
+  }
+
+  get selection(): string[] {
+    return [...this.selected];
+  }
+
+  clearSelection(): boolean {
+    if (!this.selected.size) return false;
+    this.selected.clear();
+    this.paintSelection();
+    this.vo.onSelect?.([]);
+    return true;
+  }
+
+  private setSelection(ids: string[], add: boolean): void {
+    if (!add) this.selected.clear();
+    for (const id of ids) this.selected.add(id);
+    this.paintSelection();
+    this.vo.onSelect?.(this.selection);
+  }
+
+  private paintSelection(): void {
+    for (const el of this.host.querySelectorAll("g.note.sel")) el.classList.remove("sel");
+    for (const id of this.selected) {
+      this.host.querySelector(`[id="${CSS.escape(id)}"]`)?.classList.add("sel");
+    }
+  }
+
+  private paintColors(): void {
+    const f = this.vo.noteColor;
+    if (!f) return;
+    for (const el of this.host.querySelectorAll<SVGElement>("g.note")) {
+      const c = f(el.id);
+      if (c) {
+        el.setAttribute("fill", c);
+        el.setAttribute("color", c);
+      }
+    }
+  }
+
+  /** Re-apply note colours (e.g. after switching section/part colouring). */
+  recolor(): void {
+    this.paintColors();
+    this.litKey = "";
+  }
+
+  private local(e: MouseEvent): { x: number; y: number } {
+    const h = this.host.getBoundingClientRect();
+    return { x: e.clientX - h.left + this.host.scrollLeft, y: e.clientY - h.top + this.host.scrollTop };
+  }
+
+  private onDown(e: PointerEvent): void {
+    if (e.button !== 0 || !this.lay) return;
+    this.box0 = this.local(e);
+    this.dragged = false;
+  }
+
+  private onMove(e: PointerEvent): void {
+    if (!this.box0) return;
+    const p = this.local(e);
+    if (!this.dragged && Math.abs(p.x - this.box0.x) + Math.abs(p.y - this.box0.y) < 6) return;
+    if (!this.dragged) {
+      this.dragged = true;
+      this.host.setPointerCapture(e.pointerId);
+      this.host.append(this.boxEl);
+    }
+    const st = this.boxEl.style;
+    this.boxEl.hidden = false;
+    st.transform = `translate(${Math.min(p.x, this.box0.x)}px, ${Math.min(p.y, this.box0.y)}px)`;
+    st.width = `${Math.abs(p.x - this.box0.x)}px`;
+    st.height = `${Math.abs(p.y - this.box0.y)}px`;
+  }
+
+  private onUp(e: PointerEvent): void {
+    const b0 = this.box0;
+    this.box0 = null;
+    if (!b0) return;
+    const add = e.shiftKey || e.ctrlKey || e.metaKey;
+    if (this.dragged) {
+      this.boxEl.hidden = true;
+      const p = this.local(e);
+      const [xa, xb] = [Math.min(p.x, b0.x), Math.max(p.x, b0.x)];
+      const [ya, yb] = [Math.min(p.y, b0.y), Math.max(p.y, b0.y)];
+      const ids: string[] = [];
+      for (const el of this.host.querySelectorAll("g.note")) {
+        const bx = this.box(el.querySelector(".notehead") ?? el);
+        const cx = (bx.left + bx.right) / 2, cy = (bx.top + bx.bottom) / 2;
+        if (cx >= xa && cx <= xb && cy >= ya && cy <= yb) ids.push(el.id);
+      }
+      this.setSelection(ids, add);
+      return;
+    }
+    this.pick(e, add);
+  }
+
+  /** Click: a note -> its onset's sonority (Alt: same beat position); a bar -> its notes. */
+  private pick(e: MouseEvent, add: boolean): void {
+    const lay = this.lay;
+    if (!lay) return;
+    const note = (e.target as Element).closest("g.note");
+    if (note) {
+      const ei = this.idToEvent.get(note.id);
+      if (ei === undefined) return this.setSelection([note.id], add);
+      if (!e.altKey) return this.setSelection(this.onPage(lay.events[ei]!.on ?? []), add);
+      const pos = this.barPos(ei); // same beat position within the bar, on this page
+      const ids: string[] = [];
+      lay.events.forEach((ev, i) => {
+        if (ev.on?.length && Math.abs(this.barPos(i) - pos) < 1e-3) ids.push(...this.onPage(ev.on));
+      });
+      return this.setSelection(ids, add);
+    }
+    const bar = [...this.host.querySelectorAll("g.measure")].find((m) => {
+      const r = m.getBoundingClientRect();
+      return e.clientX >= r.left && e.clientX <= r.right && e.clientY >= r.top && e.clientY <= r.bottom;
+    });
+    if (bar) return this.setSelection([...bar.querySelectorAll("g.note")].map((n) => n.id), add);
+    if (!add) this.clearSelection();
+  }
+
+  private onPage(ids: string[]): string[] {
+    return ids.filter((id) => this.host.querySelector(`[id="${CSS.escape(id)}"]`));
+  }
+
+  /** Quarter-note position of event i within its bar. */
+  private barPos(i: number): number {
+    const lay = this.lay!;
+    const ev = lay.events[i]!;
+    let lo = 0, hi = lay.measures.length - 1, mi = 0;
+    while (lo <= hi) {
+      const mid = (lo + hi) >> 1;
+      if (lay.measures[mid]!.ms <= ev.tstamp) {
+        mi = mid;
+        lo = mid + 1;
+      } else hi = mid - 1;
+    }
+    return (ev.qstamp ?? 0) - (lay.measures[mi]?.q ?? 0);
   }
 
   private call<T>(req: Req): Promise<T> {
@@ -105,12 +282,12 @@ export class ScoreView {
   }
 
   private async doLoad(): Promise<void> {
-    const sc = this.m.score;
-    if (!sc?.score_file) throw new Error("this bundle has no engraved score (score_file)");
+    const file = this.vo.file ?? this.m.score?.score_file;
+    if (!file) throw new Error("this bundle has no engraved score (score_file)");
     this.info.textContent = "reading score…";
-    const r = await fetchSameOrigin(bundleUrl(this.base, sc.score_file));
-    if (!r.ok) throw new Error(`${sc.score_file}: HTTP ${r.status}`);
-    const data = sc.score_file.endsWith(".mxl") ? await r.arrayBuffer() : await r.text();
+    const r = await fetchSameOrigin(bundleUrl(this.base, file));
+    if (!r.ok) throw new Error(`${file}: HTTP ${r.status}`);
+    const data = file.endsWith(".mxl") ? await r.arrayBuffer() : await r.text();
     this.info.textContent = "engraving (in the background)…";
     this.accept(await this.call<LayoutResult>({ op: "load", data, opts: this.opts() }));
     this.info.textContent = "";
@@ -121,6 +298,8 @@ export class ScoreView {
     this.clock = new ScoreClock(this.m.score?.measures ?? [], lay.measures, lay.endMs);
     this.sounding = new SoundingTracker(lay.events);
     this.onsets = lay.events.filter((e) => e.on?.length).map((e) => ({ ms: e.tstamp, ids: e.on! }));
+    this.idToEvent.clear();
+    lay.events.forEach((e, i) => e.on?.forEach((id) => this.idToEvent.has(id) || this.idToEvent.set(id, i)));
     this.xCache.clear();
     this.page = 0;
     this.litKey = "";
@@ -162,6 +341,8 @@ export class ScoreView {
         const svg = await this.call<string>({ op: "render", page: p });
         this.host.innerHTML = svg; // sanitized in the worker (sanitizeSvg)
         this.host.append(this.line); // innerHTML removed it
+        this.paintColors();
+        this.paintSelection();
         this.xCache.clear();
         this.page = p;
         this.lit = [];
@@ -202,21 +383,29 @@ export class ScoreView {
     this.placeLine(ms);
     if (this.rendering) return;
     const ids = this.sounding ? this.sounding.at(ms) : [];
+    this.lastSounding = ids;
     const key = `${this.page}|${ids.join(",")}`;
     if (key === this.litKey) return;
     this.litKey = key;
+    const fixed = this.vo.noteColor;
     for (const el of this.lit) {
       el.classList.remove("playing");
-      el.removeAttribute("fill");
-      el.removeAttribute("color");
+      const c = fixed?.(el.id);
+      if (c) {
+        el.setAttribute("fill", c); // back to its persistent colour
+        el.setAttribute("color", c);
+      } else {
+        el.removeAttribute("fill");
+        el.removeAttribute("color");
+      }
     }
     this.lit = [];
     for (const id of ids) {
       const el = this.host.querySelector<SVGElement>(`[id="${CSS.escape(id)}"]`);
       if (!el) continue;
-      const part = this.partOf(el);
+      const part = fixed ? null : this.partOf(el);
       if (part !== null && !this.deps.visible(part)) continue;
-      const color = part === null ? "#e6c07b" : this.deps.partColor(part);
+      const color = fixed ? "#d63c3c" : part === null ? "#e6c07b" : this.deps.partColor(part);
       el.classList.add("playing");
       el.setAttribute("fill", color); // presentation attributes (allowed by the CSP)
       el.setAttribute("color", color);

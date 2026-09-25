@@ -195,22 +195,32 @@ test("section buttons select stems and parts by family", async ({ page, baseURL 
   expect(g.errors, g.errors.join(" | ")).toEqual([]);
 });
 
-test("tutti view: box selection lists pitches and parts; Esc clears, then closes", async ({ page, baseURL }) => {
+test("tutti: engraved chord-per-bar reduction; a bar condenses into a chord and its pitch set", async ({ page, baseURL }) => {
+  test.setTimeout(120_000); // Verovio engraving on CI
   const g = guard(page, baseURL!);
   await page.goto(`/?bundle=${BUNDLE}&view=tutti&t=3`);
-  await expect(page.locator("#tuttiview")).toBeVisible();
-  const c = (await page.locator("#tutticanvas").boundingBox())!;
-  const px = c.x + 64 + 0.25 * (c.width - 76); // playhead x (25 % of the window)
-  await page.mouse.move(px - 30, c.y + 5);
-  await page.mouse.down();
-  await page.mouse.move(px + 60, c.y + c.height - 100, { steps: 4 });
-  await page.mouse.up();
-  await expect(page.locator("#tutti-sel h3")).toContainText("notes");
-  expect(Number(await page.locator("html").getAttribute("data-tutti-sel"))).toBeGreaterThan(0);
-  await expect(page.locator("#tutti-sel td.pitch").first()).toHaveText(/^[A-G][♯♭]?\d/);
-  await page.keyboard.press("Escape"); // clears the selection
+  const host = page.locator("#tutti-score");
+  await expect(host.locator("svg").first()).toBeVisible({ timeout: 90_000 });
+  await expect(page.locator("#tutti-mode")).toHaveValue("chords");
+  await expect(host.locator("g.note[fill]").first()).toBeAttached(); // coloured by section
+  const bars = host.locator("g.measure");
+  const box = (await bars.nth(1).boundingBox())!;
+  await page.mouse.click(box.x + box.width * 0.6, box.y + 8); // inside bar 2, above the notes
+  await expect(page.locator("#tutti-chord > svg")).toBeVisible();
+  await expect(page.locator("#tutti-scale > svg")).toBeVisible();
+  await expect(page.locator("#tutti-sel h3")).toContainText("m. 2");
+  const one = Number(await page.locator("html").getAttribute("data-tutti-sel"));
+  expect(one).toBeGreaterThan(0);
+  const box2 = (await bars.nth(2).boundingBox())!;
+  await page.keyboard.down("Shift");
+  await page.mouse.click(box2.x + box2.width * 0.6, box2.y + 8);
+  await page.keyboard.up("Shift");
+  await expect(page.locator("#tutti-sel h3")).toContainText("m. 2–3");
+  await page.selectOption("#tutti-color", "part"); // recolours, keeps the selection
+  await expect(page.locator("#tutti-sel h3")).toContainText("m. 2–3");
+  await page.keyboard.press("Escape"); // clears
   await expect(page.locator("#tutti-sel h3")).toHaveCount(0);
-  await page.keyboard.press("Escape"); // closes the view
+  await page.keyboard.press("Escape"); // closes
   await expect(page.locator("#tuttiview")).toBeHidden();
   expect(g.offOrigin).toEqual([]);
   expect(g.errors, g.errors.join(" | ")).toEqual([]);

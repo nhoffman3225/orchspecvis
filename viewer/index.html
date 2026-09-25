@@ -129,20 +129,35 @@
         <div id="tutti-bar">
           <strong>Tutti</strong>
           <span id="tutti-time"></span>
-          <label>staves <select id="tutti-mode">
+          <label>show <select id="tutti-mode">
             <option value="grand">grand staff</option>
             <option value="sections">by section (short score)</option>
           </select></label>
-          <label title="Seconds in view (also: mouse wheel)">window
+          <label class="t-eng" hidden>colour <select id="tutti-color">
+            <option value="section">by section</option>
+            <option value="part">by part / stem</option>
+          </select></label>
+          <span class="t-eng" hidden><button id="tutti-zoomout" type="button" title="smaller">−</button>
+            <button id="tutti-zoomin" type="button" title="larger">+</button></span>
+          <label class="t-canvas" title="Seconds in view (also: mouse wheel)">window
             <input id="tutti-win" type="range" min="2" max="30" step="0.5" value="8" />
             <span id="tutti-winval">8 s</span></label>
           <label><input id="tutti-follow" type="checkbox" checked /> follow</label>
-          <span class="hint">click: chord · Alt+click: same beat position · drag: box · Shift: add · double-click: seek · Esc: clear / close</span>
+          <span class="hint" title="click: a chord or bar · Alt+click: every note on the same beat position · drag: box · Shift/Ctrl: add · double-click: seek · Esc: clear, then close">click · Alt+click · drag · Shift adds · ⓘ</span>
           <button id="tutticlose" type="button">✕ close</button>
         </div>
         <div id="tutti-body">
-          <canvas id="tutticanvas"></canvas>
-          <aside id="tutti-sel"><p class="hint">Select notes to see their pitches, doublings and parts.</p></aside>
+          <div id="tutti-main">
+            <div id="tutti-score" hidden></div>
+            <canvas id="tutticanvas"></canvas>
+            <canvas id="tutti-kb" hidden></canvas>
+            <span id="tutti-info" class="hint"></span>
+          </div>
+          <aside id="tutti-side">
+            <div id="tutti-chord"></div>
+            <div id="tutti-scale"></div>
+            <div id="tutti-sel"><p class="hint">Select notes to see their pitches, doublings and parts.</p></div>
+          </aside>
         </div>
       </div>
       <div id="aboutview" hidden>

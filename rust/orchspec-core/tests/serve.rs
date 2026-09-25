@@ -37,7 +37,15 @@ fn viewer(rel: &str) -> Option<Vec<u8>> {
 fn confines_paths_to_the_bundle() {
     let (_t, root) = fixture("confine");
     assert!(safe_join(&root, "a.bin").is_some());
-    for bad in ["../secret.txt", "tiles/../../secret.txt", ".hidden", "..\\secret.txt", "C:/Windows/win.ini", "nope", "tiles"] {
+    for bad in [
+        "../secret.txt",
+        "tiles/../../secret.txt",
+        ".hidden",
+        "..\\secret.txt",
+        "C:/Windows/win.ini",
+        "nope",
+        "tiles",
+    ] {
         assert!(safe_join(&root, bad).is_none(), "{bad}");
     }
     let r = route("GET", "/bundle/%2E%2E/secret.txt", None, Some(&root), &viewer);

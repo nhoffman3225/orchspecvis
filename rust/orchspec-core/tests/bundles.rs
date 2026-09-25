@@ -9,8 +9,10 @@
 //! stems recomputed in Rust.
 
 use orchspec_core::manifest::{Manifest, TileEncoding};
-use orchspec_core::tiles::{decode_tile, encode_tile, lod_frame_counts, pool_max, pyramid, read_level, write_level};
 use orchspec_core::open_bundle;
+use orchspec_core::tiles::{
+    decode_tile, encode_tile, lod_frame_counts, pool_max, pyramid, read_level, write_level,
+};
 use std::path::{Path, PathBuf};
 
 fn repo() -> PathBuf {
@@ -31,8 +33,11 @@ fn check_bundle(root: &Path) -> Manifest {
         let floor = quantize(d.floor_db, m.db_min, m.db_max);
         for (lv, dl) in d.lods.iter().enumerate() {
             let got = read_level(root, dl, n_bins, m.tile_encoding).unwrap();
-            let stems: Vec<Vec<u8>> =
-                m.stems.iter().map(|s| read_level(root, &s.lods[lv], n_bins, m.tile_encoding).unwrap()).collect();
+            let stems: Vec<Vec<u8>> = m
+                .stems
+                .iter()
+                .map(|s| read_level(root, &s.lods[lv], n_bins, m.tile_encoding).unwrap())
+                .collect();
             let mut best = vec![0u8; got.len()];
             let mut want = vec![d.none_value as u8; got.len()];
             for (si, st) in stems.iter().enumerate() {
@@ -64,7 +69,7 @@ fn check_bundle(root: &Path) -> Manifest {
 fn tiny_bundle_matches_python() {
     let m = check_bundle(&repo().join("viewer/public/tiny-bundle"));
     assert_eq!(m.tile_encoding, TileEncoding::Raw);
-    assert_eq!(m.schema_version, 4);
+    assert_eq!(m.schema_version, 5);
 }
 
 #[test]
@@ -90,7 +95,8 @@ fn manifest_round_trips_through_serde() {
 }
 
 fn tiny_json() -> serde_json::Value {
-    serde_json::from_slice(&std::fs::read(repo().join("viewer/public/tiny-bundle/manifest.json")).unwrap()).unwrap()
+    serde_json::from_slice(&std::fs::read(repo().join("viewer/public/tiny-bundle/manifest.json")).unwrap())
+        .unwrap()
 }
 
 #[test]
@@ -101,7 +107,7 @@ fn rejects_what_python_rejects() {
         ("absolute", |d| d["audio_path"] = "/etc/passwd".into()),
         ("drive", |d| d["audio_path"] = "C:/x.wav".into()),
         ("unknown field", |d| d["surprise"] = 1.into()),
-        ("version", |d| d["schema_version"] = 5.into()),
+        ("version", |d| d["schema_version"] = 6.into()),
         ("gzip before v4", |d| {
             d["schema_version"] = 3.into();
             d["tile_encoding"] = "gzip".into();

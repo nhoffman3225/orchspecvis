@@ -51,7 +51,12 @@ pub fn read_tile(root: &Path, t: &Tile, n_bins: usize, enc: TileEncoding) -> io:
     crate::manifest::check_rel_path(&t.path).map_err(|e| bad(e.to_string()))?;
     let raw = decode_tile(&fs::read(root.join(&t.path))?, enc)?;
     if raw.len() != t.n_frames as usize * n_bins {
-        return Err(bad(format!("{}: {} bytes, expected {}", t.path, raw.len(), t.n_frames as usize * n_bins)));
+        return Err(bad(format!(
+            "{}: {} bytes, expected {}",
+            t.path,
+            raw.len(),
+            t.n_frames as usize * n_bins
+        )));
     }
     Ok(raw)
 }

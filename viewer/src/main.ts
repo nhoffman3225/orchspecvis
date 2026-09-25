@@ -1,11 +1,12 @@
 // orchspec viewer: 3D CQT surface + linked 2D pane + LUFS strip, synced to Web Audio.
 import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
-import { loadManifest, loadNotes, loadSeries, midiName } from "./bundle";
+import { bundleUrl, loadManifest, loadNotes, loadSeries, midiName } from "./bundle";
 import { NoteIndex, applyMask, frameSeconds, measureAt, overtones, rasterizeF0, rasterizeNotes } from "./notes";
 import { heatFromNotes, heatFromPage, keyLevelsAt, normalizeHeat } from "./heat";
-import { PianoView, notesFromF0 } from "./piano";
+import { PianoView, keyLayout, notesFromF0 } from "./piano";
 import { TuttiView } from "./tuttiview";
+import { chordXml, condense, ink, pitchClassSet, scaleXml, toHex, type MapNote } from "./condense";
 import type { SelectionSummary } from "./tutti";
 import { ScoreView } from "./scoreview";
 import { HARM_PRESETS, harmSliderValue, snapHarm } from "./presets";
@@ -643,19 +644,39 @@ async function main(): Promise<void> {
       .catch((e: unknown) => (pre.textContent = String(e)));
   });
 
-  // ---- tutti reduction (proofreading): all notes on a grand staff / short score
+  // ---- tutti reduction (proofreading)
+  // Engraved (bundles with score reductions, schema v5): Verovio renders one chord per bar
+  // or the full-rhythm reduction; a selection condenses into one chord plus its pitch-class
+  // set. MIDI-only scores fall back to the canvas reduction (tuttiview.ts).
   let tuttiOpen = false;
   let tutti: TuttiView | null = null;
+  const reductions = m.score?.reductions ?? [];
+  const engraved = reductions.length > 0;
+  let tuttiColor: "section" | "part" = params.get("tcolor") === "part" ? "part" : "section";
+  const uiColorOf = (p: number): string => tuttiColor === "part" ? toHex(partColor(p))
+    : FAMILY_COLORS[familyOf(parts[p]?.instrument || parts[p]?.name || "")];
+  const colorOfParts = (ps: number[]): string => ink(uiColorOf(ps[0] ?? 0)); // ink on paper
+  const partChip = (pi: number): HTMLElement => {
+    const chip = document.createElement("span");
+    chip.className = "chip";
+    const dot = document.createElement("i");
+    dot.style.setProperty("--c", uiColorOf(pi));
+    chip.append(dot, parts[pi]?.abbreviation || parts[pi]?.name || `part ${pi + 1}`);
+    return chip;
+  };
+  const selHint = (): void => {
+    const p = document.createElement("p");
+    p.className = "hint";
+    p.textContent = engraved
+      ? "Click a chord or a bar (Shift/drag for more) to condense it into one chord and its pitch-class set."
+      : "Select notes to see their pitches, doublings and parts.";
+    $("tutti-sel").replaceChildren(p);
+    $("tutti-chord").replaceChildren();
+    $("tutti-scale").replaceChildren();
+  };
   const renderSelection = (sum: SelectionSummary | null, sel: number[]): void => {
     const box = $("tutti-sel");
-    box.replaceChildren();
-    if (!sum || !notes) {
-      const p = document.createElement("p");
-      p.className = "hint";
-      p.textContent = "Select notes to see their pitches, doublings and parts.";
-      box.append(p);
-      return;
-    }
+    if (!sum || !notes) return selHint();
     const h = document.createElement("h3");
     const first = sel[0]!;
     const same = sel.every((i) => Math.abs(notes.onset_s[i]! - notes.onset_s[first]!) <= 0.03);
@@ -670,24 +691,168 @@ async function main(): Promise<void> {
       td1.className = "pitch";
       td1.textContent = r.count > 1 ? `${r.name} ×${r.count}` : r.name;
       const td2 = document.createElement("td");
-      for (const pi of r.parts) {
-        const chip = document.createElement("span");
-        chip.className = "chip";
-        const dot = document.createElement("i");
-        dot.style.setProperty("--c", partColor(pi));
-        chip.append(dot, parts[pi]?.abbreviation || parts[pi]?.name || `part ${pi + 1}`);
-        td2.append(chip);
-      }
+      td2.append(...r.parts.map(partChip));
       tr.append(td1, td2);
       table.append(tr);
     }
     const pcs = document.createElement("div");
     pcs.className = "pcs";
     pcs.textContent = "pitch classes: " + sum.pitchClasses.map((p) => `${p.name} ${p.count}`).join(" · ");
-    box.append(h, table, pcs);
+    box.replaceChildren(h, table, pcs);
     document.documentElement.dataset.tuttiSel = String(sum.notes); // tests
   };
-  if (notes && nix && m.score) {
+
+  // engraved reductions
+  const maps = new Map<string, Record<string, MapNote>>();
+  const views = new Map<string, ScoreView>();
+  let tv: ScoreView | null = null;
+  let tMode = "";
+  let selMidis = new Map<number, number>(); // midi -> parts selected (keyboard strip)
+  let condenseGen = 0;
+  const showCondensed = async (ids: string[]): Promise<void> => {
+    const gen = ++condenseGen;
+    const map = maps.get(tMode);
+    if (!ids.length || !map || !tv) {
+      selMidis = new Map();
+      document.documentElement.dataset.tuttiSel = "0";
+      return selHint();
+    }
+    const pitches = condense(ids, map, colorOfParts);
+    selMidis = new Map(pitches.map((p) => [p.midi, p.parts.length]));
+    const bars = [...new Set(ids.map((i) => map[i]?.bar).filter((b): b is number => b !== undefined))]
+      .sort((x, y) => x - y);
+    const barNum = (bi: number): string =>
+      m.score?.measures.find((x) => x.source_index === bi)?.number ?? String(bi + 1);
+    const where = !bars.length ? "" : bars.length === 1 ? ` · m. ${barNum(bars[0]!)}`
+      : ` · m. ${barNum(bars[0]!)}–${barNum(bars[bars.length - 1]!)}`;
+    const partSet = new Set(pitches.flatMap((p) => p.parts));
+    const set = pitchClassSet(pitches);
+    const [chordSvg, scaleSvg] = await Promise.all([
+      tv.engrave(chordXml(pitches), 32),
+      tv.engrave(scaleXml(set), 32),
+    ]);
+    if (gen !== condenseGen) return; // a newer selection won
+    $("tutti-chord").innerHTML = chordSvg; // sanitized in the worker (sanitizeSvg)
+    $("tutti-scale").innerHTML = scaleSvg;
+    const h = document.createElement("h3");
+    h.textContent = `${pitches.length} pitches · ${set.length} pitch classes · ${partSet.size} parts${where}`;
+    const table = document.createElement("table");
+    for (const p of [...pitches].reverse()) {
+      const tr = document.createElement("tr");
+      const td1 = document.createElement("td");
+      td1.className = "pitch";
+      td1.textContent = p.name;
+      const td2 = document.createElement("td");
+      td2.append(...p.parts.map(partChip));
+      tr.append(td1, td2);
+      table.append(tr);
+    }
+    const pcs = document.createElement("div");
+    pcs.className = "pcs";
+    pcs.textContent = `set: ${set.map((x) => x.name).join(" ")}`;
+    $("tutti-sel").replaceChildren(h, table, pcs);
+    document.documentElement.dataset.tuttiSel = String(pitches.length); // tests
+  };
+  const activate = async (mode: string): Promise<void> => {
+    const red = reductions.find((r) => r.mode === mode) ?? reductions[0]!;
+    if (!maps.has(red.mode)) {
+      const r = await fetchSameOrigin(bundleUrl(base, red.map));
+      if (!r.ok) throw new Error(`${red.map}: HTTP ${r.status}`);
+      maps.set(red.mode, ((await r.json()) as { notes: Record<string, MapNote> }).notes);
+    }
+    let v = views.get(red.mode);
+    if (!v) {
+      v = new ScoreView($("tutti-score"), $("tutti-info"), base, m, {
+        partColor, visible: () => true, onSeek: (s) => seek(s), now: () => player.transport.position(),
+      }, {
+        file: red.musicxml,
+        selectable: true,
+        noteColor: (id) => {
+          const n = maps.get(red.mode)?.[id];
+          return n ? colorOfParts(n.parts) : null;
+        },
+        onSelect: (ids) => void showCondensed(ids),
+      });
+      v.scale = 34;
+      views.set(red.mode, v);
+    }
+    for (const o of views.values()) o.active = o === v;
+    tv = v;
+    tMode = red.mode;
+    v.follow = $<HTMLInputElement>("tutti-follow").checked;
+    v.reset();
+    selHint();
+    await v.load();
+  };
+  const drawKb = (): void => {
+    const c = $<HTMLCanvasElement>("tutti-kb");
+    const dpr = devicePixelRatio || 1;
+    const w = c.clientWidth, hh = c.clientHeight;
+    if (!w || !hh) return;
+    if (c.width !== Math.round(w * dpr)) c.width = Math.round(w * dpr);
+    if (c.height !== Math.round(hh * dpr)) c.height = Math.round(hh * dpr);
+    const g = c.getContext("2d")!;
+    g.setTransform(dpr, 0, 0, dpr, 0, 0);
+    const map = maps.get(tMode);
+    const now = new Map<number, string>();
+    for (const id of tv?.soundingIds ?? []) {
+      const n = map?.[id];
+      if (n) now.set(n.midi, colorOfParts(n.parts));
+    }
+    for (const black of [false, true]) {
+      for (const k of keyLayout(w)) {
+        if (k.black !== black) continue;
+        const kh = black ? hh * 0.6 : hh;
+        g.fillStyle = selMidis.has(k.midi) ? "#e6c07b" : now.get(k.midi) ?? (black ? "#15171c" : "#d8d9dd");
+        g.fillRect(k.x + 0.5, 0, k.w - 1, kh);
+        if (!black) {
+          g.strokeStyle = "#0b0c10";
+          g.strokeRect(k.x + 0.5, 0, k.w - 1, kh);
+        }
+      }
+    }
+  };
+
+  const tm = $<HTMLSelectElement>("tutti-mode");
+  if (engraved && m.score) {
+    $("tuttibtn").hidden = false;
+    const labels: Record<string, string> = {
+      "chords": "one chord per bar", "section-chords": "chords by section",
+      "tutti": "full rhythm", "sections": "full rhythm by section",
+    };
+    tm.replaceChildren(...reductions.map((r) => new Option(labels[r.mode] ?? r.mode, r.mode)));
+    tm.value = reductions.some((r) => r.mode === params.get("tutti")) ? params.get("tutti")! : reductions[0]!.mode;
+    for (const el of document.querySelectorAll<HTMLElement>("#tuttiview .t-eng")) el.hidden = false;
+    for (const el of document.querySelectorAll<HTMLElement>("#tuttiview .t-canvas")) el.hidden = true;
+    $("tutti-score").hidden = false;
+    $("tutti-kb").hidden = false;
+    $("tutticanvas").hidden = true;
+    const tc = $<HTMLSelectElement>("tutti-color");
+    tc.value = tuttiColor;
+    tc.addEventListener("change", () => {
+      tuttiColor = tc.value as "section" | "part";
+      for (const v of views.values()) v.recolor();
+      if (tv) void showCondensed(tv.selection);
+    });
+    tm.addEventListener("change", () => void activate(tm.value).catch((e: unknown) => {
+      $("tutti-info").textContent = `tutti error: ${e instanceof Error ? e.message : String(e)}`;
+    }));
+    const tzoom = (f: number): void => {
+      if (!tv) return;
+      tv.scale = Math.min(120, Math.max(10, Math.round(tv.scale * f)));
+      void tv.relayout();
+    };
+    $("tutti-zoomin").addEventListener("click", () => tzoom(1.15));
+    $("tutti-zoomout").addEventListener("click", () => tzoom(1 / 1.15));
+    $("tutti-score").addEventListener("wheel", (e) => {
+      if (!e.ctrlKey) return;
+      e.preventDefault();
+      tzoom(e.deltaY < 0 ? 1.1 : 1 / 1.1);
+    }, { passive: false });
+    $<HTMLInputElement>("tutti-follow").addEventListener("change", (e) => {
+      if (tv) tv.follow = (e.target as HTMLInputElement).checked;
+    });
+  } else if (notes && nix && m.score) {
     $("tuttibtn").hidden = false;
     tutti = new TuttiView($<HTMLCanvasElement>("tutticanvas"), {
       notes, index: nix, parts, measures: m.score.measures, partColor,
@@ -695,7 +860,6 @@ async function main(): Promise<void> {
       onSeek: (s) => seek(s),
       onSelect: renderSelection,
     });
-    const tm = $<HTMLSelectElement>("tutti-mode");
     if (params.get("tutti") === "sections") tm.value = "sections";
     tutti.mode = tm.value as "grand" | "sections";
     tm.addEventListener("change", () => void (tutti!.mode = tm.value as "grand" | "sections"));
@@ -709,13 +873,18 @@ async function main(): Promise<void> {
     });
   }
   function setTutti(open: boolean): void {
-    if (open && !tutti) return;
+    if (open && !tutti && !engraved) return;
     tuttiOpen = open;
     $("tuttiview").hidden = !open;
     if (open) {
       setPiano(false);
       setScore(false);
       setRegisters(false);
+      if (engraved && !tv) {
+        void activate(tm.value).catch((e: unknown) => {
+          $("tutti-info").textContent = `tutti error: ${e instanceof Error ? e.message : String(e)}`;
+        });
+      }
     }
   }
   $("tuttibtn").addEventListener("click", () => setTutti(true));
@@ -723,7 +892,9 @@ async function main(): Promise<void> {
   addEventListener("keydown", (e) => {
     if (e.target instanceof HTMLInputElement || e.target instanceof HTMLSelectElement) return;
     if (e.code === "KeyT") setTutti(!tuttiOpen);
-    else if (e.code === "Escape" && tuttiOpen && !tutti?.clearSelection()) setTutti(false);
+    else if (e.code === "Escape" && tuttiOpen && !(tutti?.clearSelection() || tv?.clearSelection())) {
+      setTutti(false);
+    }
   });
 
   // ---- register distribution view (per section / stem: whole piece + now)
@@ -980,8 +1151,11 @@ async function main(): Promise<void> {
       const txt = bb ? `m. ${bb.number}${bb.pass > 1 ? ` (pass ${bb.pass})` : ""} · beat ${bb.beat.toFixed(1)}` : "";
       if ($("barbeat").textContent !== txt) $("barbeat").textContent = txt;
     }
-    if (tuttiOpen && tutti) {
-      tutti.draw(t);
+    if (tuttiOpen && (tutti || tv)) {
+      if (tv) {
+        tv.update(t);
+        drawKb();
+      } else tutti!.draw(t);
       const bbt = m.score ? measureAt(m.score.measures, t) : null;
       const tt = `${fmt(t)}${bbt ? ` · m. ${bbt.number} · beat ${bbt.beat.toFixed(1)}` : ""}`;
       if ($("tutti-time").textContent !== tt) $("tutti-time").textContent = tt;

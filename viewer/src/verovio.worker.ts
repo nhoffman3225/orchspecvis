@@ -4,15 +4,19 @@
 
 import createVerovioModule from "verovio/wasm";
 import { VerovioToolkit } from "verovio/esm";
+import { sanitizeSvg } from "./scoremap";
 import { elementTimes, layout, renderPage, type LayoutOptions } from "./verovioCore";
 
 export type ScoreRequest =
   | { id: number; op: "load"; data: string | ArrayBuffer; opts: LayoutOptions }
   | { id: number; op: "relayout"; opts: LayoutOptions }
   | { id: number; op: "render"; page: number }
-  | { id: number; op: "times"; element: string };
+  | { id: number; op: "times"; element: string }
+  | { id: number; op: "engrave"; xml: string; scale: number };
 
 let tk: VerovioToolkit | null = null;
+let mod: unknown = null;
+let small: VerovioToolkit | null = null; // one-off snippets (condensed chords), own state
 const progress = (text: string): void => self.postMessage({ progress: text });
 
 async function toolkit(): Promise<VerovioToolkit> {
@@ -24,7 +28,7 @@ async function toolkit(): Promise<VerovioToolkit> {
       progress(`starting the notation engine… ${Math.round((performance.now() - t0) / 1000)} s`);
     }, 1000);
     try {
-      const mod = await createVerovioModule({
+      mod = await createVerovioModule({
         printErr: (text: string) => progress(`notation engine: ${text}`),
         onAbort: (what: unknown) => progress(`notation engine aborted: ${String(what)}`),
       });
@@ -37,6 +41,16 @@ async function toolkit(): Promise<VerovioToolkit> {
   return tk;
 }
 
+function engrave(xml: string, scale: number): string {
+  small ??= new VerovioToolkit(mod!);
+  small.setOptions({
+    scale, adjustPageWidth: true, adjustPageHeight: true, breaks: "none", footer: "none",
+    header: "none", pageMarginLeft: 20, pageMarginRight: 20, pageMarginTop: 10, pageMarginBottom: 10,
+  });
+  if (!small.loadData(xml)) throw new Error(`could not engrave: ${small.getLog()}`);
+  return sanitizeSvg(small.renderToSVG(1));
+}
+
 self.onmessage = async (ev: MessageEvent<ScoreRequest>) => {
   const req = ev.data;
   try {
@@ -45,6 +59,7 @@ self.onmessage = async (ev: MessageEvent<ScoreRequest>) => {
     if (req.op === "load") result = layout(tk, req.opts, req.data);
     else if (req.op === "relayout") result = layout(tk, req.opts);
     else if (req.op === "render") result = renderPage(tk, req.page);
+    else if (req.op === "engrave") result = engrave(req.xml, req.scale);
     else result = elementTimes(tk, req.element);
     self.postMessage({ id: req.id, ok: true, result });
   } catch (e) {
