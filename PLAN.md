@@ -196,6 +196,15 @@ carry the `real` marker and never run in CI.
       common spelling, ascending from the lowest note) plus pitches with their parts and a
       keyboard strip. The canvas reduction remains for MIDI-only bundles. Dorico 6.2
       MusicXML export writes 18 separate one-staff parts (no condensing information)
+- [x] Tutti per beat (2026-09-25, schema v7): `beat-chords` / `section-beat-chords`, one
+      chord per beat (held notes included; dotted beat in compound time; empty beats are
+      rests). Full-rhythm reductions dropped from bundles and from the viewer (decision:
+      ties and voices made them unreadable); v5-v6 bundles still load
+- [x] UI (2026-09-25): views dock below the toolbar instead of covering the window (the
+      "disappearing UI"), top edge draggable; splitters for the 2D pane, stems list and
+      tutti side panel (min sizes, double-click reset, remembered per browser); toolbar in
+      labelled groups; desktop View > Full Screen (F11)
+- [ ] Canvas tutti for MIDI-only bundles is still full rhythm (no engraving path there)
 - [x] Score PDF (2026-09-25, schema v6 `score.pdf`): session `score.pdf` rendered once at
       import (pypdfium2 / PDFium, 150 dpi grayscale PNG); bars found on the image (staff
       lines, barlines through every staff of a system) and numbered from the PDF's text
