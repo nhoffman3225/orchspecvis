@@ -81,6 +81,7 @@ export interface ScoreMeasure {
   beats: number;
   beat_type: number;
   pass_no: number;
+  source_index: number | null;
 }
 export interface Alignment {
   method: "warp" | "xcorr" | "manual" | "preroll_only";
@@ -101,6 +102,7 @@ export interface ScoreInfo {
   measures: ScoreMeasure[];
   notes: { path: string; n: number; columns: string[]; dtype: "f32le"; layout: "column_major" };
   alignment: Alignment;
+  score_file: string | null;
 }
 export interface Manifest {
   schema_version: 1 | 2 | 3;
@@ -282,7 +284,8 @@ function parseScorePart(p: unknown, i: number, w0: string): ScorePart {
 
 function parseScoreMeasure(v: unknown, i: number, w0: string): ScoreMeasure {
   const w = `${w0}.measures[${i}]`;
-  const o = obj(v, w, ["play_index", "number", "start_s", "end_s", "beats", "beat_type"], ["pass_no"]);
+  const o = obj(v, w, ["play_index", "number", "start_s", "end_s", "beats", "beat_type"],
+    ["pass_no", "source_index"]);
   const play_index = int(o.play_index, `${w}.play_index`);
   if (play_index !== i) fail(w, "measures must be in playback order");
   return {
@@ -293,12 +296,14 @@ function parseScoreMeasure(v: unknown, i: number, w0: string): ScoreMeasure {
     beats: int(o.beats, `${w}.beats`),
     beat_type: int(o.beat_type, `${w}.beat_type`),
     pass_no: o.pass_no === undefined ? 1 : int(o.pass_no, `${w}.pass_no`, 1),
+    source_index: o.source_index == null ? null : int(o.source_index, `${w}.source_index`),
   };
 }
 
 function parseScore(v: unknown): ScoreInfo {
   const w = "manifest.score";
-  const o = obj(v, w, ["kind", "source_files", "parts", "measures", "notes", "alignment"]);
+  const o = obj(v, w, ["kind", "source_files", "parts", "measures", "notes", "alignment"],
+    ["score_file"]);
   const no = obj(o.notes, `${w}.notes`, ["path", "n", "columns"], ["dtype", "layout"]);
   const columns = strList(no.columns, `${w}.notes.columns`);
   if (columns.join(",") !== NOTE_COLUMNS.join(",")) {
@@ -321,6 +326,7 @@ function parseScore(v: unknown): ScoreInfo {
       dtype: "f32le",
       layout: "column_major",
     },
+    score_file: o.score_file == null ? null : checkRelPath(o.score_file, `${w}.score_file`),
     alignment: {
       method: oneOf(ao.method, `${aw}.method`, ["warp", "xcorr", "manual", "preroll_only"] as const),
       offset_sec: num(ao.offset_sec, `${aw}.offset_sec`),

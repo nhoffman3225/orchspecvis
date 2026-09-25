@@ -5,6 +5,7 @@ import { loadManifest, loadNotes, loadSeries, midiName } from "./bundle";
 import { NoteIndex, applyMask, frameSeconds, measureAt, overtones, rasterizeF0, rasterizeNotes } from "./notes";
 import { heatFromNotes, heatFromPage, keyLevelsAt, normalizeHeat } from "./heat";
 import { PianoView, notesFromF0 } from "./piano";
+import { ScoreView } from "./scoreview";
 import { HARM_PRESETS, harmSliderValue, snapHarm } from "./presets";
 import { frameGaps, frameSpans, smoothPage } from "./gaps";
 import { COLORMAPS, colormapLut, cssColor, stemPalette } from "./colormap";
@@ -608,6 +609,57 @@ async function main(): Promise<void> {
     if ($("piano-time").textContent !== txt) $("piano-time").textContent = txt;
   }
 
+  // ---- engraved score view (Verovio; loaded on first open)
+  let scoreOpen = false;
+  let scoreView: ScoreView | null = null;
+  if (m.score?.score_file) {
+    $("scorebtn").hidden = false;
+    scoreView = new ScoreView($("score-host"), $("score-info"), base, m, {
+      partColor,
+      visible: (p) => partsVisible.has(p),
+      onSeek: (s) => seek(s),
+      now: () => player.transport.position(),
+    });
+  }
+  const setScore = (open: boolean): void => {
+    if (open && !scoreView) return;
+    scoreOpen = open;
+    $("scoreview").hidden = !open;
+    if (open) {
+      setPiano(false);
+      void scoreView!.load().catch((e: unknown) => {
+        $("score-info").textContent = `score error: ${e instanceof Error ? e.message : String(e)}`;
+      });
+    }
+  };
+  $("scorebtn").addEventListener("click", () => setScore(true));
+  $("scoreclose").addEventListener("click", () => setScore(false));
+  $("score-prev").addEventListener("click", () => scoreView?.step(-1));
+  $("score-next").addEventListener("click", () => scoreView?.step(1));
+  const zoom = (f: number): void => {
+    if (!scoreView) return;
+    scoreView.scale = Math.min(80, Math.max(15, Math.round(scoreView.scale * f)));
+    scoreView.relayout();
+  };
+  $("score-zoomin").addEventListener("click", () => zoom(1.15));
+  $("score-zoomout").addEventListener("click", () => zoom(1 / 1.15));
+  $<HTMLInputElement>("score-follow").addEventListener("change", (e) => {
+    if (scoreView) scoreView.follow = (e.target as HTMLInputElement).checked;
+  });
+  let relayoutTimer = 0;
+  addEventListener("resize", () => {
+    clearTimeout(relayoutTimer);
+    relayoutTimer = window.setTimeout(() => scoreView?.relayout(), 250);
+  });
+  addEventListener("keydown", (e) => {
+    if (e.target instanceof HTMLInputElement || e.target instanceof HTMLSelectElement) return;
+    if (e.code === "KeyS") setScore(!scoreOpen);
+    else if (e.code === "Escape" && scoreOpen) setScore(false);
+    else if (scoreOpen && e.code === "PageDown") scoreView?.step(1);
+    else if (scoreOpen && e.code === "PageUp") scoreView?.step(-1);
+  });
+  if (params.get("view") === "score") setScore(true);
+
   // ---- frame loop
   const view = $("view3d");
   const resize = (): void => {
@@ -632,7 +684,14 @@ async function main(): Promise<void> {
       const txt = bb ? `m. ${bb.number}${bb.pass > 1 ? ` (pass ${bb.pass})` : ""} · beat ${bb.beat.toFixed(1)}` : "";
       if ($("barbeat").textContent !== txt) $("barbeat").textContent = txt;
     }
-    if (pianoOpen) {
+    if (scoreOpen) {
+      scoreView?.update(t);
+      const bbs = m.score ? measureAt(m.score.measures, t) : null;
+      const st = `${fmt(t)}${bbs ? ` · m. ${bbs.number}${bbs.pass > 1 ? ` (pass ${bbs.pass})` : ""} · beat ${bbs.beat.toFixed(1)}` : ""}`;
+      if ($("score-time").textContent !== st) $("score-time").textContent = st;
+      const pl = scoreView?.pageLabel() ?? "";
+      if ($("score-page").textContent !== pl) $("score-page").textContent = pl;
+    } else if (pianoOpen) {
       drawPiano(t);
     } else {
       controls.update();

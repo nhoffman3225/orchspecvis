@@ -53,6 +53,33 @@ html, body { margin: 0; height: 100%; background: var(--bg); color: var(--fg); }
 #part-list li.focus .pname { font-weight: 600; color: #fff; }
 #part-list .rng { color: var(--muted); margin-left: auto; font-size: 11px; }
 .hint { color: var(--muted); font-size: 11px; margin: 6px 0 0; }
+#scoreview {
+  position: fixed; inset: 0; z-index: 10; background: #0b0c10;
+  display: grid; grid-template-rows: auto 1fr;
+}
+#scoreview[hidden] { display: none; }
+#score-bar {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; padding: 6px 12px;
+  background: var(--panel); border-bottom: 1px solid var(--line); font-size: 12px;
+}
+#score-bar label { display: inline-flex; align-items: center; gap: 4px; color: var(--muted); }
+#score-bar button { background: #1d2028; color: var(--fg); border: 1px solid var(--line);
+  border-radius: 4px; font: inherit; padding: 2px 8px; }
+#score-bar .hint:last-of-type { margin-left: auto; }
+#score-time { color: #e6c07b; font-variant-numeric: tabular-nums; min-width: 220px; }
+#score-host {
+  overflow: auto; background: #f3efe6; color: #1b1b1b; padding: 12px; min-height: 0;
+  cursor: pointer;
+}
+/* Verovio's own <style> is stripped (CSP); these are its rules, scoped here */
+#score-host svg { display: block; margin: 0 auto; color: #1b1b1b; fill: #1b1b1b; }
+#score-host g.ending, #score-host g.fing, #score-host g.reh, #score-host g.tempo { font-weight: bold; }
+#score-host g.dir, #score-host g.dynam, #score-host g.mNum { font-style: italic; }
+#score-host g.label { font-weight: normal; }
+#score-host ellipse, #score-host path, #score-host polygon, #score-host polyline,
+#score-host rect { stroke: currentColor; }
+#score-host g.note.playing, #score-host g.chord.playing { stroke-width: 12; }
+#score-host g.measure:hover { fill: #3a5a8c; color: #3a5a8c; }
 #pianoview {
   position: fixed; inset: 0; z-index: 10; background: #0b0c10;
   display: grid; grid-template-rows: auto 1fr;

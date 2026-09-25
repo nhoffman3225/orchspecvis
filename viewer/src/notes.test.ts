@@ -71,9 +71,9 @@ describe("rasterize + mask (fundamentals only)", () => {
 
 describe("bar/beat", () => {
   const ms: ScoreMeasure[] = [
-    { play_index: 0, number: "1", start_s: 1, end_s: 3, beats: 4, beat_type: 4, pass_no: 1 },
-    { play_index: 1, number: "2", start_s: 3, end_s: 4.5, beats: 3, beat_type: 4, pass_no: 1 },
-    { play_index: 2, number: "2", start_s: 4.5, end_s: 6, beats: 3, beat_type: 4, pass_no: 2 },
+    { play_index: 0, number: "1", start_s: 1, end_s: 3, beats: 4, beat_type: 4, pass_no: 1, source_index: null },
+    { play_index: 1, number: "2", start_s: 3, end_s: 4.5, beats: 3, beat_type: 4, pass_no: 1, source_index: null },
+    { play_index: 2, number: "2", start_s: 4.5, end_s: 6, beats: 3, beat_type: 4, pass_no: 2, source_index: null },
   ];
   it("looks up bar, pass and beat", () => {
     expect(measureAt(ms, 0.5)).toBeNull();

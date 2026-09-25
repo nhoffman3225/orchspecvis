@@ -17,6 +17,7 @@ export default defineConfig({
   base: "./",
   plugins: [devCsp()],
   server: { host: "127.0.0.1", strictPort: false },
-  build: { target: "es2022", sourcemap: true, chunkSizeWarningLimit: 1500 },
+  // the Verovio wasm module (~8 MB) is its own lazily loaded chunk
+  build: { target: "es2022", sourcemap: true, chunkSizeWarningLimit: 9000 },
   test: { environment: "node", include: ["src/**/*.test.ts"] },
 });
