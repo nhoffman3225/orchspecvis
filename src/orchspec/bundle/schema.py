@@ -16,7 +16,8 @@ from typing import Annotated, Literal
 
 from pydantic import AfterValidator, BaseModel, ConfigDict, Field, model_validator
 
-SCHEMA_VERSION = 6  # v2 score; v3 warp; v4 gzip tiles; v5 reductions; v6 score pdf
+SCHEMA_VERSION = 7  # v2 score; v3 warp; v4 gzip tiles; v5 reductions; v6 score pdf;
+# v7 chord-per-beat reductions
 TileEncoding = Literal["raw", "gzip"]
 MANIFEST_NAME = "manifest.json"
 NONE_STEM = 255  # value in dominant-stem tiles meaning "no stem above the floor"
@@ -200,8 +201,11 @@ class Reduction(_Model):
     """v5: an engravable reduction of the score (score/reduce.py) and its note map."""
 
     # chords: one chord per bar on one grand staff; section-chords: per section;
-    # tutti / sections: full rhythm (voices, ties) on one grand staff / per section
-    mode: Literal["chords", "section-chords", "tutti", "sections"]
+    # v7 beat-chords / section-beat-chords: one chord per beat; tutti / sections: full
+    # rhythm (voices, ties), written by v5-v6 bundles only
+    mode: Literal[
+        "chords", "section-chords", "tutti", "sections", "beat-chords", "section-beat-chords"
+    ]
     musicxml: RelPath
     map: RelPath  # JSON: {"notes": {note id: {"parts", "midi", "name", "group"}}, ...}
 
@@ -266,7 +270,7 @@ class ScoreInfo(_Model):
 
 
 class Manifest(_Model):
-    schema_version: Literal[1, 2, 3, 4, 5, 6] = SCHEMA_VERSION
+    schema_version: Literal[1, 2, 3, 4, 5, 6, 7] = SCHEMA_VERSION
     created_by: str
     created_at: str  # ISO 8601 UTC
 
@@ -332,6 +336,9 @@ class Manifest(_Model):
                 raise ValueError("a score section requires schema_version 2")
             if self.score.reductions and self.schema_version < 5:
                 raise ValueError("score reductions require schema_version 5")
+            per_beat = {"beat-chords", "section-beat-chords"}
+            if any(r.mode in per_beat for r in self.score.reductions) and self.schema_version < 7:
+                raise ValueError("chord-per-beat reductions require schema_version 7")
             if self.score.pdf is not None:
                 if self.schema_version < 6:
                     raise ValueError("a score pdf requires schema_version 6")

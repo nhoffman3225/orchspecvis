@@ -40,13 +40,13 @@ def _notes(root: Path, m: Manifest) -> dict[str, np.ndarray]:
 def test_manifest_v2_score_section(bundle) -> None:  # type: ignore[no-untyped-def]
     root, _ = bundle
     m2 = Manifest.model_validate_json((root / "manifest.json").read_text(encoding="utf-8"))
-    assert m2.schema_version == 6 and m2.score is not None
+    assert m2.schema_version == 7 and m2.score is not None
     # engravable reductions (tutti grand staff + short score) with their note maps
     assert [r.mode for r in m2.score.reductions] == [
         "chords",
+        "beat-chords",
         "section-chords",
-        "tutti",
-        "sections",
+        "section-beat-chords",
     ]
     for r in m2.score.reductions:
         assert (root / r.musicxml).read_text(encoding="utf-8").startswith("<?xml")

@@ -202,7 +202,7 @@ test("section buttons select stems and parts by family", async ({ page, baseURL 
   expect(g.errors, g.errors.join(" | ")).toEqual([]);
 });
 
-test("tutti: engraved chord-per-bar reduction; a bar condenses into a chord and its pitch set", async ({ page, baseURL }) => {
+test("tutti: chord per bar / per beat; a bar condenses into a chord and its pitch set", async ({ page, baseURL }) => {
   test.setTimeout(120_000); // Verovio engraving on CI
   const g = guard(page, baseURL!);
   await page.goto(`/?${Q}&view=tutti&t=3`);
@@ -227,6 +227,14 @@ test("tutti: engraved chord-per-bar reduction; a bar condenses into a chord and 
   await expect(page.locator("#tutti-sel h3")).toContainText("m. 2–3");
   await page.keyboard.press("Escape"); // clears
   await expect(page.locator("#tutti-sel h3")).toHaveCount(0);
+  // only chord-per-bar / chord-per-beat reductions are offered (no full rhythm)
+  await expect(page.locator("#tutti-mode option")).toHaveText([
+    "one chord per bar", "one chord per beat", "per bar, by section", "per beat, by section",
+  ]);
+  const heads = async (): Promise<number> => host.locator("g.note").count();
+  const perBar = await heads();
+  await page.selectOption("#tutti-mode", "beat-chords");
+  await expect.poll(heads, { timeout: 60_000 }).toBeGreaterThan(perBar); // held notes repeat per beat
   await page.keyboard.press("Escape"); // closes
   await expect(page.locator("#tuttiview")).toBeHidden();
   expect(g.offOrigin).toEqual([]);

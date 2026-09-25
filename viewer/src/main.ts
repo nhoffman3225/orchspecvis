@@ -656,12 +656,17 @@ async function main(): Promise<void> {
   });
 
   // ---- tutti reduction (proofreading)
-  // Engraved (bundles with score reductions, schema v5): Verovio renders one chord per bar
-  // or the full-rhythm reduction; a selection condenses into one chord plus its pitch-class
-  // set. MIDI-only scores fall back to the canvas reduction (tuttiview.ts).
+  // Engraved (bundles with score reductions, schema v5+): Verovio renders one chord per bar
+  // or per beat (v7), for all parts or by section; a selection condenses into one chord plus
+  // its pitch-class set. Full-rhythm reductions (v5-v6 bundles) are not offered: ties and
+  // voices made them unreadable. MIDI-only scores fall back to the canvas reduction.
   let tuttiOpen = false;
   let tutti: TuttiView | null = null;
-  const reductions = m.score?.reductions ?? [];
+  const TUTTI_LABELS: Record<string, string> = {
+    "chords": "one chord per bar", "beat-chords": "one chord per beat",
+    "section-chords": "per bar, by section", "section-beat-chords": "per beat, by section",
+  };
+  const reductions = (m.score?.reductions ?? []).filter((r) => r.mode in TUTTI_LABELS);
   const engraved = reductions.length > 0;
   let tuttiColor: "section" | "part" = params.get("tcolor") === "part" ? "part" : "section";
   const uiColorOf = (p: number): string => tuttiColor === "part" ? toHex(partColor(p))
@@ -827,11 +832,7 @@ async function main(): Promise<void> {
   const tm = $<HTMLSelectElement>("tutti-mode");
   if (engraved && m.score) {
     $("tuttibtn").hidden = false;
-    const labels: Record<string, string> = {
-      "chords": "one chord per bar", "section-chords": "chords by section",
-      "tutti": "full rhythm", "sections": "full rhythm by section",
-    };
-    tm.replaceChildren(...reductions.map((r) => new Option(labels[r.mode] ?? r.mode, r.mode)));
+    tm.replaceChildren(...reductions.map((r) => new Option(TUTTI_LABELS[r.mode]!, r.mode)));
     tm.value = reductions.some((r) => r.mode === params.get("tutti")) ? params.get("tutti")! : reductions[0]!.mode;
     for (const el of document.querySelectorAll<HTMLElement>("#tuttiview .t-eng")) el.hidden = false;
     for (const el of document.querySelectorAll<HTMLElement>("#tuttiview .t-canvas")) el.hidden = true;
