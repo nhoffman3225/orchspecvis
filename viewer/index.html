@@ -183,8 +183,9 @@
           <div id="tutti-main">
             <div id="tutti-score"></div>
             <canvas id="tutti-kb"></canvas>
+            <svg id="tutti-region" class="bubble-overlay" hidden aria-hidden="true"><rect /></svg>
             <div id="tutti-bubble" hidden role="dialog" aria-label="Orchestration of the selected chord">
-              <div class="bubble-head"><strong id="tutti-bubble-title"></strong>
+              <div class="bubble-head" title="Drag to move · double-click: back beside the selection, original size"><strong id="tutti-bubble-title"></strong>
                 <span id="tutti-bubble-nav" hidden>
                   <button id="tutti-bubble-prev" type="button" title="Previous chord (←)">◀</button>
                   <span id="tutti-bubble-page"></span>
@@ -192,7 +193,9 @@
                 </span>
                 <button id="tutti-bubble-close" type="button" title="Close (Esc)">✕</button></div>
               <div id="tutti-bubble-chart"></div>
+              <div id="tutti-bubble-grip" title="Drag to resize (the chart scales to fit)"></div>
             </div>
+            <svg id="tutti-tail" class="bubble-overlay" hidden aria-hidden="true"><polygon /><polyline /></svg>
             <span id="tutti-info" class="hint"></span>
           </div>
           <div id="split-tutti" class="splitter x"></div>
