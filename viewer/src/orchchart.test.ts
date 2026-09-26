@@ -103,6 +103,18 @@ describe("orchestration chart", () => {
     expect(c.gLine - c.staves[0]!.top).toBe(30); // G4: the second line from the bottom
   });
 
+  it("tags every label, header and notehead with its parts (for hover highlighting)", () => {
+    const mix = layoutChart(chord, parts, colorOf, "mix");
+    const fo = mix.labels.find((l) => l.text === "fl. & ob.")!;
+    expect(fo.parts).toEqual([0, 1]);
+    expect(mix.labels.find((l) => l.text === "trp.")!.parts).toEqual([3, 4]);
+    const svg = renderChart(mix);
+    expect(svg).toContain('<g class="voice" data-parts="0 1" tabindex="0" role="button" aria-label="fl. &amp; ob.">');
+    expect(svg).toContain('<g class="head" data-parts="0 1">'); // their C5 in the woodwind block
+    const split = layoutChart(chord, parts, colorOf, "split");
+    expect(split.headers.map((h) => h.part)).toEqual([5, 6, 0, 1, 2, 3, 4]);
+  });
+
   it("colour mixing is weighted and exact for a single colour", () => {
     expect(mixColors(["#ff0000"], [3])).toBe("#ff0000");
     expect(mixColors(["#ff0000", "#0000ff"], [1, 1])).toBe("#bc00bc");
