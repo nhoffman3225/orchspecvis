@@ -125,14 +125,17 @@ between panels to resize them (double-click resets). Esc closes the view.
 - **Tutti (T).** Needs the session's MusicXML score. A reduction of the whole orchestra
   at concert pitch for proofreading:
   one chord per bar or per beat, for all parts or by section, coloured by section or by
-  part. **Drag a box** over the score to open a pop-up beside it: the selected chord as an
-  orchestration chart, each section in its own column and colour, with instrument
-  labels (bracketed over several notes, joined by a line when moved off them). **Split
-  Doublings**: off, a pitch several sections play is one notehead in their colours mixed
-  (weighted by how many parts of each play it); on, each colour is kept (a notehead per
-  part in the chart, colour bands on the engraved notehead). Click a chord or bar, Alt+click every note on the same
-  beat, or drag a box (Shift/Ctrl adds). The selection condenses into one chord plus its
-  pitch-class set, shown as a scale, and appears on the piano below.
+  part. It opens on one chord per beat. Click a chord or bar, Alt+click every note on the
+  same beat, or drag a box (Shift/Ctrl adds); the selection condenses into one chord plus
+  its pitch-class set, shown as a scale, and appears on the piano below.
+  **Drag a box** to also open a pop-up beside it: the selected chord as an orchestration
+  chart, every section in its own block and colour, with instrument labels (bracketed
+  over several notes, or fanned out to each of their notes, with leader lines routed
+  around other labels). Several chords in the box are shown side by side, or one at a
+  time with ◀ ▶ (and the arrow keys) when they do not fit. **Split Doublings**: off, a
+  pitch several sections play is one notehead in their colours mixed (weighted by how
+  many parts of each play it); on, each colour is kept: colour bands on the engraved
+  notehead, and in the chart every instrument gets its own column under its name.
 - **Registers (R).** How each section (or stem) spreads over the pitch range. It uses
   either the *sound*, where fundamentals are solid and partials striped or dotted, or the
   *notes* of the score. The axis can show notes, Hz or both.
