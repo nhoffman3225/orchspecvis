@@ -61,7 +61,11 @@ export function initHoverTips(doc: Document = document): void {
     timer = window.setTimeout(() => show(el), DELAY_MS);
   };
 
-  doc.addEventListener("pointerover", (e) => arm(carrier(e.target)));
+  // the tip can be hovered itself without closing (WCAG 1.4.13); Esc dismisses it
+  doc.addEventListener("pointerover", (e) => {
+    if (e.target instanceof Node && box.contains(e.target)) return;
+    arm(carrier(e.target));
+  });
   doc.addEventListener("focusin", (e) => {
     if ((e.target as Element).matches?.(":focus-visible")) arm(carrier(e.target));
   });

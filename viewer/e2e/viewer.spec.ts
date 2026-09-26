@@ -461,3 +461,24 @@ test("tutti: a box selection opens the orchestration chart; doublings split or m
   expect(g.offOrigin).toEqual([]);
   expect(g.errors, g.errors.join(" | ")).toEqual([]);
 });
+
+
+test("accessible mode (WCAG): toggled from Help, remembered, larger targets", async ({ page, baseURL }) => {
+  const g = guard(page, baseURL!);
+  await page.goto(`/?${Q}&view=help`);
+  await page.evaluate(() => localStorage.removeItem("orchspec.a11y"));
+  await page.goto(`/?${Q}&view=help`);
+  await expect(page.locator("html")).toHaveAttribute("data-a11y", "off");
+  const box = page.locator("#help-bar input[data-a11y-toggle]");
+  await box.check();
+  await expect(page.locator("html")).toHaveAttribute("data-a11y", "on");
+  await page.goto(`/?${Q}`); // remembered
+  await expect(page.locator("html")).toHaveAttribute("data-a11y", "on");
+  const h = (await page.locator("#play").boundingBox())!.height;
+  expect(h).toBeGreaterThanOrEqual(24); // WCAG 2.5.8 target size
+  expect(await page.locator("#bar .cap").first().evaluate((e) => getComputedStyle(e).transform)).toBe("none");
+  await page.goto(`/?${Q}&a11y=0`); // the URL wins
+  await expect(page.locator("html")).toHaveAttribute("data-a11y", "off");
+  expect(g.offOrigin).toEqual([]);
+  expect(g.errors, g.errors.join(" | ")).toEqual([]);
+});

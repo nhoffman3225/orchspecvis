@@ -125,7 +125,12 @@ between panels to resize them (double-click resets). Esc closes the view.
 - **Tutti (T).** Needs the session's MusicXML score. A reduction of the whole orchestra
   at concert pitch for proofreading:
   one chord per bar or per beat, for all parts or by section, coloured by section or by
-  part. Click a chord or bar, Alt+click every note on the same
+  part. **Drag a box** over the score to open a pop-up beside it: the selected chord as an
+  orchestration chart, each section in its own column and colour, with instrument
+  labels (bracketed over several notes, joined by a line when moved off them). **Split
+  Doublings**: off, a pitch several sections play is one notehead in their colours mixed
+  (weighted by how many parts of each play it); on, each colour is kept (a notehead per
+  part in the chart, colour bands on the engraved notehead). Click a chord or bar, Alt+click every note on the same
   beat, or drag a box (Shift/Ctrl adds). The selection condenses into one chord plus its
   pitch-class set, shown as a scale, and appears on the piano below.
 - **Registers (R).** How each section (or stem) spreads over the pitch range. It uses
@@ -135,6 +140,10 @@ between panels to resize them (double-click resets). Esc closes the view.
   and key height.
 - **ⓘ credits.** The open-source projects orchspec is built on, with their full licence
   texts.
+
+**Accessible mode (WCAG 2.2 AA)**, in the Help view and on the home screen: higher
+contrast, larger text and targets, no motion or decoration, stronger focus rings. It is
+remembered; `?a11y=1` in the URL turns it on.
 
 ## 6. Keys
 

@@ -27,6 +27,7 @@ import { Splitter } from "./splitter";
 import { initFolds } from "./toolbar";
 import { initHoverTips } from "./hovertip";
 import { renderHelp } from "./help";
+import { initA11y } from "./a11y";
 
 type Mode = "mix" | "ensemble" | "stems" | "dominant";
 
@@ -41,6 +42,7 @@ function fmt(t: number): string {
 async function main(): Promise<void> {
   initToken(location.search);
   const params = new URLSearchParams(location.search);
+  initA11y(params); // accessible mode (WCAG 2.2 AA), before any screen
   if (params.has("import")) return runImportScreen(document.body); // desktop app: import progress
   if (params.has("home")) return runHomeScreen(document.body, params); // desktop app: start
   // views the bundle lacks the inputs for: the button stays, disabled, and says why; its

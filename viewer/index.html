@@ -135,7 +135,7 @@
         <div id="tip" hidden></div>
       </section>
       <canvas id="lufs"></canvas>
-      <div id="status">loading…</div>
+      <div id="status" role="status" aria-live="polite">loading…</div>
       <div id="split-view" class="splitter y" hidden></div>
       <div id="scoreview" hidden>
         <div id="score-bar">
@@ -201,6 +201,7 @@
       <div id="helpview" hidden>
         <div id="help-bar">
           <strong>Help</strong>
+          <label class="a11y-toggle" title="Higher contrast, larger text and targets, no motion or decoration, stronger focus rings"><input type="checkbox" data-a11y-toggle /> Accessible Mode (WCAG 2.2 AA)</label>
           <span class="hint">Hover any control for what it does · the full guide is docs/user-guide.md</span>
           <button id="helpclose" type="button" title="Close help (Esc)">✕ Close</button>
         </div>
