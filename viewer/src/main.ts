@@ -13,6 +13,7 @@ import { frameGaps, frameSpans } from "./gaps";
 import { COLORMAPS, colormapLut, cssColor, stemPalette } from "./colormap";
 import { fetchSameOrigin, initToken } from "./net";
 import { runImportScreen } from "./importview";
+import { runHomeScreen } from "./home";
 import { busy } from "./busy";
 import { LufsStrip, Pane2D } from "./pane2d";
 import { Player } from "./player";
@@ -41,6 +42,26 @@ async function main(): Promise<void> {
   initToken(location.search);
   const params = new URLSearchParams(location.search);
   if (params.has("import")) return runImportScreen(document.body); // desktop app: import progress
+  if (params.has("home")) return runHomeScreen(document.body, params); // desktop app: start
+  // views the bundle lacks the inputs for: the button stays, disabled, and says why; its
+  // key shortcut shows the same reason in the status line instead of opening it
+  const notice = (msg: string): void => {
+    const st = $("status");
+    st.textContent = msg;
+    st.classList.add("notice");
+    setTimeout(() => st.classList.remove("notice"), 2500);
+  };
+  const unavailable = (id: string, ok: boolean, why: string): void => {
+    const b = $<HTMLButtonElement>(id);
+    b.hidden = false;
+    // aria-disabled, not disabled: a disabled button gets no hover, so no tip; a click
+    // reaches the view's open function, which refuses with `why`
+    b.classList.toggle("unavail", !ok);
+    if (!ok) {
+      b.title = why;
+      b.setAttribute("aria-disabled", "true");
+    }
+  };
   let base = params.get("bundle") ?? (import.meta.env.DEV ? "./tiny-bundle/" : "./bundle/");
   if (!base.endsWith("/")) base += "/";
   const m = await loadManifest(base);
@@ -664,9 +685,10 @@ async function main(): Promise<void> {
     m, base, partColor, seek: (s) => seek(s), now: () => player.transport.position(),
     mode: params.get("tutti"), color: params.get("tcolor"),
   });
-  $("tuttibtn").hidden = !tutti.available;
+  const TUTTI_NEEDS = "The tutti view needs a MusicXML score in the bundle (rebuild it with one).";
+  unavailable("tuttibtn", tutti.available, TUTTI_NEEDS);
   function setTutti(open: boolean): void {
-    if (open && !tutti.available) return;
+    if (open && !tutti.available) return notice(TUTTI_NEEDS);
     tuttiOpen = open;
     $("tuttiview").hidden = !open;
     if (open) {
@@ -704,7 +726,7 @@ async function main(): Promise<void> {
     const fams = names.map(familyOf);
     const present = FAMILIES.filter((f) => fams.includes(f));
     return { groupOf: fams.map((f) => present.indexOf(f)),
-      groups: present.map((f: Family) => ({ label: f[0]!.toUpperCase() + f.slice(1), color: FAMILY_COLORS[f] })) };
+      groups: present.map((f: Family) => ({ key: f, label: f[0]!.toUpperCase() + f.slice(1), color: FAMILY_COLORS[f] })) };
   };
   function buildRegisters(): Promise<void> {
     return busy.while("registers", buildRegistersNow());
@@ -746,7 +768,7 @@ async function main(): Promise<void> {
           if (!partsVisible.has(p)) return -1;
           if (!byFamily) return stemOf[p] ?? -1;
           const f = familyOf(parts[p]?.instrument || parts[p]?.name || "");
-          return fg.groups.findIndex((g2) => g2.label === f);
+          return fg.groups.findIndex((g2) => g2.key === f); // the family, not the display label
         };
         fund = notesGrid(notes, groupOfPart, groups.length, frames, frameSec);
       }
@@ -869,7 +891,8 @@ async function main(): Promise<void> {
     $("score-src-l").hidden = !scoreView; // choice only when both exist
     if (!scoreView || params.get("scoresrc") === "pdf") scoreSrc.value = "pdf";
   }
-  if (scoreView || hasPdf) $("scorebtn").hidden = false;
+  const SCORE_NEEDS = "The score view needs a MusicXML score or a score PDF in the bundle (rebuild it with one).";
+  unavailable("scorebtn", !!scoreView || hasPdf, SCORE_NEEDS);
   const usePdf = (): boolean => hasPdf && scoreSrc.value === "pdf";
   const showSource = (): void => {
     const pdf = usePdf();
@@ -889,7 +912,7 @@ async function main(): Promise<void> {
     }
   };
   const setScore = (open: boolean): void => {
-    if (open && !scoreView && !hasPdf) return;
+    if (open && !scoreView && !hasPdf) return notice(SCORE_NEEDS);
     scoreOpen = open;
     $("scoreview").hidden = !open;
     if (open) {

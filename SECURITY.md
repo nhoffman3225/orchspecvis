@@ -33,7 +33,11 @@ no reason to talk to the network.
    (GET/HEAD only, root confinement, no hidden files, the CSP and headers below;
    `rust/orchspec-core/src/serve.rs`, tested in `tests/serve.rs`). No updater plugin, no
    capabilities file (the page gets no IPC permissions), navigation off the app origin is
-   refused. Bundles are opened from a local folder only (argument or native dialog).
+   refused. Bundles are opened from a local folder only (argument, native dialog, or one
+   the home screen listed). The home screen's `/app/` routes act only on paths the user
+   picked in a native dialog during this run (`/app/build` refuses any other path, and
+   `/app/open` any bundle it did not list); the wizard writes only into
+   `Documents/orchspec/sessions/`. An import still running when the app closes is killed.
 4. **Viewer CSP** (in `viewer/index.html`):
    `default-src 'self'; connect-src 'self'; img-src 'self' blob: data:;
    script-src 'self' 'wasm-unsafe-eval'` (+ `style-src 'self'`, `object-src 'none'`,

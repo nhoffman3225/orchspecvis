@@ -1,9 +1,10 @@
-# orchspec
+# orchspecvis — Orchestral Spectrum Visualizer
 
 **See how an orchestral render fills the pitch spectrum, next to the score that made it.**
 
-orchspec analyses a render session (the mix, one audio file per player, the tempo MIDI
-and the MusicXML score) into a bundle. A viewer then plays it back:
+orchspecvis (`orchspec` for short: the name of its command line and packages) analyses a
+render session (the mix, one audio file per player, the tempo MIDI and the MusicXML score)
+into a bundle. A viewer then plays it back:
 
 - a **3D spectrogram** (time × pitch × loudness), with each stem selectable and the
   score's notes outlined;
@@ -53,4 +54,5 @@ as a separate, replaceable file.
 
 ## Note
 
-This is a vibe-coded personal project build to test Opus 5.5 so don't expect much lol
+This is a personal project created to experiment with Agentic Coding. Feel free to use or fork
+it with that in mind.

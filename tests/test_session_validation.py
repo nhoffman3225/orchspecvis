@@ -59,8 +59,34 @@ def test_all_problems_reported_together(tmp_path: Path) -> None:
     assert "01_A.wav" in str(e.value) and "badname.wav" in str(e.value)
 
 
-def test_missing_mix(tmp_path: Path) -> None:
-    with pytest.raises(SessionError, match=r"no mix.wav"):
+def test_missing_mix_and_stems(tmp_path: Path) -> None:
+    with pytest.raises(SessionError, match=r"no mix.wav and no stems"):
+        load_session(tmp_path)
+
+
+def test_mix_summed_from_stems(tmp_path: Path) -> None:
+    """Without mix.wav the stems are summed (mono stems into every channel) into a temp
+    mix; the session folder is not written to."""
+    t = np.arange(1000) / SR
+    flute = (0.25 * np.sin(2 * np.pi * 440 * t)).astype(np.float32)
+    strings = np.stack([0.5 * np.sin(2 * np.pi * 220 * t), 0.1 * np.ones_like(t)], 1)
+    (tmp_path / "stems").mkdir()
+    sf.write(str(tmp_path / "stems" / "01_Flute.wav"), flute, SR, subtype="FLOAT")
+    st = strings.astype(np.float32)
+    sf.write(str(tmp_path / "stems" / "02_Strings.wav"), st, SR, subtype="FLOAT")
+    before = sorted(p.name for p in tmp_path.rglob("*"))
+    s = load_session(tmp_path)
+    assert s.mix_summed and s.mix.channels == 2 and s.mix.n_samples == 1000
+    assert s.mix.path.parent != tmp_path and sorted(p.name for p in tmp_path.rglob("*")) == before
+    mix, _ = sf.read(str(s.mix.path), dtype="float32", always_2d=True)
+    np.testing.assert_allclose(mix[:, 0], flute + strings[:, 0], atol=1e-6)
+    np.testing.assert_allclose(mix[:, 1], flute + strings[:, 1], atol=1e-6)
+
+
+def test_stems_without_mix_must_match_each_other(tmp_path: Path) -> None:
+    _wav(tmp_path / "stems" / "01_A.wav", 1000)
+    _wav(tmp_path / "stems" / "02_B.wav", 900)
+    with pytest.raises(SessionError, match=r"02_B\.wav: length 900 samples .* != the first stem"):
         load_session(tmp_path)
 
 

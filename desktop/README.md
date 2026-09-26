@@ -11,10 +11,18 @@ one local bundle folder.
   ranges for streaming playback, the SECURITY.md headers) are in
   `rust/orchspec-core/src/serve.rs` and tested there.
 - **No network**: no updater, no telemetry, no remote URLs. No IPC permissions (there is
-  no capabilities file), so the page cannot call into Rust. Navigation away from the
-  app origin is refused.
-- **Opening a bundle**: pass the folder as the first argument, or use File › Open Bundle…
-  (Ctrl/Cmd+O; also shown at start). The manifest is validated by orchspec-core first.
+  no capabilities file). The page reaches Rust only through a few `/app/` routes on the
+  same protocol (below). Navigation away from the app origin is refused.
+- **Home screen** (`?home=1`, the start page without an argument): open a bundle (native
+  folder dialog, or one of the listed bundles: recently opened first, then the bundles
+  folder), build one from files (the wizard), or import a session folder. Routes:
+  `GET /app/home.json` (the list), `POST /app/open` (a *listed* bundle, or the dialog),
+  `POST /app/pick` (a native file dialog per input kind), `POST /app/build` (lays the
+  chosen files out as a session in `Documents/orchspec/sessions/<name>`, hard links or
+  copies, then imports it; every path must have been picked in a dialog in this run),
+  `POST /app/import`. The pure parts are in `rust/orchspec-core/src/app.rs`, tested.
+- **Opening a bundle**: pass the folder as the first argument, from the home screen, or
+  with File › Open Bundle… (Ctrl/Cmd+O). The manifest is validated by orchspec-core first.
 - **Importing a session**: File › Import Session… (Ctrl/Cmd+I), or
   `orchspec-desktop --import <session folder>`. The app runs the Python analysis CLI
   (`orchspec bundle … --backend auto`) as a subprocess — argument list, no shell, no

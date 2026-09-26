@@ -61,5 +61,11 @@ fn finds_the_cli_in_a_checkout_venv() {
     fs::write(base.join("mix.wav"), b"RIFF").unwrap();
     assert!(looks_like_session(&base));
     assert!(!looks_like_session(&deep));
+    // stems only: the analysis sums them into the mix
+    fs::create_dir_all(deep.join("stems")).unwrap();
+    fs::write(deep.join("stems/notes.txt"), b"").unwrap();
+    assert!(!looks_like_session(&deep));
+    fs::write(deep.join("stems/01_Flute.WAV"), b"RIFF").unwrap();
+    assert!(looks_like_session(&deep));
     fs::remove_dir_all(&base).unwrap();
 }

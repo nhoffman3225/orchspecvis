@@ -41,7 +41,8 @@ def validate(path: Path) -> None:
         typer.echo(f"error: {e}", err=True)
         raise typer.Exit(2) from e
     typer.echo(
-        f"session {s.name}: mix {s.mix.sr} Hz, {s.mix.channels} ch, "
+        f"session {s.name}: mix{' (summed from the stems)' if s.mix_summed else ''} "
+        f"{s.mix.sr} Hz, {s.mix.channels} ch, "
         f"{s.mix.duration:.2f} s, {len(s.stems)} stems, renderer={s.config.renderer}"
     )
     for st in s.stems:

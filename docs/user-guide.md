@@ -44,19 +44,32 @@ My Piece/
   render.yaml             optional: settings (`orchspec session-template` prints one)
 ```
 
-Only `mix.wav` is required. Stems make per-instrument views possible. With the MIDI and
+You need the mix, the stems, or both: without `mix.wav` the stems are summed into the mix
+(the session folder is not changed). Stems make per-instrument views possible. With the MIDI and
 MusicXML, notes, bars and parts are aligned to the audio. Dorico users can export the
 whole set in one go: see [dorico-session.md](dorico-session.md), which also has
 `orchspec import-dorico`, a command that lays a Dorico export out as a session.
 
 ## 3. Import
 
-In the app, choose **File › Import Session…** (Ctrl/Cmd+I) and pick the session folder.
-A progress screen shows each stem as it is analysed, then the result opens. Bundles are
-saved in `Documents/orchspec/bundles/<name>.bundle`. Importing the same session again
-replaces its bundle.
+The app starts on its **home screen** (File › Home, Ctrl/Cmd+H):
 
-**File › Open Bundle…** (Ctrl/Cmd+O) opens a bundle you made earlier.
+- **Open Bundle** opens a bundle folder; your bundles are listed below it, recently
+  opened ones first. Click one to open it.
+- **New Bundle from Files** (Ctrl/Cmd+N) is a wizard: choose the score (MusicXML), the
+  tempo MIDI, the stems, the mix and the score PDF (each optional except that you need
+  the stems or the mix), name it, and **Build Bundle**. The app lays the files out as a
+  session in `Documents/orchspec/sessions/<name>` (hard links, so no extra space on the
+  same drive) and analyses it.
+  Each optional input says what is lost without it, and **This Bundle Will Have** lists
+  the views the files allow: no MusicXML means no engraved score or tutti view (a MIDI
+  still gives the notes), no PDF means no score PDF view, no stems means no
+  per-instrument views.
+- **Import Session Folder** (Ctrl/Cmd+I) analyses a folder already laid out as above.
+
+A progress screen shows each stem as it is analysed, then the result opens. Bundles are
+saved in `Documents/orchspec/bundles/<name>.bundle`; building or importing the same
+session again replaces its bundle. Closing the app during an import stops the analysis.
 
 From the command line:
 
@@ -99,7 +112,8 @@ The controls:
 
 ## 5. Other views
 
-Open each with its toolbar button or key. Each view opens below the toolbar, which
+Open each with its toolbar button or key. A view the bundle lacks the inputs for is
+greyed out; hovering it (or pressing its key) says what it needs. Each view opens below the toolbar, which
 stays usable. Drag the view's top edge to see the spectrum above it, and drag the bars
 between panels to resize them (double-click resets). Esc closes the view.
 

@@ -9,6 +9,33 @@ import { KEYS, MIDI0, axisLabel, smoothStats, type AxisMode, type RegisterStats 
 export interface RegisterGroup {
   label: string;
   color: string;
+  /** stable id (e.g. the family), when the label is only for display */
+  key?: string;
+}
+
+/** Semitones from a fundamental to its 2nd..8th harmonics. */
+const HARMONIC_SEMIS = [12, 19, 24, 28, 31, 34, 36];
+
+/** Keys (0..87) where a fundamental sounds that another sounding note's 2nd..8th
+ * harmonic also lands on: there, partials overlap the written pitch. */
+export function overlappedFundamentals(fund: ArrayLike<number>, nGroups: number, frames: number,
+  f: number, keys: number): Set<number> {
+  const any = new Uint8Array(keys);
+  for (let gi = 0; gi < nGroups; gi++) {
+    const o = (gi * frames + f) * keys;
+    for (let s = 0; s < keys; s++) if (fund[o + s]! > 0) any[s] = 1;
+  }
+  const out = new Set<number>();
+  for (let s = 0; s < keys; s++) {
+    if (!any[s]) continue;
+    for (const d of HARMONIC_SEMIS) {
+      if (s - d >= 0 && any[s - d]) {
+        out.add(s);
+        break;
+      }
+    }
+  }
+  return out;
 }
 
 export interface RegisterData {
@@ -197,10 +224,13 @@ export class RegisterView {
     const rowH = (L.bottom - L.top) / KEYS;
     const span = 255 - d.thrU8;
     g.font = "10px system-ui, sans-serif";
+    const overlaps = d.fund ? overlappedFundamentals(d.fund, n, d.frames, f, KEYS) : new Set<number>();
+    let fundBars = 0;
     d.groups.forEach((grp, gi) => {
       const cx = L.nx0 + gi * colW;
       const o = (gi * d.frames + f) * KEYS;
       const style = d.fund && d.partials !== "solid" ? d.partials ?? "stripes" : "solid";
+      const overlap = d.fund ? overlaps : null;
       const partial = style === "solid" ? null : this.pattern(grp.color, style);
       for (let s = 0; s < KEYS; s++) {
         const v = d.grid[o + s]! - d.thrU8;
@@ -209,7 +239,17 @@ export class RegisterView {
         const w = Math.max(1, (v / span) * (colW - 3)), h = Math.max(1, rowH - 0.5);
         const isFund = !partial || d.fund![o + s]! > 0;
         g.fillStyle = isFund ? grp.color : partial;
-        g.fillRect(cx + 1, y, w, h);
+        if (isFund && partial) fundBars++;
+        if (isFund && overlap?.has(s)) {
+          // partials of another sounding note land on this written pitch: a faint glow
+          g.save();
+          g.shadowColor = grp.color;
+          g.shadowBlur = 9;
+          g.fillRect(cx + 1, y, w, h);
+          g.restore();
+        } else {
+          g.fillRect(cx + 1, y, w, h);
+        }
         if (!isFund && h >= 3) {
           g.strokeStyle = grp.color; // outline keeps short patterned bars readable
           g.lineWidth = 0.75;
@@ -229,5 +269,6 @@ export class RegisterView {
       g.fillText(grp.label.slice(0, 12), 0, 0);
       g.restore();
     });
+    this.canvas.dataset.fundBars = String(fundBars); // tests: solid (score) fundamentals drawn
   }
 }

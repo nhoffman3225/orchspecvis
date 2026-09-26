@@ -151,6 +151,9 @@ test("register view: sections from stem spectra and from the score", async ({ pa
   await page.locator("#reg-partials").selectOption("dots"); // partials patterned, fundamentals solid
   await page.locator("#reg-axis").selectOption("both");
   await expect(page.locator("html")).toHaveAttribute("data-registers", /^sound:[1-9]/);
+  // by section, the score's fundamentals are drawn solid (regression: family key match)
+  await expect.poll(async () => Number(await page.locator("#regcanvas").getAttribute("data-fund-bars")))
+    .toBeGreaterThan(0);
   await page.locator("#reg-src").selectOption("notes");
   await page.locator("#reg-by").selectOption("each");
   await expect(page.locator("html")).toHaveAttribute("data-registers", "notes:4"); // 4 parts
@@ -352,4 +355,82 @@ test("toolbar groups fold open; hover tips; the help view lists every control", 
   await expect(page.locator("#regview")).toBeVisible();
   expect(g.offOrigin).toEqual([]);
   expect(g.errors, g.errors.join(" | ")).toEqual([]);
+});
+
+test("home screen (desktop): bundles list and the from-files wizard", async ({ page, baseURL }) => {
+  const g = guard(page, baseURL!);
+  await page.route("**/app/home.json", (r) => r.fulfill({ json: {
+    bundles: [
+      { name: "Beethoven 5", path: "C:/b/Beethoven 5.bundle", modified: 1790000000, has_score: true, recent: true },
+      { name: "Sketch", path: "C:/b/Sketch.bundle", modified: 1780000000, has_score: false, recent: false },
+    ],
+    bundles_dir: "C:/b", importing: false,
+  } }));
+  const picked: Record<string, string[]> = {
+    musicxml: ["D:/Renders/Bolero/Bolero.musicxml"], midi: ["D:/Renders/Bolero/render.mid"],
+    stems: ["D:/Renders/Bolero/stems/01_Flute.wav", "D:/Renders/Bolero/stems/02_Snare.wav"],
+  };
+  await page.route("**/app/pick", async (r) => {
+    const kind = (r.request().postDataJSON() as { kind: string }).kind;
+    await r.fulfill({ json: { paths: picked[kind] ?? [] } });
+  });
+  let built: unknown = null;
+  await page.route("**/app/build", async (r) => {
+    built = r.request().postDataJSON();
+    await r.fulfill({ json: { ok: true } });
+  });
+  let opened: unknown = null;
+  await page.route("**/app/open", async (r) => {
+    opened = r.request().postDataJSON();
+    await r.fulfill({ json: { ok: true } });
+  });
+  await page.goto("/?home=1");
+  await expect(page.locator("html")).toHaveAttribute("data-home", "ready");
+  await expect(page.locator(".home-bundle")).toHaveCount(2);
+  await expect(page.locator(".home-bundle").first()).toContainText("Recent");
+  await page.locator(".home-bundle").first().click();
+  await expect.poll(() => opened).toEqual({ path: "C:/b/Beethoven 5.bundle" });
+  // the wizard: nothing to build until there is audio
+  await page.locator("#home-new").click();
+  await expect(page.locator("#wizard")).toBeVisible();
+  await expect(page.locator("#wizard-build")).toBeDisabled();
+  await page.locator("#pick-musicxml").click();
+  await page.locator("#pick-midi").click();
+  await expect(page.locator("#wizard-build")).toBeDisabled();
+  await expect(page.locator(".wizard-summary li.on")).toContainText(["Engraved score view", "Tutti view"]);
+  await expect(page.locator(".wizard-summary li.off").first()).toContainText("Spectrum and playback");
+  await page.locator("#pick-stems").click();
+  await expect(page.locator(".wizard-summary li.on").first()).toContainText("Spectrum and playback");
+  await expect(page.locator('[data-kind="pdf"] .wizard-without')).toContainText("no score PDF view");
+  await expect(page.locator('[data-kind="stems"] .wizard-files')).toHaveText("01_Flute.wav · 02_Snare.wav");
+  await expect(page.locator("#wizard-name")).toHaveValue("Bolero");
+  await expect(page.locator("#wizard-build")).toBeEnabled();
+  await page.locator("#wizard-build").click();
+  await expect.poll(() => built).toEqual({
+    name: "Bolero", stems: picked.stems, musicxml: picked.musicxml![0], midi: picked.midi![0],
+  });
+  expect(g.offOrigin).toEqual([]);
+  expect(g.errors, g.errors.join(" | ")).toEqual([]);
+});
+
+
+test("views the bundle cannot show are marked unavailable and say why", async ({ page, baseURL }) => {
+  const g = guard(page, baseURL!);
+  await page.goto("/?bundle=tiny-bundle/&fps=15"); // no score
+  // (its audio is git-ignored, so on CI the status line reports "audio unavailable")
+  for (const id of ["#scorebtn", "#tuttibtn"]) {
+    await expect(page.locator(id)).toBeVisible();
+    await expect(page.locator(id)).toHaveAttribute("aria-disabled", "true");
+  }
+  await page.keyboard.press("KeyS");
+  await expect(page.locator("#scoreview")).toBeHidden();
+  await expect(page.locator("#status")).toContainText("needs a MusicXML score or a score PDF");
+  await page.locator("#tuttibtn").click({ force: true }); // Playwright waits on aria-disabled; a user can click
+  await expect(page.locator("#tuttiview")).toBeHidden();
+  await expect(page.locator("#status")).toContainText("tutti view needs a MusicXML score");
+  await page.locator("#scorebtn").hover();
+  await expect(page.locator("#hovertip")).toContainText("needs a MusicXML score");
+  expect(g.offOrigin).toEqual([]);
+  const errors = g.errors.filter((e) => !/^HTTP 404 \/tiny-bundle\/audio\//.test(e)); // not committed
+  expect(errors, errors.join(" | ")).toEqual([]);
 });
