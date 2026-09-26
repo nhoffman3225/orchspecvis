@@ -447,6 +447,15 @@ Checked on the first real session (Dorico 5 + NotePerformer 5, Beethoven 5 i, 6:
   ids. Pages hold whole systems (~3 viewports, adjustPageHeight): a whole movement on one
   page was a 5.4 MB SVG that stalled the browser.
 
+- 2026-09-26: Review pass. Untrusted-input limits added: MusicXML ending numbers <= 100
+  passes, `<sound tempo>` finite and in (0, 10000], time signatures >= 1; render.mid zero
+  tempos and bad time signatures ignored; score PDF pages rendered at <= 40 MP; viewer
+  gzip inflation bounded by the tile's size; SVG sanitizer covers unquoted attributes,
+  prefixed tags and `<set>`/`<animate>`. Desktop wizard: clashing stem names are made
+  unique and an existing file is never written to (it used to be copied over a hard link,
+  i.e. into the user's original). align_notes rebuilds the warp with one sort per pass
+  (was one scan of all notes per event; same values, ~300x faster on 60k notes).
+
 ## API drift
 
 (Record here whenever an installed library differs from what the original prompt assumed.)
@@ -489,11 +498,11 @@ librosa 4.9 s.
 
 ## Open issues
 
-- Bundle size: 20 min x 31 tracks at k=3 = 1.87 GiB of raw u8 tiles. Options: gzip
-  tiles + `DecompressionStream` in the viewer (Safari 16.4+/WebView2 OK), or store stems
-  from LOD 1 upward. Needs a schema bump; deferred.
-- Viewer decodes the whole mix with `decodeAudioData` (20-min stereo ≈ 460 MB float32 in
-  memory). Phase 3 task "streaming playback (AudioWorklet)" addresses it.
+- Bundle size: 20 min x 31 tracks at k=3 = 1.87 GiB of raw u8 tiles. Resolved: tiles are
+  gzipped by default (schema v4, ~30 % of raw) and inflated with `DecompressionStream`.
+  Storing stems from LOD 1 upward would save more; not planned.
+- Resolved: the mix WAV streams through an AudioWorklet with Range requests
+  (stream.feeder.ts / stream.worklet.ts); only other formats are decoded whole.
 - "Selected stems" view power-sums stems on the CPU per page (4096 x 264 cells x n);
   fine for tens of stems, may stutter at ~100 when paging during playback. Could move
   to a texture array + shader sum.
@@ -502,12 +511,12 @@ librosa 4.9 s.
 - Viewer rendering verified only with headless Edge (SwiftShader WebGL) screenshots and
   vitest; audio playback/sync not verified by ear. Please check in a real browser.
 - The viewer no-network check is a vitest unit test (fetch stub + source scan + CSP
-  check), not a Playwright end-to-end run (Playwright needs approval as a dependency).
+  check); the Playwright E2E specs also fail on any off-origin request (e2e/guard.ts).
 - CI runs neither `gpu` nor `slow` tests (no CUDA runners); run them locally.
 
 - The built-in Claude browser pane has WebGL disabled (sandboxed GPU), so visual checks of
   the viewer there are limited to loading/DOM; rendering is verified in a normal browser.
 - Viewer dev deps added beyond the prompt's list: @eslint/js, @types/node (types for tests
   reading fixtures). Python: uvicorn (FastAPI server) and httpx (FastAPI TestClient) —
-  both are FastAPI's own companions; flagging for approval.
+  both approved (see "Dependencies").
 
