@@ -37,6 +37,38 @@ export function buildRequest(name: string, p: Picks): { body: Record<string, unk
   return { body };
 }
 
+export interface Feature {
+  name: string;
+  on: boolean;
+  /** what is missing, when off */
+  needs: string;
+}
+
+/** What a bundle built from these files will have (the views it can open). */
+export function featuresFor(p: Picks): Feature[] {
+  const audio = !!p.mix || p.stems.length > 0;
+  const notes = !!p.musicxml || !!p.midi;
+  return [
+    { name: "Spectrum and playback", on: audio, needs: "the stems or the mix" },
+    { name: "Per-instrument views", on: p.stems.length > 0, needs: "stems" },
+    { name: "Notes on the spectrum, piano notes", on: notes, needs: "a MusicXML score or a MIDI file" },
+    { name: "Engraved score view", on: !!p.musicxml, needs: "a MusicXML score" },
+    { name: "Tutti view", on: !!p.musicxml, needs: "a MusicXML score" },
+    { name: "Score PDF view", on: !!p.pdf, needs: "a score PDF" },
+    { name: "Timing from the rendered MIDI", on: !!p.midi,
+      needs: "the MIDI (without it, a score's timing comes from its tempo marks)" },
+  ];
+}
+
+/** What is lost without one input (shown on its step when it is not chosen). */
+export const WITHOUT: Record<PickKind, string> = {
+  musicxml: "Without it: no engraved score and no tutti view (the MIDI can still give the notes).",
+  midi: "Without it: timing comes from the score's tempo marks; with neither, no notes are shown.",
+  stems: "Without them: no per-instrument views (stem list, ensemble, dominant stem, registers per stem).",
+  mix: "Without it: the stems are summed into the mix.",
+  pdf: "Without it: no score PDF view.",
+};
+
 const baseName = (path: string): string => path.split(/[\\/]/).pop() ?? path;
 const stemOf = (path: string): string => baseName(path).replace(/\.[^.]+$/, "");
 
@@ -177,6 +209,8 @@ export async function runHomeScreen(root: HTMLElement, params: URLSearchParams):
   closeW.type = "button";
   wh.append(el("h2", "", "New Bundle from Files"), closeW);
   const steps = el("ol", "wizard-steps");
+  const summary = el("ul", "wizard-summary");
+  summary.setAttribute("aria-label", "What this bundle will have");
   const shown = new Map<PickKind, HTMLElement>();
   const refresh = (): void => {
     for (const s of STEPS) {
@@ -188,6 +222,11 @@ export async function runHomeScreen(root: HTMLElement, params: URLSearchParams):
       out.parentElement!.classList.toggle("done", files.length > 0);
     }
     if (!nameIn.dataset.edited) nameIn.value = suggestName(picks);
+    summary.replaceChildren(...featuresFor(picks).map((f) => {
+      const chip = el("li", f.on ? "on" : "off", f.name);
+      chip.title = f.on ? "Included" : `Needs ${f.needs}`;
+      return chip;
+    }));
     const req = buildRequest(nameIn.value, picks);
     buildBtn.disabled = "error" in req;
     buildBtn.title = "error" in req ? req.error : "Lay the files out as a session and analyse it";
@@ -199,7 +238,8 @@ export async function runHomeScreen(root: HTMLElement, params: URLSearchParams):
     text.append(el("strong", "", s.title), el("span", `tag ${s.tag.toLowerCase()}`, s.tag), el("p", "hint", s.hint));
     const chosen = el("p", "wizard-files");
     shown.set(s.kind, chosen);
-    text.append(chosen);
+    const without = el("p", "wizard-without", WITHOUT[s.kind]);
+    text.append(chosen, without);
     const choose = el("button", "", s.kind === "stems" ? "Choose Files…" : "Choose…");
     choose.type = "button";
     choose.id = `pick-${s.kind}`;
@@ -231,7 +271,8 @@ export async function runHomeScreen(root: HTMLElement, params: URLSearchParams):
   const nameLabel = el("label", "", "Name ");
   nameLabel.append(nameIn);
   foot.append(nameLabel, buildBtn);
-  wizard.append(wh, steps, foot);
+  const sumHead = el("h3", "", "This Bundle Will Have");
+  wizard.append(wh, steps, sumHead, summary, foot);
   nameIn.addEventListener("input", () => {
     nameIn.dataset.edited = nameIn.value ? "1" : "";
     refresh();

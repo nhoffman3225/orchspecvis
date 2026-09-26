@@ -397,7 +397,11 @@ test("home screen (desktop): bundles list and the from-files wizard", async ({ p
   await page.locator("#pick-musicxml").click();
   await page.locator("#pick-midi").click();
   await expect(page.locator("#wizard-build")).toBeDisabled();
+  await expect(page.locator(".wizard-summary li.on")).toContainText(["Engraved score view", "Tutti view"]);
+  await expect(page.locator(".wizard-summary li.off").first()).toContainText("Spectrum and playback");
   await page.locator("#pick-stems").click();
+  await expect(page.locator(".wizard-summary li.on").first()).toContainText("Spectrum and playback");
+  await expect(page.locator('[data-kind="pdf"] .wizard-without')).toContainText("no score PDF view");
   await expect(page.locator('[data-kind="stems"] .wizard-files')).toHaveText("01_Flute.wav · 02_Snare.wav");
   await expect(page.locator("#wizard-name")).toHaveValue("Bolero");
   await expect(page.locator("#wizard-build")).toBeEnabled();
@@ -405,6 +409,27 @@ test("home screen (desktop): bundles list and the from-files wizard", async ({ p
   await expect.poll(() => built).toEqual({
     name: "Bolero", stems: picked.stems, musicxml: picked.musicxml![0], midi: picked.midi![0],
   });
+  expect(g.offOrigin).toEqual([]);
+  expect(g.errors, g.errors.join(" | ")).toEqual([]);
+});
+
+
+test("views the bundle cannot show are marked unavailable and say why", async ({ page, baseURL }) => {
+  const g = guard(page, baseURL!);
+  await page.goto("/?bundle=tiny-bundle/&fps=15"); // no score
+  await expect(page.locator("#status")).toContainText("frames");
+  for (const id of ["#scorebtn", "#tuttibtn"]) {
+    await expect(page.locator(id)).toBeVisible();
+    await expect(page.locator(id)).toHaveAttribute("aria-disabled", "true");
+  }
+  await page.keyboard.press("KeyS");
+  await expect(page.locator("#scoreview")).toBeHidden();
+  await expect(page.locator("#status")).toContainText("needs a MusicXML score or a score PDF");
+  await page.locator("#tuttibtn").click({ force: true }); // Playwright waits on aria-disabled; a user can click
+  await expect(page.locator("#tuttiview")).toBeHidden();
+  await expect(page.locator("#status")).toContainText("tutti view needs a MusicXML score");
+  await page.locator("#scorebtn").hover();
+  await expect(page.locator("#hovertip")).toContainText("needs a MusicXML score");
   expect(g.offOrigin).toEqual([]);
   expect(g.errors, g.errors.join(" | ")).toEqual([]);
 });

@@ -43,6 +43,25 @@ async function main(): Promise<void> {
   const params = new URLSearchParams(location.search);
   if (params.has("import")) return runImportScreen(document.body); // desktop app: import progress
   if (params.has("home")) return runHomeScreen(document.body, params); // desktop app: start
+  // views the bundle lacks the inputs for: the button stays, disabled, and says why; its
+  // key shortcut shows the same reason in the status line instead of opening it
+  const notice = (msg: string): void => {
+    const st = $("status");
+    st.textContent = msg;
+    st.classList.add("notice");
+    setTimeout(() => st.classList.remove("notice"), 2500);
+  };
+  const unavailable = (id: string, ok: boolean, why: string): void => {
+    const b = $<HTMLButtonElement>(id);
+    b.hidden = false;
+    // aria-disabled, not disabled: a disabled button gets no hover, so no tip; a click
+    // reaches the view's open function, which refuses with `why`
+    b.classList.toggle("unavail", !ok);
+    if (!ok) {
+      b.title = why;
+      b.setAttribute("aria-disabled", "true");
+    }
+  };
   let base = params.get("bundle") ?? (import.meta.env.DEV ? "./tiny-bundle/" : "./bundle/");
   if (!base.endsWith("/")) base += "/";
   const m = await loadManifest(base);
@@ -666,9 +685,10 @@ async function main(): Promise<void> {
     m, base, partColor, seek: (s) => seek(s), now: () => player.transport.position(),
     mode: params.get("tutti"), color: params.get("tcolor"),
   });
-  $("tuttibtn").hidden = !tutti.available;
+  const TUTTI_NEEDS = "The tutti view needs a MusicXML score in the bundle (rebuild it with one).";
+  unavailable("tuttibtn", tutti.available, TUTTI_NEEDS);
   function setTutti(open: boolean): void {
-    if (open && !tutti.available) return;
+    if (open && !tutti.available) return notice(TUTTI_NEEDS);
     tuttiOpen = open;
     $("tuttiview").hidden = !open;
     if (open) {
@@ -871,7 +891,8 @@ async function main(): Promise<void> {
     $("score-src-l").hidden = !scoreView; // choice only when both exist
     if (!scoreView || params.get("scoresrc") === "pdf") scoreSrc.value = "pdf";
   }
-  if (scoreView || hasPdf) $("scorebtn").hidden = false;
+  const SCORE_NEEDS = "The score view needs a MusicXML score or a score PDF in the bundle (rebuild it with one).";
+  unavailable("scorebtn", !!scoreView || hasPdf, SCORE_NEEDS);
   const usePdf = (): boolean => hasPdf && scoreSrc.value === "pdf";
   const showSource = (): void => {
     const pdf = usePdf();
@@ -891,7 +912,7 @@ async function main(): Promise<void> {
     }
   };
   const setScore = (open: boolean): void => {
-    if (open && !scoreView && !hasPdf) return;
+    if (open && !scoreView && !hasPdf) return notice(SCORE_NEEDS);
     scoreOpen = open;
     $("scoreview").hidden = !open;
     if (open) {
