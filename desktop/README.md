@@ -19,7 +19,9 @@ one local bundle folder.
   `GET /app/home.json` (the list), `POST /app/open` (a *listed* bundle, or the dialog),
   `POST /app/pick` (a native file dialog per input kind), `POST /app/build` (lays the
   chosen files out as a session in `Documents/orchspec/sessions/<name>`, hard links or
-  copies, then imports it; every path must have been picked in a dialog in this run),
+  copies, then imports it; every path must have been picked in a dialog in this run;
+  stems are named `NN_<name>` with clashing names made unique, and an existing file is
+  never written to, since it may be a hard link to one of the user's originals),
   `POST /app/import`. The pure parts are in `rust/orchspec-core/src/app.rs`, tested.
 - **Opening a bundle**: pass the folder as the first argument, from the home screen, or
   with File › Open Bundle… (Ctrl/Cmd+O). The manifest is validated by orchspec-core first.

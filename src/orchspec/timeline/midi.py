@@ -42,10 +42,12 @@ class MidiFile:
     track_names: list[str]
     notes: list[MidiNote]
     _sec_at: list[float] = field(default_factory=list, repr=False)
+    _ticks: list[int] = field(default_factory=list, repr=False)
 
     def __post_init__(self) -> None:
         acc = 0.0
         self._sec_at = []
+        self._ticks = [t for t, _ in self.tempos]  # bisect keys (one lookup per note)
         for i, (tick, _us) in enumerate(self.tempos):
             if i:
                 pt, pus = self.tempos[i - 1]
@@ -53,7 +55,7 @@ class MidiFile:
             self._sec_at.append(acc)
 
     def tick_to_seconds(self, tick: float) -> float:
-        i = bisect.bisect_right([t for t, _ in self.tempos], tick) - 1
+        i = bisect.bisect_right(self._ticks, tick) - 1
         i = max(i, 0)
         t0, us = self.tempos[i]
         return self._sec_at[i] + (tick - t0) * us / 1e6 / self.ppq
@@ -147,9 +149,10 @@ def parse_midi_bytes(data: bytes) -> MidiFile:
             if b == 0xFF:
                 mtype = r.byte()
                 payload = r.take(r.vlq())
-                if mtype == 0x51 and len(payload) == 3:
+                if mtype == 0x51 and len(payload) == 3 and any(payload):
                     tempos.append((tick, int.from_bytes(payload, "big")))
-                elif mtype == 0x58 and len(payload) >= 2:
+                elif mtype == 0x58 and len(payload) >= 2 and payload[0] and payload[1] <= 6:
+                    # numerator, log2 denominator (<= 64th); malformed ones are ignored
                     sigs.append((tick, payload[0], 2 ** payload[1]))
                 elif mtype == 0x03 and not name:
                     name = payload.decode("utf-8", errors="replace").strip()

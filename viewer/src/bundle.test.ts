@@ -77,4 +77,12 @@ describe("gzip tiles", () => {
     const gz = new Response(new Blob([raw]).stream().pipeThrough(new CompressionStream("gzip")));
     expect(await gunzip(gz)).toEqual(raw);
   });
+
+  it("stops inflating at the expected size (gzip bomb)", async () => {
+    const zeros = new Uint8Array(8 << 20); // 8 MB of zeros: ~8 KB of gzip
+    const gz = (): Response =>
+      new Response(new Blob([zeros]).stream().pipeThrough(new CompressionStream("gzip")));
+    await expect(gunzip(gz(), 3000)).rejects.toThrow(BundleError);
+    expect((await gunzip(gz(), zeros.length)).length).toBe(zeros.length);
+  });
 });

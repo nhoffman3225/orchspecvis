@@ -74,8 +74,9 @@ updating plist to 1.10.1 (quick-xml 0.42) and time to 0.3.55.
 ## Untrusted inputs
 
 - **Score PDF** (`score.pdf`, schema v6): parsed by PDFium (pypdfium2; the engine Chrome
-  uses), once, at import; local path only, at most 200 MB and 400 pages. The viewer only
-  ever sees the rendered PNG pages and the bar boxes (never the PDF itself).
+  uses), once, at import; local path only, at most 200 MB and 400 pages, each page
+  rendered at no more than 40 megapixels (a PDF may declare a page of any size). The
+  viewer only ever sees the rendered PNG pages and the bar boxes (never the PDF itself).
 
 Session folders (WAV, MIDI, MusicXML, YAML) and bundles are treated as untrusted.
 
@@ -84,6 +85,10 @@ Session folders (WAV, MIDI, MusicXML, YAML) and bundles are treated as untrusted
 | render.yaml | `yaml.safe_load` + pydantic with `extra="forbid"` |
 | MusicXML | `defusedxml`, or `lxml` with `resolve_entities=False, no_network=True` |
 | .mxl | zip: reject absolute/`..` member paths, cap member count and total uncompressed size |
+| MusicXML values | ending numbers at most 100 passes; `<sound tempo>` must be finite, > 0 and <= 10000; time signatures >= 1 (others ignored) |
+| render.mid | bounded SMF reader: file size, track and event counts, every length checked; zero tempos and malformed time signatures ignored |
+| bundle tiles (viewer) | gzip inflation stops at the tile's expected size (no gzip bombs); length checked against the manifest |
+| engraved SVG (viewer) | Verovio output passes `sanitizeSvg` (no script/style/foreignObject/iframe/set/animate, no `on*`/`style`, only local `#` hrefs) before `innerHTML`; CSP forbids inline script anyway |
 | audio | `soundfile` only; no ffmpeg shelling in Phase 1 |
 | numpy data | `np.load(..., allow_pickle=False)`; no `pickle`, no `torch.load` of inputs |
 | bundle manifest | pydantic model; all paths relative POSIX, no `..`, no absolute, no `:` |

@@ -96,6 +96,13 @@ class Session:
         return self.root.name if self.root else self.mix.path.stem
 
 
+def _audio_info_or_error(p: Path) -> AudioInfo:
+    try:
+        return audio_info(p)
+    except Exception as e:  # soundfile raises various errors for unreadable files
+        raise SessionError(f"{p}: unreadable audio ({e})") from e
+
+
 def _find_mix(root: Path) -> Path | None:
     hits = [
         p
@@ -208,7 +215,7 @@ def load_session(path: str | Path) -> Session:
     if not root.is_dir():
         raise SessionError(f"{root}: not a directory")
     mix_path = _find_mix(root)
-    mix = audio_info(mix_path) if mix_path is not None else None
+    mix = _audio_info_or_error(mix_path) if mix_path is not None else None
     config = _load_config(root)
     stems = _load_stems(root, mix)
     summed = mix is None
@@ -239,7 +246,7 @@ def load_input(path: str | Path) -> Session:
     if p.is_dir():
         return load_session(p)
     if p.is_file() and p.suffix.lower() in AUDIO_SUFFIXES:
-        return Session(root=None, mix=audio_info(p))
+        return Session(root=None, mix=_audio_info_or_error(p))
     raise SessionError(
         f"{p}: expected a session folder or an audio file ({', '.join(sorted(AUDIO_SUFFIXES))})"
     )

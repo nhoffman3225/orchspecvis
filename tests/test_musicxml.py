@@ -158,3 +158,21 @@ def test_timewise_rejected(tmp_path: Path) -> None:
     p.write_text('<?xml version="1.0"?><score-timewise/>', encoding="utf-8")
     with pytest.raises(ScoreError, match="score-timewise"):
         parse_musicxml(p)
+
+
+def test_bad_tempo_and_time_signature_ignored(tmp_path: Path) -> None:
+    """<sound tempo="0|nan|inf"> and a 0 beat-type are ignored instead of dividing by
+    zero (an empty measure's length comes from its time signature)."""
+    body = (
+        '<direction><sound tempo="0"/></direction><direction><sound tempo="nan"/></direction>'
+        '<direction><sound tempo="inf"/></direction><direction><sound tempo="-5"/></direction>'
+    )
+    empty = (
+        '<measure number="2"><attributes><time><beats>3</beats><beat-type>0</beat-type>'
+        "</time></attributes></measure>"
+    )
+    p = tmp_path / "t.musicxml"
+    p.write_text(_minimal(body, empty), encoding="utf-8")
+    s = parse_musicxml(p)
+    assert s.tempos == []
+    assert [(m.beats, m.beat_type, m.dur_q) for m in s.played] == [(4, 4, 4.0), (4, 4, 4.0)]

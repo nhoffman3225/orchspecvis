@@ -60,7 +60,10 @@ The app starts on its **home screen** (File › Home, Ctrl/Cmd+H):
   tempo MIDI, the stems, the mix and the score PDF (each optional except that you need
   the stems or the mix), name it, and **Build Bundle**. The app lays the files out as a
   session in `Documents/orchspec/sessions/<name>` (hard links, so no extra space on the
-  same drive) and analyses it.
+  same drive; your original files are never modified) and analyses it. Stems keep an
+  existing `NN_` number prefix, otherwise they are numbered in the order chosen; two
+  stems that would get the same name (say `01_Flute.wav` from two folders) are both
+  kept, the second renamed.
   Each optional input says what is lost without it, and **This Bundle Will Have** lists
   the views the files allow: no MusicXML means no engraved score or tutti view (a MIDI
   still gives the notes), no PDF means no score PDF view, no stems means no

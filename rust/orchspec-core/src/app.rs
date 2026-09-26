@@ -3,7 +3,9 @@
 //! folder from files the user chose (hard links where possible, else copies).
 
 use serde::{Deserialize, Serialize};
-use std::fs;
+use std::collections::HashSet;
+use std::fs::{self, OpenOptions};
+use std::io::ErrorKind;
 use std::path::{Path, PathBuf};
 use std::time::UNIX_EPOCH;
 
@@ -155,20 +157,44 @@ impl BuildSpec {
     }
 }
 
-/// Hard link (instant, no extra space) or, across drives, a copy.
+/// Hard link (instant, no extra space) or, across drives, a copy. Never writes to an
+/// existing `dst`: it could be a hard link to another of the user's original files.
 fn place(src: &Path, dst: &Path) -> Result<(), String> {
-    fs::hard_link(src, dst)
-        .or_else(|_| fs::copy(src, dst).map(|_| ()))
-        .map_err(|e| format!("{} -> {}: {e}", src.display(), dst.display()))
+    let err = |e: std::io::Error| format!("{} -> {}: {e}", src.display(), dst.display());
+    match fs::hard_link(src, dst) {
+        Ok(()) => Ok(()),
+        Err(e) if e.kind() == ErrorKind::AlreadyExists => Err(err(e)),
+        Err(_) => {
+            // the source first: if it has gone, no empty file is left at dst
+            let mut from = fs::File::open(src).map_err(err)?;
+            let mut out = OpenOptions::new().write(true).create_new(true).open(dst).map_err(err)?;
+            std::io::copy(&mut from, &mut out).map(|_| ()).map_err(err)
+        }
+    }
 }
 
-/// The stem file name: `NN_<name>.<ext>`, keeping an existing `NN_` prefix.
-fn stem_name(i: usize, src: &Path) -> String {
+/// The stem file name: `NN_<name>.<ext>`, keeping an existing `NN_` prefix unless that
+/// name is taken (compared case-insensitively, as on Windows and macOS), then numbered
+/// by position, then suffixed `_2`, `_3`, ...
+fn stem_name(i: usize, src: &Path, taken: &mut HashSet<String>) -> String {
     let stem = src.file_stem().map(|s| s.to_string_lossy().into_owned()).unwrap_or_default();
     let numbered =
         stem.len() > 3 && stem.as_bytes()[..2].iter().all(u8::is_ascii_digit) && &stem[2..3] == "_";
-    let base = if numbered { safe_name(&stem) } else { format!("{:02}_{}", i + 1, safe_name(&stem)) };
-    format!("{base}.{}", ext_of(src))
+    let ext = ext_of(src);
+    let positional = format!("{:02}_{}", i + 1, safe_name(&stem));
+    let mut candidates = vec![];
+    if numbered {
+        candidates.push(safe_name(&stem));
+    }
+    candidates.push(positional.clone());
+    candidates.extend((2..).map(|n| format!("{positional}_{n}")).take(taken.len() + 1));
+    let name = candidates
+        .into_iter()
+        .map(|base| format!("{base}.{ext}"))
+        .find(|n| !taken.contains(&n.to_lowercase()))
+        .expect("more candidates than taken names");
+    taken.insert(name.to_lowercase());
+    name
 }
 
 /// Lays out the chosen files as a session folder `parent/<name>` (replacing an earlier
@@ -186,8 +212,9 @@ pub fn assemble_session(spec: &BuildSpec, parent: &Path) -> Result<PathBuf, Stri
     if !spec.stems.is_empty() {
         let sd = dir.join("stems");
         fs::create_dir_all(&sd).map_err(|e| format!("{}: {e}", sd.display()))?;
+        let mut taken = HashSet::new();
         for (i, s) in spec.stems.iter().enumerate() {
-            place(s, &sd.join(stem_name(i, s)))?;
+            place(s, &sd.join(stem_name(i, s, &mut taken)))?;
         }
     }
     if let Some(x) = &spec.musicxml {

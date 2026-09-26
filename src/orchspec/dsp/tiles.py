@@ -84,10 +84,16 @@ def tile_suffix(encoding: TileEncoding) -> str:
 
 
 def flush_writes() -> None:
-    """Wait for all background tile writes; re-raises the first failure."""
+    """Wait for all background tile writes; re-raises the first failure (after all have
+    finished, so a caller cleaning up after an error never races a pending write)."""
     pending, _PENDING[:] = list(_PENDING), []
+    first: BaseException | None = None
     for f in pending:
-        f.result()
+        e = f.exception()
+        if e is not None and first is None:
+            first = e
+    if first is not None:
+        raise first
 
 
 def write_level(

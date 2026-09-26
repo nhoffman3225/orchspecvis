@@ -193,7 +193,10 @@ def build_bundle(
     out.parent.mkdir(parents=True, exist_ok=True)
     tmp = Path(tempfile.mkdtemp(prefix=f".{out.name}.", dir=out.parent))
     try:
-        report = _build(inputs, tmp, opts, log)
+        # the ExitStack stops _build's thread pools on the way out, so after an error no
+        # background job is still writing into `tmp` while it is deleted below
+        with contextlib.ExitStack() as pools:
+            report = _build(inputs, tmp, opts, log, pools)
         _replace_dir(tmp, out, log)
     except BaseException:
         # let background tile writes finish before deleting their dir; the original
@@ -249,8 +252,18 @@ def _replace_dir(new: Path, out: Path, log: Callable[[str], None]) -> None:
             log(f"warning: could not remove the previous bundle {old}: {e}")
 
 
+def _executor(pools: contextlib.ExitStack, workers: int) -> ThreadPoolExecutor:
+    ex = ThreadPoolExecutor(max_workers=workers)
+    pools.callback(ex.shutdown, wait=True, cancel_futures=True)
+    return ex
+
+
 def _build(
-    inputs: BundleInputs, root: Path, opts: BundleOptions, log: Callable[[str], None]
+    inputs: BundleInputs,
+    root: Path,
+    opts: BundleOptions,
+    log: Callable[[str], None],
+    pools: contextlib.ExitStack,
 ) -> BundleReport:
     tm = _Timer()
     spec = CQTSpec(sr=inputs.sr, hop=opts.hop, k=opts.k)
@@ -292,7 +305,7 @@ def _build(
     overlap = opts.parallel and onset_device is not None
     has_score = inputs.score_path is not None or inputs.midi_path is not None
     want_envs = has_score and opts.offset is None and opts.align
-    side = ThreadPoolExecutor(max_workers=2)
+    side = _executor(pools, 2)
 
     def score_job(mono: np.ndarray, mix_db: np.ndarray) -> ScorePlan | None:
         t0 = time.perf_counter()
@@ -388,7 +401,7 @@ def _build(
     # at most `workers` stems are in flight (memory).
     cpu = not isinstance(backend, TorchBackend)
     workers = (opts.workers or min(4, max(1, (os.cpu_count() or 2) // 2))) if cpu else 1
-    loader = ThreadPoolExecutor(max_workers=workers)
+    loader = _executor(pools, workers)
 
     def stem_job(i: int) -> tuple[np.ndarray | None, np.ndarray, np.ndarray, dict[str, np.ndarray]]:
         """CPU backend: everything per stem that needs the audio; the audio is dropped."""

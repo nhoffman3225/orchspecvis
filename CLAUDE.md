@@ -66,10 +66,10 @@ installer rather than shimmed; new shells pick it up.
 
 ```
 src/orchspec/
-  cli.py            typer app: bundle, serve, validate, session-template
+  cli.py            typer app: bundle, serve, validate, session-template, import-dorico, report
   io/               audio + session folder loading (session.py, audio.py)
   dsp/              cqt.py (CQTSpec + backends), tiles.py, features.py
-  bundle/           schema.py (pydantic manifest, v4)
+  bundle/           schema.py (pydantic manifest, v7)
   score/            musicxml.py (safe parser), repeats.py, match.py (part<->stem), ranges.py
   timeline/         midi.py (bounded SMF reader), align.py (tempo maps, pitch-aware warp,
                     per-stem onset snapping, detector self-calibration)
@@ -95,7 +95,9 @@ viewer/             Vite + TS + three.js (WebGL2 only)
 data/instruments/   ranges.yaml (schema documented in-file)
 tests/              pytest; fixtures/make_synthetic.py; fixtures/real/ is git-ignored
 docs/               bundle-format.md (language-neutral spec, Rust must match)
-rust/, desktop/     Phase 3b placeholders (README only)
+rust/orchspec-core/ Rust bundle core: manifest checks, tile reads, local serving, desktop
+                    app logic (tests/ beside it; `cargo test -p orchspec-core`)
+desktop/            Tauri desktop app (src-tauri/; see desktop/README.md)
 session/            git-ignored real session folders
 ```
 

@@ -32,6 +32,8 @@ MAX_BYTES = 200 * 1024 * 1024
 Token = tuple[str, float, float, float, float]  # text, x0, y0, x1, y1 (image pixels)
 BarBox = tuple[int, int, int, int, str | None]  # x0, y0, x1, y1, printed number
 MAX_PAGES = 400
+MAX_PAGE_PIXELS = 40_000_000  # per rendered page (an A3 page at 150 dpi is ~4 MP)
+MAX_DOC_PIXELS = 2_000_000_000  # all pages together (400 A3 pages at 150 dpi are ~1.6 GP)
 
 
 class PdfScoreError(ValueError):
@@ -210,6 +212,23 @@ def analyse_page(
     return bars
 
 
+def page_scale(width_pt: float, height_pt: float, dpi: int) -> float:
+    """Render scale for a page: `dpi`, reduced so the image stays within MAX_PAGE_PIXELS
+    (a PDF can declare a page of any size; the PDF is untrusted input)."""
+    scale = dpi / 72
+    area = max(width_pt, 1.0) * max(height_pt, 1.0) * scale * scale
+    if area > MAX_PAGE_PIXELS:
+        scale *= (MAX_PAGE_PIXELS / area) ** 0.5
+    return scale
+
+
+def doc_scale(sizes: list[tuple[float, float]], dpi: int) -> float:
+    """A factor (<= 1) on every page's scale so the whole document stays within
+    MAX_DOC_PIXELS: MAX_PAGE_PIXELS alone would still allow MAX_PAGES huge pages."""
+    total = sum(w * h * page_scale(w, h, dpi) ** 2 for w, h in sizes)
+    return min(1.0, (MAX_DOC_PIXELS / total) ** 0.5) if total > 0 else 1.0
+
+
 def render_pdf(pdf_path: Path, root: Path, rel_dir: str = "score/pdf", dpi: int = 150) -> PdfScore:
     """Render every page to root/rel_dir/page-NNN.png and find the bars."""
     import pypdfium2 as pdfium
@@ -224,11 +243,12 @@ def render_pdf(pdf_path: Path, root: Path, rel_dir: str = "score/pdf", dpi: int 
         out = root / rel_dir
         out.mkdir(parents=True, exist_ok=True)
         score = PdfScore(dpi=dpi)
-        scale = dpi / 72
+        k = doc_scale([doc.get_page_size(i) for i in range(len(doc))], dpi)
         last = 0
         for pi in range(len(doc)):
             page = doc[pi]
             try:
+                scale = page_scale(*page.get_size(), dpi) * k
                 # the stub says int; PDFium takes any positive scale
                 bmp = page.render(scale=scale, grayscale=True)  # pyright: ignore[reportArgumentType]
                 img = np.asarray(bmp.to_numpy())

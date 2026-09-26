@@ -537,6 +537,29 @@ class NoteAlignment:
     part_snapped: dict[int, float]  # per part fraction snapped in the final pass
 
 
+def _group_medians(group: np.ndarray, x: np.ndarray, n_groups: int) -> np.ndarray:
+    """Median of `x` per group id in 0..n_groups-1 (NaN for empty groups); the same values
+    as np.median per group, in O(n log n) instead of one pass over `x` per group."""
+    out = np.full(n_groups, np.nan)
+    if not len(x):
+        return out
+    order = np.lexsort((x, group))
+    g, v = group[order], x[order]
+    starts = np.flatnonzero(np.r_[True, g[1:] != g[:-1]])
+    counts = np.diff(np.r_[starts, len(g)])
+    lo = v[starts + (counts - 1) // 2]
+    hi = v[starts + counts // 2]
+    out[g[starts]] = (lo + hi) / 2.0
+    return out
+
+
+def _strictly_increasing(dst: np.ndarray, step: float = 1e-4) -> np.ndarray:
+    """dst[i] = max(dst[i], dst[i-1] + step), left to right (keeps a warp monotonic)."""
+    for i in range(1, len(dst)):
+        dst[i] = max(dst[i], dst[i - 1] + step)
+    return dst
+
+
 def _adaptive_windows(pred: np.ndarray, cap: float) -> np.ndarray:
     """Per note: min(cap, 0.45 * gap to the nearest other onset time of the same part)."""
     order = np.argsort(pred)
@@ -595,18 +618,13 @@ def align_notes(
                 lat[int(p_)] = float(np.median(snapped[hit] - base[idx][hit]))
         frac = float(hits.mean()) if len(hits) else 0.0
         # rebuild the common warp from snapped onsets
-        ev = np.unique(np.round(on, 4))
-        key = np.round(on, 4)
-        dst = np.empty(len(ev))
-        for i, t in enumerate(ev):
-            sel = (key == t) & hits
-            if sel.any():
-                dst[i] = float(np.median(final[sel] - np.array([lat[int(q)] for q in part[sel]])))
-            else:
-                dst[i] = float(warp(t))
-        for i in range(1, len(dst)):
-            dst[i] = max(dst[i], dst[i - 1] + 1e-4)
-        warp = Warp(ev, dst)
+        ev, inv = np.unique(np.round(on, 4), return_inverse=True)
+        lat_hit = np.array([lat[int(q)] for q in part[hits]], dtype=np.float64)
+        dst = np.asarray(warp(ev), dtype=np.float64).copy()  # events without a snapped note
+        dst_hit = _group_medians(inv[hits], final[hits] - lat_hit, len(ev))
+        has = ~np.isnan(dst_hit)
+        dst[has] = dst_hit[has]
+        warp = Warp(ev, _strictly_increasing(dst))
     # report latencies relative to the typical part: fold their median into the warp
     common = float(np.median(list(lat.values()))) if lat else 0.0
     warp = Warp(warp.src, warp.dst + common)

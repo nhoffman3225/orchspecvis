@@ -47,6 +47,23 @@ describe("tiles", () => {
     expect(cache.size).toBe(3);
   });
 
+  it("a stale failed load does not evict the newer entry for its tile", async () => {
+    const { lod, data } = fakeLod(100, 10, 1);
+    const t0 = lod.tiles[0]!;
+    let fail: (e: Error) => void = () => {};
+    let n = 0;
+    const cache = new TileCache((t) => (n++ === 0
+      ? new Promise<Uint8Array>((_, rej) => { fail = rej; })
+      : Promise.resolve(data.get(t.path)!)), 1);
+    const first = cache.get(t0); // pending
+    await cache.get(lod.tiles[1]!); // capacity 1: tile 0 evicted
+    await cache.get(t0); // reloaded, now cached
+    fail(new Error("network"));
+    await expect(first).rejects.toThrow("network");
+    await cache.get(t0);
+    expect(n).toBe(3); // still cached: no fourth load
+  });
+
   it("sums stems in the power domain", () => {
     const dbMin = -96, dbMax = 6;
     const { fromPow, toPow } = powerTables(dbMin, dbMax);

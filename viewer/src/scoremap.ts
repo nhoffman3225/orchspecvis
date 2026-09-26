@@ -95,16 +95,22 @@ export class ScoreClock {
  * (The CSP also blocks scripts and inline styles; this keeps the DOM clean regardless.)
  */
 export function sanitizeSvg(svg: string): string {
-  return svg
-    .replace(/<\?xml[^>]*>/g, "")
-    .replace(/<!DOCTYPE[^>]*>/gi, "")
-    .replace(/<style[\s\S]*?<\/style>/gi, "")
-    .replace(/<script[\s\S]*?<\/script>/gi, "")
-    .replace(/<script[^>]*\/>/gi, "")
-    .replace(/<foreignObject[\s\S]*?<\/foreignObject>/gi, "")
-    .replace(/\s+on[a-z]+\s*=\s*("[^"]*"|'[^']*')/gi, "")
-    .replace(/\s+style\s*=\s*("[^"]*"|'[^']*')/gi, "")
-    .replace(/\s+(xlink:)?href\s*=\s*("[^#"][^"]*"|'[^#'][^']*')/gi, "");
+  // attribute values: quoted, or unquoted up to whitespace / tag end
+  const val = String.raw`("[^"]*"|'[^']*'|[^\s"'>]+)`;
+  const tag = (names: string): RegExp[] => [
+    new RegExp(String.raw`<(\w+:)?(${names})\b[\s\S]*?<\/(\w+:)?\2\s*>`, "gi"),
+    new RegExp(String.raw`<\/?(\w+:)?(${names})\b[^>]*>`, "gi"), // self-closing or stray
+  ];
+  let out = svg.replace(/<\?xml[^>]*>/g, "").replace(/<!DOCTYPE[^>]*>/gi, "");
+  // <set>/<animate*> can rewrite an href after sanitizing, so they go too
+  for (const re of tag("style|script|foreignObject|iframe|embed|object|set|animate\\w*")) {
+    out = out.replace(re, "");
+  }
+  // "/" separates attributes like whitespace does (<a/href=...>, <svg/onload=...>)
+  return out
+    .replace(new RegExp(String.raw`[\s/]+on[a-z]+\s*=\s*${val}`, "gi"), "")
+    .replace(new RegExp(String.raw`[\s/]+style\s*=\s*${val}`, "gi"), "")
+    .replace(/[\s/]+(xlink:)?href\s*=\s*("(?!#)[^"]*"|'(?!#)[^']*'|(?!["'#])[^\s>]+)/gi, "");
 }
 
 export interface TimemapEvent {

@@ -23,6 +23,9 @@ class RepeatInfo:
     ending_group: int | None = None  # identifies one ending bracket (its extent)
 
 
+MAX_PASSES = 100  # ending numbers beyond this are not a real repeat (untrusted input)
+
+
 def parse_ending_numbers(text: str) -> tuple[int, ...]:
     """'1, 2' / '1.' / '1-3' -> (1, 2) / (1,) / (1, 2, 3)."""
     out: list[int] = []
@@ -31,10 +34,14 @@ def parse_ending_numbers(text: str) -> tuple[int, ...]:
         if not part:
             continue
         if "-" in part:
-            a, b = part.split("-", 1)
-            out.extend(range(int(a), int(b) + 1))
+            a, b = (int(x) for x in part.split("-", 1))
+            if not 1 <= a <= b <= MAX_PASSES:
+                raise UnsupportedRepeatError(f"ending number {text!r}: bad pass range")
+            out.extend(range(a, b + 1))
         else:
             out.append(int(part))
+        if len(out) > MAX_PASSES:
+            raise UnsupportedRepeatError(f"ending number {text!r}: too many passes")
     if not out:
         raise UnsupportedRepeatError(f"ending number {text!r} is not a list of pass numbers")
     return tuple(out)

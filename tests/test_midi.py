@@ -57,3 +57,27 @@ def test_huge_vlq_rejected() -> None:
     bad = good[:i] + b"\xff\xff\xff\xff\xff" + good[i:]
     with pytest.raises(MidiError):
         parse_midi_bytes(bad)
+
+
+def test_malformed_meta_events_ignored() -> None:
+    """A time signature with a 2**255 denominator or 0 beats, and a zero tempo, are
+    ignored (they would give absurd bar lengths / a clock that never advances)."""
+    good = write_smf(480, [(0, 60.0)], [("x", [(0, 480, 0, 60, 64)])])
+    assert parse_midi_bytes(good).time_sigs == [(0, 4, 4)]
+    bad_den = good.replace(b"\xff\x58\x04\x04\x02", b"\xff\x58\x04\x04\xff")
+    assert parse_midi_bytes(bad_den).time_sigs == []
+    zero_beats = good.replace(b"\xff\x58\x04\x04\x02", b"\xff\x58\x04\x00\x02")
+    assert parse_midi_bytes(zero_beats).time_sigs == []
+    us = (1_000_000).to_bytes(3, "big")
+    zero_tempo = good.replace(b"\xff\x51\x03" + us, b"\xff\x51\x03\x00\x00\x00")
+    assert parse_midi_bytes(zero_tempo).quarters_to_seconds(1) == pytest.approx(0.5)
+
+
+def test_many_tempo_changes() -> None:
+    """tick_to_seconds with a dense tempo map (rubato renders emit thousands of events)."""
+    ppq = 96
+    tempos = [(i * ppq, 60.0 if i % 2 else 120.0) for i in range(2000)]
+    m = parse_midi_bytes(write_smf(ppq, tempos, [("x", [(0, ppq, 0, 60, 64)])]))
+    # pairs of quarters at 120 then 60 bpm: 0.5 s + 1 s
+    assert m.quarters_to_seconds(1000) == pytest.approx(750.0)
+    assert m.quarters_to_seconds(1001) == pytest.approx(750.5)
