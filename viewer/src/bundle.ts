@@ -545,19 +545,43 @@ export async function loadManifest(base: string): Promise<Manifest> {
   return parseManifest(await r.json());
 }
 
-/** Response body -> bytes through the browser's native gzip decoder (no JS inflate). */
-export async function gunzip(r: Response): Promise<Uint8Array> {
+/**
+ * Response body -> bytes through the browser's native gzip decoder (no JS inflate).
+ * Stops with a BundleError once the output passes `maxBytes`: tiles are untrusted input,
+ * and a few KB of gzip can inflate to gigabytes before any size check afterwards.
+ */
+export async function gunzip(r: Response, maxBytes = Infinity): Promise<Uint8Array> {
   if (!r.body) return new Uint8Array(0);
-  const out = r.body.pipeThrough(new DecompressionStream("gzip"));
-  return new Uint8Array(await new Response(out).arrayBuffer());
+  const reader = r.body.pipeThrough(new DecompressionStream("gzip")).getReader();
+  const chunks: Uint8Array[] = [];
+  let n = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    n += value.length;
+    if (n > maxBytes) {
+      await reader.cancel();
+      throw new BundleError(`gzip data inflates past the expected ${maxBytes} bytes`);
+    }
+    chunks.push(value);
+  }
+  if (chunks.length === 1) return chunks[0]!;
+  const out = new Uint8Array(n);
+  let o = 0;
+  for (const c of chunks) {
+    out.set(c, o);
+    o += c.length;
+  }
+  return out;
 }
 
 export async function loadTile(base: string, m: Manifest, tile: Tile): Promise<Uint8Array> {
   const r = await fetchSameOrigin(bundleUrl(base, tile.path));
   if (!r.ok) throw new BundleError(`${tile.path}: HTTP ${r.status}`);
-  const buf = m.tile_encoding === "gzip" ? await gunzip(r) : new Uint8Array(await r.arrayBuffer());
-  if (buf.length !== tile.n_frames * m.n_bins) {
-    throw new BundleError(`${tile.path}: ${buf.length} bytes, expected ${tile.n_frames * m.n_bins}`);
+  const want = tile.n_frames * m.n_bins;
+  const buf = m.tile_encoding === "gzip" ? await gunzip(r, want) : new Uint8Array(await r.arrayBuffer());
+  if (buf.length !== want) {
+    throw new BundleError(`${tile.path}: ${buf.length} bytes, expected ${want}`);
   }
   return buf;
 }

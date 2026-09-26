@@ -49,6 +49,19 @@ describe("svg sanitizer", () => {
     expect(clean).toContain('xlink:href="#E0A4"');
     expect(clean).toContain('class="note" id="n1"');
   });
+
+  it("also strips unquoted values, prefixed script tags and href-rewriting animations", () => {
+    const dirty = '<svg xmlns:svg="http://www.w3.org/2000/svg"><svg:script>alert(1)</svg:script>' +
+      '<SCRIPT src=x.js/><g onload=alert(1) class="a"><a href=javascript:alert(1)>x</a>' +
+      '<set attributeName="href" to="javascript:alert(1)"/><animate attributeName="href" ' +
+      'values="javascript:alert(1)"></animate><iframe src="x"></iframe>' +
+      "<use href='#E0A4'/><use href=#E0A5 /></g></svg>";
+    const clean = sanitizeSvg(dirty);
+    expect(clean).not.toMatch(/script|onload|javascript|<set|<animate|<iframe/i);
+    expect(clean).toContain("href='#E0A4'");
+    expect(clean).toContain("href=#E0A5");
+    expect(clean).toContain('<g class="a">');
+  });
 });
 
 // Real Verovio on the synthetic score (written by the Python fixtures; skipped if absent)

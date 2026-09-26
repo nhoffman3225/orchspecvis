@@ -39,8 +39,13 @@ export class TileCache {
     if (p) {
       this.map.delete(key); // refresh LRU order
     } else {
-      p = this.load(tile);
-      p.catch(() => this.map.delete(key));
+      const q = this.load(tile);
+      // a failed load is retried next time; only if it is still the cached entry (it may
+      // have been evicted and reloaded meanwhile)
+      q.catch(() => {
+        if (this.map.get(key) === q) this.map.delete(key);
+      });
+      p = q;
     }
     this.map.set(key, p);
     while (this.map.size > this.capacity) {
