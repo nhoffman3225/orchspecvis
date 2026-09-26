@@ -533,3 +533,18 @@ body:has(> #home) { display: block; overflow: auto; }
 #status.notice { color: var(--ink); background: var(--orange); }
 #bar button.unavail { opacity: 0.4; cursor: not-allowed; box-shadow: none; }
 #bar button.unavail:active { transform: none; }
+
+/* tutti: the chord pop-up (orchestration chart) beside a box selection, with a tail */
+#tutti-bubble { position: absolute; left: 0; top: 0; z-index: 6; max-width: min(560px, 90%);
+  background: #fbf8f1; color: #1b1b1b; border: 2px solid var(--ink); box-shadow: 6px 6px 0 var(--pink); }
+#tutti-bubble .bubble-head { display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  padding: 5px 8px 5px 10px; border-bottom: 2px solid var(--ink); background: var(--yellow); }
+#tutti-bubble .bubble-head strong { font-size: 12px; font-weight: 900; text-transform: uppercase; letter-spacing: 0.04em; }
+#tutti-bubble .bubble-head button { font: inherit; font-weight: 800; cursor: pointer; background: #fbf8f1;
+  color: var(--ink); border: 2px solid var(--ink); padding: 0 6px; }
+#tutti-bubble-chart { overflow: auto; max-height: 60vh; padding: 4px 6px; }
+#tutti-bubble-chart svg { display: block; }
+#tutti-bubble::before { content: ""; position: absolute; top: calc(var(--tail-y, 30px) - 9px); width: 16px; height: 16px;
+  background: #fbf8f1; border: 2px solid var(--ink); border-width: 0 0 2px 2px; }
+#tutti-bubble.tail-left::before { left: -10px; transform: rotate(45deg); }
+#tutti-bubble.tail-right::before { right: -10px; transform: rotate(-135deg); }

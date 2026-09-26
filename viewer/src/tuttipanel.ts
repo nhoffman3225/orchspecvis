@@ -10,6 +10,7 @@ import { chordXml, condense, ink, pitchClassSet, scaleXml, toHex, type MapNote }
 import { fetchSameOrigin } from "./net";
 import { keyLayout } from "./piano";
 import { FAMILY_COLORS, familyOf } from "./registers";
+import { CHART_ORDER, chartNotes, layoutChart, mixColors, renderChart, type ChartPart } from "./orchchart";
 import { ScoreView } from "./scoreview";
 
 const $ = <T extends HTMLElement>(id: string): T => document.getElementById(id) as T;
@@ -28,6 +29,7 @@ export interface TuttiDeps {
   /** initial mode and colouring (URL parameters) */
   mode?: string | null;
   color?: string | null;
+  split?: boolean;
 }
 
 export class TuttiPanel {
@@ -42,6 +44,8 @@ export class TuttiPanel {
   private selMidis = new Map<number, number>(); // midi -> parts selected (keyboard strip)
   private condenseGen = 0;
   private modeSel = $<HTMLSelectElement>("tutti-mode");
+  private split = false; // doubled pitches: split (each section's colour) or mixed
+  private bubbleBox: { x0: number; y0: number; x1: number; y1: number } | null = null;
 
   constructor(private d: TuttiDeps) {
     this.reductions = (d.m.score?.reductions ?? []).filter((r) => r.mode in TUTTI_LABELS);
@@ -65,6 +69,17 @@ export class TuttiPanel {
       e.preventDefault();
       this.zoom(e.deltaY < 0 ? 1.1 : 1 / 1.1);
     }, { passive: false });
+    const sp = $<HTMLInputElement>("tutti-split");
+    sp.checked = this.split = d.split === true;
+    sp.addEventListener("change", () => {
+      this.split = sp.checked;
+      for (const v of this.views.values()) v.recolor();
+      if (this.tv) void this.showCondensed(this.tv.selection);
+      if (this.bubbleBox && this.tv) this.showBubble(this.tv.selection, this.bubbleBox);
+    });
+    $("tutti-bubble-close").addEventListener("click", () => this.hideBubble());
+    $("tutti-score").addEventListener("pointerdown", () => this.hideBubble());
+    $("tutti-score").addEventListener("scroll", () => this.placeBubble(), { passive: true });
     $<HTMLInputElement>("tutti-follow").addEventListener("change", (e) => {
       if (this.tv) this.tv.follow = (e.target as HTMLInputElement).checked;
     });
@@ -89,8 +104,9 @@ export class TuttiPanel {
     if (this.tv) void busy.while("tutti", this.tv.relayout());
   }
 
-  /** Clears the selection; false if there was none. */
+  /** Esc: closes the chord pop-up, else clears the selection; false if neither was open. */
   clearSelection(): boolean {
+    if (this.hideBubble()) return true;
     return this.tv?.clearSelection() ?? false;
   }
 
@@ -112,7 +128,96 @@ export class TuttiPanel {
       : FAMILY_COLORS[familyOf(part?.instrument || part?.name || "")];
   }
 
-  private colorOfParts = (ps: number[]): string => ink(this.uiColorOf(ps[0] ?? 0)); // ink on paper
+  private familyOfPart(p: number): string {
+    const part = this.d.m.score?.parts[p];
+    return familyOf(part?.instrument || part?.name || "");
+  }
+
+  /** The colours of the parts on one notehead: distinct section (or part) colours, in the
+   * charts' order, with how many parts carry each. */
+  private shares(ps: number[]): { colors: string[]; weights: number[] } {
+    const key = (p: number): string => (this.color === "part" ? String(p) : this.familyOfPart(p));
+    const n = new Map<string, number>();
+    for (const p of ps) n.set(key(p), (n.get(key(p)) ?? 0) + 1);
+    const keys = [...n.keys()].sort((a, b) => CHART_ORDER.indexOf(a) - CHART_ORDER.indexOf(b));
+    const colorOfKey = (k: string): string =>
+      this.color === "part" ? this.uiColorOf(Number(k)) : FAMILY_COLORS[k as keyof typeof FAMILY_COLORS] ?? "#888888";
+    return { colors: keys.map((k) => toHex(colorOfKey(k))), weights: keys.map((k) => n.get(k)!) };
+  }
+
+  /** One colour for a pitch: doubled pitches mix their sections' colours, weighted by the
+   * number of parts of each (ink on paper). */
+  private colorOfParts = (ps: number[]): string => {
+    const { colors, weights } = this.shares(ps.length ? ps : [0]);
+    return ink(colors.length > 1 ? mixColors(colors, weights) : colors[0]!);
+  };
+
+  /** A notehead's fill: mixed, or with "split doublings" one band per section's colour. */
+  private noteFill = (ps: number[]): string | string[] => {
+    const { colors } = this.shares(ps.length ? ps : [0]);
+    return this.split && colors.length > 1 ? colors.map(ink) : this.colorOfParts(ps);
+  };
+
+  private chartParts(): ChartPart[] {
+    return (this.d.m.score?.parts ?? []).map((p, i) => ({
+      name: p.name, abbreviation: p.abbreviation ?? undefined, family: this.familyOfPart(i),
+    }));
+  }
+
+  /** The chord pop-up (an orchestration chart) beside a box selection. */
+  private showBubble(ids: string[], box: { x0: number; y0: number; x1: number; y1: number }): void {
+    const map = this.maps.get(this.tMode);
+    if (!map || !ids.length) {
+      this.hideBubble();
+      return;
+    }
+    const notes = chartNotes(ids, map);
+    const colorOf = (f: string): string => ink(toHex(FAMILY_COLORS[f as keyof typeof FAMILY_COLORS] ?? "#888888"));
+    const chart = layoutChart(notes, this.chartParts(), colorOf, this.split ? "split" : "mix");
+    $("tutti-bubble-chart").innerHTML = renderChart(chart); // generated here: labels escaped
+    const secs = new Set(notes.flatMap((n) => n.parts.map((p) => this.familyOfPart(p))));
+    const bars = [...new Set(ids.map((i) => map[i]?.bar).filter((b): b is number => b !== undefined))].sort((a, b) => a - b);
+    const barNum = (bi: number): string =>
+      this.d.m.score?.measures.find((x) => x.source_index === bi)?.number ?? String(bi + 1);
+    const where = !bars.length ? "" : bars.length === 1 ? `m. ${barNum(bars[0]!)} · `
+      : `m. ${barNum(bars[0]!)}–${barNum(bars.at(-1)!)} · `;
+    $("tutti-bubble-title").textContent =
+      `${where}${new Set(notes.map((n) => n.midi)).size} pitches · ${secs.size} section${secs.size === 1 ? "" : "s"}`;
+    this.bubbleBox = box;
+    $("tutti-bubble").hidden = false;
+    this.placeBubble();
+    document.documentElement.dataset.tuttiBubble = String(chart.heads.length); // tests
+  }
+
+  /** Beside the selection (right if it fits, else left), its tail at the box's middle. */
+  private placeBubble(): void {
+    const box = this.bubbleBox;
+    const el = $("tutti-bubble");
+    if (!box || el.hidden) return;
+    const host = $("tutti-score");
+    const main = el.parentElement!;
+    const ox = host.offsetLeft - host.scrollLeft, oy = host.offsetTop - host.scrollTop;
+    const w = el.offsetWidth, h = el.offsetHeight;
+    const right = box.x1 + ox + 22;
+    const onRight = right + w <= main.clientWidth - 8;
+    const x = onRight ? right : Math.max(8, box.x0 + ox - 22 - w);
+    const mid = (box.y0 + box.y1) / 2 + oy;
+    const y = Math.min(Math.max(8, mid - h / 2), Math.max(8, main.clientHeight - h - 8));
+    el.style.transform = `translate(${Math.round(x)}px, ${Math.round(y)}px)`;
+    el.classList.toggle("tail-left", onRight);
+    el.classList.toggle("tail-right", !onRight);
+    el.style.setProperty("--tail-y", `${Math.round(Math.min(Math.max(mid - y, 18), h - 18))}px`);
+  }
+
+  /** Closes the pop-up; false if it was not open. */
+  private hideBubble(): boolean {
+    const el = $("tutti-bubble");
+    if (el.hidden) return false;
+    el.hidden = true;
+    this.bubbleBox = null;
+    document.documentElement.dataset.tuttiBubble = "0";
+    return true;
+  }
 
   private partChip(pi: number): HTMLElement {
     const part = this.d.m.score?.parts[pi];
@@ -195,9 +300,10 @@ export class TuttiPanel {
         selectable: true,
         noteColor: (id) => {
           const n = this.maps.get(red.mode)?.[id];
-          return n ? this.colorOfParts(n.parts) : null;
+          return n ? this.noteFill(n.parts) : null;
         },
         onSelect: (ids) => void this.showCondensed(ids),
+        onBox: (ids, box) => this.showBubble(ids, box),
       });
       v.scale = 34;
       this.views.set(red.mode, v);

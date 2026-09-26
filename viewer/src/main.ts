@@ -683,7 +683,7 @@ async function main(): Promise<void> {
   let tuttiOpen = false;
   const tutti = new TuttiPanel({
     m, base, partColor, seek: (s) => seek(s), now: () => player.transport.position(),
-    mode: params.get("tutti"), color: params.get("tcolor"),
+    mode: params.get("tutti"), color: params.get("tcolor"), split: params.get("tsplit") === "1",
   });
   const TUTTI_NEEDS = "The tutti view needs a MusicXML score in the bundle (rebuild it with one).";
   unavailable("tuttibtn", tutti.available, TUTTI_NEEDS);
@@ -701,9 +701,13 @@ async function main(): Promise<void> {
   $("tuttibtn").addEventListener("click", () => setTutti(true));
   $("tutticlose").addEventListener("click", () => setTutti(false));
   addEventListener("keydown", (e) => {
+    // Esc works from the view's own checkboxes too: pop-up, then selection, then the view
+    if (e.code === "Escape" && tuttiOpen) {
+      if (!tutti.clearSelection()) setTutti(false);
+      return;
+    }
     if (e.target instanceof HTMLInputElement || e.target instanceof HTMLSelectElement) return;
     if (e.code === "KeyT") setTutti(!tuttiOpen);
-    else if (e.code === "Escape" && tuttiOpen && !tutti.clearSelection()) setTutti(false);
   });
 
   // ---- register distribution view (per section / stem: whole piece + now)

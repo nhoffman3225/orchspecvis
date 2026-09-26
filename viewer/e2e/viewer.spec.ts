@@ -434,3 +434,30 @@ test("views the bundle cannot show are marked unavailable and say why", async ({
   const errors = g.errors.filter((e) => !/^HTTP 404 \/tiny-bundle\/audio\//.test(e)); // not committed
   expect(errors, errors.join(" | ")).toEqual([]);
 });
+
+
+test("tutti: a box selection opens the orchestration chart; doublings split or mixed", async ({ page, baseURL }) => {
+  test.setTimeout(120_000);
+  const g = guard(page, baseURL!);
+  await page.goto(`/?${Q}&view=tutti&t=3`);
+  const host = page.locator("#tutti-score");
+  await expect(host.locator("svg").first()).toBeVisible({ timeout: 90_000 });
+  const bar = (await host.locator("g.measure").nth(1).boundingBox())!;
+  await page.mouse.move(bar.x + 2, bar.y - 10);
+  await page.mouse.down();
+  await page.mouse.move(bar.x + bar.width - 2, bar.y + bar.height + 10, { steps: 5 });
+  await page.mouse.up();
+  const bubble = page.locator("#tutti-bubble");
+  await expect(bubble).toBeVisible();
+  await expect(page.locator("#tutti-bubble-title")).toContainText("m. 2");
+  await expect(page.locator("#tutti-bubble-chart svg text").first()).toBeVisible(); // labels
+  const mixed = Number(await page.locator("html").getAttribute("data-tutti-bubble"));
+  expect(mixed).toBeGreaterThan(0);
+  await page.locator("#tutti-split").check(); // re-drawn split
+  await expect(page.locator("html")).toHaveAttribute("data-tutti-bubble", /^[1-9]/);
+  await page.keyboard.press("Escape"); // closes the pop-up first
+  await expect(bubble).toBeHidden();
+  await expect(page.locator("#tuttiview")).toBeVisible();
+  expect(g.offOrigin).toEqual([]);
+  expect(g.errors, g.errors.join(" | ")).toEqual([]);
+});

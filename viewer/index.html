@@ -175,6 +175,7 @@
           <span><button id="tutti-zoomout" type="button" title="Smaller (Ctrl+wheel)">−</button>
             <button id="tutti-zoomin" type="button" title="Larger (Ctrl+wheel)">+</button></span>
           <label title="Scroll with the music"><input id="tutti-follow" type="checkbox" checked /> Follow</label>
+          <label title="A pitch several sections play: off = one notehead in their colours mixed (weighted by how many parts of each); on = split, each section's colour kept (bands in the score, separate noteheads in the chord pop-up)"><input id="tutti-split" type="checkbox" /> Split Doublings</label>
           <span class="hint" title="click: a chord or bar · Alt+click: every note on the same beat position · drag: box · Shift/Ctrl: add · double-click: seek · Esc: clear, then close">click · Alt+click · drag · Shift adds · ⓘ</span>
           <button id="tutticlose" type="button" title="Close the tutti view (Esc)">✕ Close</button>
         </div>
@@ -182,6 +183,11 @@
           <div id="tutti-main">
             <div id="tutti-score"></div>
             <canvas id="tutti-kb"></canvas>
+            <div id="tutti-bubble" hidden role="dialog" aria-label="Orchestration of the selected chord">
+              <div class="bubble-head"><strong id="tutti-bubble-title"></strong>
+                <button id="tutti-bubble-close" type="button" title="Close (Esc)">✕</button></div>
+              <div id="tutti-bubble-chart"></div>
+            </div>
             <span id="tutti-info" class="hint"></span>
           </div>
           <div id="split-tutti" class="splitter x"></div>
