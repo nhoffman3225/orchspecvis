@@ -41,6 +41,34 @@ fn assembles_a_session_from_chosen_files() {
     fs::remove_dir_all(&d).unwrap();
 }
 
+#[test]
+fn colliding_stem_names_never_overwrite_the_originals() {
+    // two stems that map to one name: the second used to be copied over the first one's
+    // hard link, i.e. into the user's original file
+    let d = tmp("collide");
+    let a = touch(&d.join("a/01_Flute.wav"), b"first");
+    let b = touch(&d.join("b/01_Flute.wav"), b"second");
+    let c = touch(&d.join("c/Flute.WAV"), b"third"); // positional name 03_Flute
+    let e = touch(&d.join("e/03_flute.wav"), b"fourth"); // case-insensitive clash
+    let spec = BuildSpec { name: "x".into(), stems: vec![a.clone(), b.clone(), c, e], ..Default::default() };
+    let out = assemble_session(&spec, &d.join("sessions")).unwrap();
+    let mut names = walk(&out);
+    names.sort();
+    assert_eq!(
+        names,
+        ["stems/01_Flute.wav", "stems/02_01_Flute.wav", "stems/03_Flute.wav", "stems/04_03_flute.wav"]
+    );
+    assert_eq!(fs::read(&a).unwrap(), b"first");
+    assert_eq!(fs::read(&b).unwrap(), b"second");
+    assert_eq!(fs::read(out.join("stems/02_01_Flute.wav")).unwrap(), b"second");
+    // the same file picked twice
+    let twice = BuildSpec { name: "y".into(), stems: vec![a.clone(), a.clone()], ..Default::default() };
+    let out = assemble_session(&twice, &d.join("sessions")).unwrap();
+    assert_eq!(walk(&out).len(), 2);
+    assert_eq!(fs::read(&a).unwrap(), b"first");
+    fs::remove_dir_all(&d).unwrap();
+}
+
 fn walk(dir: &Path) -> Vec<String> {
     let mut v = vec![];
     for e in fs::read_dir(dir).unwrap().flatten() {
