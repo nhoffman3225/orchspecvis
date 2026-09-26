@@ -15,6 +15,7 @@ import { fetchSameOrigin, initToken } from "./net";
 import { runImportScreen } from "./importview";
 import { runHomeScreen } from "./home";
 import { busy } from "./busy";
+import { isShortcut, take } from "./keys";
 import { LufsStrip, Pane2D } from "./pane2d";
 import { Player } from "./player";
 import { GRID_COLS, SURFACE_STYLES, Surface, colsPerBin, type SurfaceStyle } from "./surface";
@@ -653,13 +654,11 @@ async function main(): Promise<void> {
   vol.addEventListener("input", () => player.setVolume(Number(vol.value)));
   player.setVolume(Number(vol.value));
   addEventListener("keydown", (e) => {
-    if (e.target instanceof HTMLInputElement || e.target instanceof HTMLSelectElement) return;
-    if (e.code === "Space") {
-      e.preventDefault();
-      void togglePlay();
-    } else if (e.code === "ArrowLeft") seek(player.transport.position() - (e.shiftKey ? 1 : 5));
-    else if (e.code === "ArrowRight") seek(player.transport.position() + (e.shiftKey ? 1 : 5));
-    else if (e.code === "Home") seek(0);
+    if (!isShortcut(e, { repeat: e.code !== "Space" })) return; // held arrows keep seeking
+    if (e.code === "Space") take(e, () => void togglePlay());
+    else if (e.code === "ArrowLeft") take(e, () => seek(player.transport.position() - (e.shiftKey ? 1 : 5)));
+    else if (e.code === "ArrowRight") take(e, () => seek(player.transport.position() + (e.shiftKey ? 1 : 5)));
+    else if (e.code === "Home") take(e, () => seek(0));
   });
 
   // ---- about & credits (licence texts: licenses/THIRD-PARTY.txt, same origin)
@@ -708,8 +707,7 @@ async function main(): Promise<void> {
       if (!tutti.clearSelection()) setTutti(false);
       return;
     }
-    if (e.target instanceof HTMLInputElement || e.target instanceof HTMLSelectElement) return;
-    if (e.code === "KeyT") setTutti(!tuttiOpen);
+    if (e.code === "KeyT" && isShortcut(e)) take(e, () => setTutti(!tuttiOpen));
   });
 
   // ---- register distribution view (per section / stem: whole piece + now)
@@ -810,8 +808,8 @@ async function main(): Promise<void> {
   $("regbtn").addEventListener("click", () => setRegisters(true));
   $("regclose").addEventListener("click", () => setRegisters(false));
   addEventListener("keydown", (e) => {
-    if (e.target instanceof HTMLInputElement || e.target instanceof HTMLSelectElement) return;
-    if (e.code === "KeyR") setRegisters(!regOpen);
+    if (!isShortcut(e)) return;
+    if (e.code === "KeyR") take(e, () => setRegisters(!regOpen));
     else if (e.code === "Escape" && regOpen) setRegisters(false);
   });
 
@@ -859,8 +857,8 @@ async function main(): Promise<void> {
   $("pianobtn").addEventListener("click", () => setPiano(true));
   $("pianoclose").addEventListener("click", () => setPiano(false));
   addEventListener("keydown", (e) => {
-    if (e.target instanceof HTMLInputElement || e.target instanceof HTMLSelectElement) return;
-    if (e.code === "KeyP") setPiano(!pianoOpen);
+    if (!isShortcut(e)) return;
+    if (e.code === "KeyP") take(e, () => setPiano(!pianoOpen));
     else if (e.code === "Escape" && pianoOpen) setPiano(false);
   });
   function drawPiano(t: number): void {
@@ -967,9 +965,9 @@ async function main(): Promise<void> {
     zoom(e.deltaY < 0 ? 1.1 : 1 / 1.1);
   }, { passive: false });
   addEventListener("keydown", (e) => {
-    if (!scoreOpen || e.target instanceof HTMLInputElement || e.target instanceof HTMLSelectElement) return;
-    if (e.key === "+" || e.key === "=") zoom(1.15);
-    else if (e.key === "-" || e.key === "_") zoom(1 / 1.15);
+    if (!scoreOpen || !isShortcut(e, { repeat: true })) return;
+    if (e.key === "+" || e.key === "=") take(e, () => zoom(1.15));
+    else if (e.key === "-" || e.key === "_") take(e, () => zoom(1 / 1.15));
   });
   if (params.get("zoom") && scoreView) {
     scoreView.scale = Math.min(150, Math.max(10, Number(params.get("zoom")) || 38));
@@ -985,11 +983,11 @@ async function main(): Promise<void> {
     relayoutTimer = window.setTimeout(() => void scoreView?.relayout(), 250);
   });
   addEventListener("keydown", (e) => {
-    if (e.target instanceof HTMLInputElement || e.target instanceof HTMLSelectElement) return;
-    if (e.code === "KeyS") setScore(!scoreOpen);
+    if (!isShortcut(e, { repeat: e.code === "PageDown" || e.code === "PageUp" })) return;
+    if (e.code === "KeyS") take(e, () => setScore(!scoreOpen));
     else if (e.code === "Escape" && scoreOpen) setScore(false);
-    else if (scoreOpen && e.code === "PageDown") stepPage(1);
-    else if (scoreOpen && e.code === "PageUp") stepPage(-1);
+    else if (scoreOpen && e.code === "PageDown") take(e, () => stepPage(1));
+    else if (scoreOpen && e.code === "PageUp") take(e, () => stepPage(-1));
   });
   if (params.get("view") === "score") setScore(true);
   if (params.get("view") === "registers") setRegisters(true);
@@ -1024,6 +1022,8 @@ async function main(): Promise<void> {
   new ResizeObserver(() => app.style.setProperty("--bar-h", `${$("bar").offsetHeight}px`))
     .observe($("bar"));
   const docked = ["scoreview", "tuttiview", "regview", "pianoview"].map((id) => $(id));
+  const TABS = [["spectrumtab", "spectrum"], ["scorebtn", "score"], ["tuttibtn", "tutti"],
+    ["regbtn", "reg"], ["pianobtn", "piano"], ["helpbtn", "help"]] as const;
   const splitView = $("split-view");
   const helpView = $("helpview");
   const syncDock = (): void => {
@@ -1031,6 +1031,15 @@ async function main(): Promise<void> {
     if (!docked.every((v) => v.hidden) && !helpView.hidden) helpView.hidden = true; // replaced
     const none = docked.every((v) => v.hidden) && helpView.hidden !== false;
     if (splitView.hidden !== none) splitView.hidden = none;
+    // the views are tabs: one at a time, each filling the window below the toolbar, which
+    // then drops the spectrum-only settings (style.css, #app[data-tab])
+    const tab = [...docked, helpView].find((v) => !v.hidden)?.id.replace(/view$/, "") ?? "spectrum";
+    if (app.dataset.tab !== tab) app.dataset.tab = tab;
+    for (const [id, name] of TABS) {
+      const on = String(name === tab);
+      const b = $(id);
+      if (b.getAttribute("aria-pressed") !== on) b.setAttribute("aria-pressed", on);
+    }
   };
   const dockObs = new MutationObserver(syncDock);
   for (const v of [...docked, helpView]) dockObs.observe(v, { attributes: true, attributeFilter: ["hidden"] });
@@ -1051,11 +1060,18 @@ async function main(): Promise<void> {
     }
     helpView.hidden = !open;
   };
-  $("helpbtn").addEventListener("click", () => setHelp(helpView.hidden !== false));
+  $("helpbtn").addEventListener("click", () => setHelp(true));
+  $("spectrumtab").addEventListener("click", () => {
+    if (scoreOpen) setScore(false);
+    if (tuttiOpen) setTutti(false);
+    if (regOpen) setRegisters(false);
+    setPiano(false);
+    setHelp(false);
+  });
   $("helpclose").addEventListener("click", () => setHelp(false));
   addEventListener("keydown", (e) => {
-    if (e.target instanceof HTMLInputElement || e.target instanceof HTMLSelectElement) return;
-    if (e.key === "?" || (e.code === "KeyH" && !e.ctrlKey && !e.metaKey)) setHelp(helpView.hidden !== false);
+    if (!isShortcut(e)) return; // Shift is allowed: "?" needs it on most layouts
+    if (e.key === "?" || e.code === "KeyH") take(e, () => setHelp(helpView.hidden !== false));
     else if (e.code === "Escape" && !helpView.hidden) setHelp(false);
   });
   if (params.get("view") === "help") setHelp(true);

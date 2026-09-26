@@ -87,9 +87,13 @@ orchspec report "out/My Piece.bundle"   # checks the score alignment; writes rep
 | Loudness strip | Short-term loudness (LUFS). |
 | Stems list (right) | Show or hide stems and parts. The section chips select woodwinds, brass, percussion or strings in one click (Ctrl/Shift+click adds a section). |
 
-The toolbar is grouped. Playback and the view buttons are always visible. The
-**Spectrum**, **Surface**, **Score** and **Keys** groups start folded: click a group's
-coloured tag to slide it open (the choice is remembered). Hover any control to see what
+The toolbar is grouped. Playback and the view tabs are always visible. The views are
+tabs (**Spectrum**, Score, Tutti, Registers, Piano, Help): one at a time, each filling the
+window, and the open one is pressed in. The settings groups belong to the spectrum:
+**Spectrum** (what it shows and how the 3D surface is drawn) and **Notes & Keys** (the
+score's notes over the spectrum, fundamentals, gaps and the keyboard's heat). They start
+folded (click a group's coloured tag to slide it open; the choice is remembered) and leave
+the toolbar while another view is open, except Notes & Keys in the piano view. Hover any control to see what
 it does, or open **Help** (H) for a list of every control.
 
 The controls:
@@ -164,6 +168,11 @@ remembered; `?a11y=1` in the URL turns it on.
 | PgUp / PgDn | score pages |
 | + / − | score zoom |
 | Esc | clear the tutti selection, or close the open view |
+
+Shortcuts work wherever the focus is, except in a text field. A control you reached with
+Tab keeps the keys it uses (Space, Enter, arrows); one you clicked does not, so Space
+still plays after ticking a checkbox. Letters with Ctrl, Alt or Cmd are left to the
+app and the browser.
 
 ## 7. Troubleshooting
 

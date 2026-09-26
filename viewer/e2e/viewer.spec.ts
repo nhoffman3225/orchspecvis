@@ -330,8 +330,8 @@ test("toolbar groups fold open; hover tips; the help view lists every control", 
   await expect(page.locator("#mode")).toBeInViewport();
   await page.goto(`/?${Q}`); // remembered
   await expect(cap).toHaveAttribute("aria-expanded", "true");
-  // accordion: opening Surface folds Spectrum; Shift+click keeps others open
-  const surface = page.locator('.grp[data-fold="surface"] button.cap');
+  // accordion: opening Notes & Keys folds Spectrum; Shift+click keeps others open
+  const surface = page.locator('.grp[data-fold="notes"] button.cap');
   await surface.click();
   await expect(surface).toHaveAttribute("aria-expanded", "true");
   await expect(cap).toHaveAttribute("aria-expanded", "false");
@@ -516,6 +516,34 @@ test("tutti: a box selection opens the orchestration chart; doublings split or m
   await page.locator("#tutti-bubble-prev").click(); // wraps around
   await expect(page.locator("#tutti-bubble-page")).toHaveText(`${n} / ${n}`);
   expect(g.offOrigin).toEqual([]);
+  expect(g.errors, g.errors.join(" | ")).toEqual([]);
+});
+
+
+test("views are tabs filling the window; shortcuts work after clicking a control", async ({ page, baseURL }) => {
+  const g = guard(page, baseURL!);
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await page.goto(`/?${Q}`);
+  const spectrum = page.locator('.grp[data-fold="spectrum"]');
+  await expect(page.locator("#spectrumtab")).toHaveAttribute("aria-pressed", "true");
+  await expect(spectrum).toBeVisible();
+  // a clicked slider no longer swallows the letter shortcuts
+  await page.locator("#vol").click();
+  await page.keyboard.press("KeyP");
+  await expect(page.locator("#pianoview")).toBeVisible();
+  await expect(page.locator("#pianobtn")).toHaveAttribute("aria-pressed", "true");
+  await expect(page.locator("#spectrumtab")).toHaveAttribute("aria-pressed", "false");
+  await expect(spectrum).toBeHidden(); // spectrum-only settings leave the toolbar
+  await expect(page.locator('.grp[data-fold="notes"]')).toBeVisible(); // the piano uses these
+  // with Ctrl/Alt a letter is not a shortcut
+  await page.keyboard.press("Alt+KeyR");
+  await expect(page.locator("#regview")).toBeHidden();
+  await page.keyboard.press("KeyR");
+  await expect(page.locator("#regview")).toBeVisible();
+  await expect(page.locator('.grp[data-fold="notes"]')).toBeHidden();
+  await page.locator("#spectrumtab").click();
+  await expect(page.locator("#regview")).toBeHidden();
+  await expect(spectrum).toBeVisible();
   expect(g.errors, g.errors.join(" | ")).toEqual([]);
 });
 
