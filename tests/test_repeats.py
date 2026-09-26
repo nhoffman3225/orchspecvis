@@ -67,3 +67,10 @@ def test_ending_numbers_parse() -> None:
     assert parse_ending_numbers("1-3") == (1, 2, 3)
     with pytest.raises(UnsupportedRepeatError):
         parse_ending_numbers("")
+
+
+@pytest.mark.parametrize("text", ["1-1000000000", "0-2", "3-1", ",".join(["1"] * 101)])
+def test_ending_numbers_bounded(text: str) -> None:
+    """Ending numbers are untrusted: a huge range must not allocate billions of passes."""
+    with pytest.raises(UnsupportedRepeatError):
+        parse_ending_numbers(text)

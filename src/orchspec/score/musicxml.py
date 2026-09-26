@@ -38,6 +38,7 @@ from orchspec.score.repeats import (
 MAX_XML_BYTES = 200 * 1024 * 1024
 MAX_MXL_MEMBERS = 2000
 MAX_MXL_TOTAL = 300 * 1024 * 1024
+MAX_BPM = 10_000.0  # <sound tempo> beyond this is not a tempo
 
 STEP = {"C": 0, "D": 2, "E": 4, "F": 5, "G": 7, "A": 9, "B": 11}
 JUMP_WORDS = re.compile(
@@ -210,8 +211,10 @@ def _parse_part(part_el: Element, part_name: str) -> list[_Measure]:
                 t = el.find("time")
                 if t is not None and t.find("beats") is not None:
                     try:
-                        beats = int(_text(t.find("beats")).split("+")[0])
-                        beat_type = int(_text(t.find("beat-type"), "4"))
+                        b = int(_text(t.find("beats")).split("+")[0])
+                        bt = int(_text(t.find("beat-type"), "4"))
+                        if b >= 1 and bt >= 1:  # 0 would divide by zero downstream
+                            beats, beat_type = b, bt
                     except ValueError:
                         pass
                     m.beats, m.beat_type = beats, beat_type
@@ -263,7 +266,9 @@ def _parse_part(part_el: Element, part_name: str) -> list[_Measure]:
                 for snd in sounds:
                     if snd.get("tempo"):
                         with contextlib.suppress(ValueError):
-                            m.tempos.append((cursor, float(snd.get("tempo"))))
+                            bpm = float(snd.get("tempo"))
+                            if 0 < bpm <= MAX_BPM:  # also rejects nan / inf
+                                m.tempos.append((cursor, bpm))
                     for a in JUMP_SOUND_ATTRS:
                         if snd.get(a):
                             m.jumps.append(a)

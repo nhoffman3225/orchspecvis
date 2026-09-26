@@ -114,3 +114,13 @@ def test_cli_validate_error_exit(tmp_path: Path) -> None:
     _wav(tmp_path / "stems" / "01_Oboe.wav", 5)
     r = CliRunner().invoke(app, ["validate", str(tmp_path)])
     assert r.exit_code == 2
+
+
+def test_unreadable_mix_is_a_session_error(tmp_path: Path) -> None:
+    (tmp_path / "mix.wav").write_bytes(b"not a wav file")
+    with pytest.raises(SessionError, match="unreadable audio"):
+        load_session(tmp_path)
+    with pytest.raises(SessionError, match="unreadable audio"):
+        load_input(tmp_path / "mix.wav")
+    r = CliRunner().invoke(app, ["validate", str(tmp_path)])
+    assert r.exit_code == 2 and "unreadable audio" in r.output

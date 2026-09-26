@@ -5,6 +5,7 @@ from orchspec.score.match import match_parts_to_stems, normalize
 from orchspec.score.musicxml import parse_musicxml
 from orchspec.timeline.align import (
     TempoMap,
+    _group_medians,
     estimate_offset,
     onset_envelope_fine,
     pitch_agreement,
@@ -125,3 +126,14 @@ def test_fft_pitch_scores_equal_the_gather_version() -> None:
     ref = _pitch_scores(act, flux, sem, frm, rel, sus, lags)
     got = _pitch_scores_fft(act, flux, sem, frm, np.exp(-rel / ONSET_TAU), SUSTAIN_W * sus, lags)
     np.testing.assert_allclose(got, ref, rtol=1e-9, atol=1e-9 * float(np.abs(ref).max()))
+
+
+def test_group_medians_match_numpy() -> None:
+    rng = np.random.default_rng(3)
+    g = rng.integers(0, 50, 1000)
+    x = rng.normal(size=1000)
+    out = _group_medians(g, x, 60)
+    for k in range(60):
+        want = np.median(x[g == k]) if np.any(g == k) else np.nan
+        assert out[k] == want or (np.isnan(want) and np.isnan(out[k]))
+    assert np.isnan(_group_medians(g[:0], x[:0], 3)).all()

@@ -4,7 +4,13 @@ from pathlib import Path
 
 import numpy as np
 
-from orchspec.score.pdf import find_staves, render_pdf, write_png_gray
+from orchspec.score.pdf import (
+    MAX_PAGE_PIXELS,
+    find_staves,
+    page_scale,
+    render_pdf,
+    write_png_gray,
+)
 from tests.fixtures.make_pdf import make_pdf
 
 
@@ -48,3 +54,10 @@ def test_png_writer_roundtrip(tmp_path: Path) -> None:
     rows = np.frombuffer(raw, np.uint8).reshape(32, 65)
     assert (rows[:, 0] == 0).all()
     assert np.array_equal(rows[:, 1:], img)
+
+
+def test_page_scale_caps_huge_pages() -> None:
+    """A PDF can declare any page size: rendering stays within MAX_PAGE_PIXELS."""
+    assert page_scale(612, 792, 150) == 150 / 72  # a normal page keeps its dpi
+    s = page_scale(14400, 14400, 150)  # PDF's maximum page size, 200 in square
+    assert (14400 * s) ** 2 <= MAX_PAGE_PIXELS * 1.0001
