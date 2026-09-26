@@ -5,7 +5,10 @@ from pathlib import Path
 import numpy as np
 
 from orchspec.score.pdf import (
+    MAX_DOC_PIXELS,
     MAX_PAGE_PIXELS,
+    MAX_PAGES,
+    doc_scale,
     find_staves,
     page_scale,
     render_pdf,
@@ -61,3 +64,12 @@ def test_page_scale_caps_huge_pages() -> None:
     assert page_scale(612, 792, 150) == 150 / 72  # a normal page keeps its dpi
     s = page_scale(14400, 14400, 150)  # PDF's maximum page size, 200 in square
     assert (14400 * s) ** 2 <= MAX_PAGE_PIXELS * 1.0001
+
+
+def test_doc_scale_caps_the_whole_document() -> None:
+    """MAX_PAGES pages each at the per-page cap would be ~16 GP: all pages shrink together."""
+    assert doc_scale([(612, 792)] * 300, 150) == 1.0  # a real score keeps its dpi
+    huge = [(14400.0, 14400.0)] * MAX_PAGES
+    k = doc_scale(huge, 150)
+    total = sum((w * page_scale(w, h, 150) * k) * (h * page_scale(w, h, 150) * k) for w, h in huge)
+    assert k < 1 and total <= MAX_DOC_PIXELS * 1.0001

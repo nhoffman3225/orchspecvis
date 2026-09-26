@@ -619,9 +619,9 @@ def align_notes(
         frac = float(hits.mean()) if len(hits) else 0.0
         # rebuild the common warp from snapped onsets
         ev, inv = np.unique(np.round(on, 4), return_inverse=True)
-        lat_now = np.array([lat[int(q)] for q in part], dtype=np.float64)
+        lat_hit = np.array([lat[int(q)] for q in part[hits]], dtype=np.float64)
         dst = np.asarray(warp(ev), dtype=np.float64).copy()  # events without a snapped note
-        dst_hit = _group_medians(inv[hits], (final - lat_now)[hits], len(ev))
+        dst_hit = _group_medians(inv[hits], final[hits] - lat_hit, len(ev))
         has = ~np.isnan(dst_hit)
         dst[has] = dst_hit[has]
         warp = Warp(ev, _strictly_increasing(dst))

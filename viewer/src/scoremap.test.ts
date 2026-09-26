@@ -62,6 +62,13 @@ describe("svg sanitizer", () => {
     expect(clean).toContain("href=#E0A5");
     expect(clean).toContain('<g class="a">');
   });
+
+  it("treats a slash as an attribute separator (<a/href=...>)", () => {
+    const clean = sanitizeSvg('<svg><a/href=javascript:alert(1)>x</a><image/href="https://x.example/y"/>' +
+      '<g/onload=alert(1)/><rect/style="fill:url(https://x.example/z)"/><use/href="#E0A4"/></svg>');
+    expect(clean).not.toMatch(/javascript|onload|https:|style/i);
+    expect(clean).toContain('<use/href="#E0A4"/>');
+  });
 });
 
 // Real Verovio on the synthetic score (written by the Python fixtures; skipped if absent)

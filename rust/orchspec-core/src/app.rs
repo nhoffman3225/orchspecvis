@@ -165,8 +165,10 @@ fn place(src: &Path, dst: &Path) -> Result<(), String> {
         Ok(()) => Ok(()),
         Err(e) if e.kind() == ErrorKind::AlreadyExists => Err(err(e)),
         Err(_) => {
+            // the source first: if it has gone, no empty file is left at dst
+            let mut from = fs::File::open(src).map_err(err)?;
             let mut out = OpenOptions::new().write(true).create_new(true).open(dst).map_err(err)?;
-            std::io::copy(&mut fs::File::open(src).map_err(err)?, &mut out).map(|_| ()).map_err(err)
+            std::io::copy(&mut from, &mut out).map(|_| ()).map_err(err)
         }
     }
 }

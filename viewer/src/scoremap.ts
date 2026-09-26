@@ -106,10 +106,11 @@ export function sanitizeSvg(svg: string): string {
   for (const re of tag("style|script|foreignObject|iframe|embed|object|set|animate\\w*")) {
     out = out.replace(re, "");
   }
+  // "/" separates attributes like whitespace does (<a/href=...>, <svg/onload=...>)
   return out
-    .replace(new RegExp(String.raw`\s+on[a-z]+\s*=\s*${val}`, "gi"), "")
-    .replace(new RegExp(String.raw`\s+style\s*=\s*${val}`, "gi"), "")
-    .replace(/\s+(xlink:)?href\s*=\s*("(?!#)[^"]*"|'(?!#)[^']*'|(?!["'#])[^\s>]+)/gi, "");
+    .replace(new RegExp(String.raw`[\s/]+on[a-z]+\s*=\s*${val}`, "gi"), "")
+    .replace(new RegExp(String.raw`[\s/]+style\s*=\s*${val}`, "gi"), "")
+    .replace(/[\s/]+(xlink:)?href\s*=\s*("(?!#)[^"]*"|'(?!#)[^']*'|(?!["'#])[^\s>]+)/gi, "");
 }
 
 export interface TimemapEvent {
