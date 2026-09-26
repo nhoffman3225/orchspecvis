@@ -5,6 +5,7 @@
 
 import type { Manifest } from "./bundle";
 import { bundleUrl } from "./bundle";
+import { intersect, overlaps, tailShape, type Rect } from "./bubbletail";
 import { busy } from "./busy";
 import { chordXml, condense, ink, pitchClassSet, scaleXml, toHex, type MapNote } from "./condense";
 import { fetchSameOrigin } from "./net";
@@ -48,6 +49,8 @@ export class TuttiPanel {
   private bubbleBox: { x0: number; y0: number; x1: number; y1: number } | null = null;
   private bubbleChords: string[][] = []; // the selection, one entry per chord
   private bubblePage = 0; // the chord shown when they do not all fit
+  private placed: { x: number; y: number } | null = null; // where the user dragged the pop-up
+  private sized: { w: number; h: number } | null = null; // the size the user gave it
 
   constructor(private d: TuttiDeps) {
     this.reductions = (d.m.score?.reductions ?? []).filter((r) => r.mode in TUTTI_LABELS);
@@ -94,6 +97,8 @@ export class TuttiPanel {
     }, true);
     $("tutti-score").addEventListener("pointerdown", () => this.hideBubble());
     $("tutti-score").addEventListener("scroll", () => this.placeBubble(), { passive: true });
+    addEventListener("resize", () => this.placeBubble());
+    this.wireBubbleDrag();
     $<HTMLInputElement>("tutti-follow").addEventListener("change", (e) => {
       if (this.tv) this.tv.follow = (e.target as HTMLInputElement).checked;
     });
@@ -188,6 +193,11 @@ export class TuttiPanel {
     this.bubbleChords = (this.tv?.chords(ids) ?? [ids]).filter((g) => g.length);
     this.bubblePage = 0;
     this.bubbleBox = box;
+    // a placement that would cover the new selection is forgotten
+    const el = $("tutti-bubble");
+    const r = this.regionRect();
+    if (this.placed && r && overlaps(r, { x0: this.placed.x, y0: this.placed.y,
+      x1: this.placed.x + (el.offsetWidth || 320), y1: this.placed.y + (el.offsetHeight || 240) })) this.placed = null;
     this.renderBubble();
   }
 
@@ -218,14 +228,14 @@ export class TuttiPanel {
     const caption = (p: (typeof panes)[number]): string =>
       `m. ${this.barNum(p.bar)}${several(p.bar) ? ` · chord ${p.nth}` : ""} · ${p.pitches} pitches · ${p.secs} section${p.secs === 1 ? "" : "s"}`;
     const main = $("tutti-bubble").parentElement!;
-    const avail = main.clientWidth * 0.95 - 24;
+    const avail = (this.sized?.w ?? main.clientWidth * 0.95) - 24;
     const total = panes.reduce((w, p) => w + p.chart.width + 14, 0);
     const paged = panes.length > 1 && total > avail;
     this.bubblePage = Math.min(Math.max(0, this.bubblePage), panes.length - 1);
     const shown = paged ? [panes[this.bubblePage]!] : panes;
     const esc = (t: string): string => t.replace(/[&<>]/g, (ch) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" })[ch]!);
-    $("tutti-bubble-chart").innerHTML = shown.map((p) =>
-      `<figure class="bubble-pane">${panes.length > 1 ? `<figcaption>${esc(caption(p))}</figcaption>` : ""}${p.svg}</figure>`).join("");
+    $("tutti-bubble-chart").innerHTML = `<div class="bubble-fit">${shown.map((p) =>
+      `<figure class="bubble-pane">${panes.length > 1 ? `<figcaption>${esc(caption(p))}</figcaption>` : ""}${p.svg}</figure>`).join("")}</div>`;
     $("tutti-bubble-nav").hidden = !paged;
     $("tutti-bubble-page").textContent = `${this.bubblePage + 1} / ${panes.length}`;
     if (panes.length === 1) {
@@ -236,6 +246,7 @@ export class TuttiPanel {
       $("tutti-bubble-title").textContent = `${range} · ${panes.length} chords`;
     }
     $("tutti-bubble").hidden = false;
+    this.fitChart();
     this.placeBubble();
     document.documentElement.dataset.tuttiBubble = String(shown.reduce((n, p) => n + p.chart.heads.length, 0)); // tests
     document.documentElement.dataset.tuttiBubblePanes = `${shown.length}/${panes.length}`;
@@ -249,24 +260,123 @@ export class TuttiPanel {
     this.renderBubble();
   }
 
-  /** Beside the selection (right if it fits, else left), its tail at the box's middle. */
-  private placeBubble(): void {
+  /** The selected area in the tutti view's coordinates (it moves as the score scrolls). */
+  private regionRect(): Rect | null {
     const box = this.bubbleBox;
-    const el = $("tutti-bubble");
-    if (!box || el.hidden) return;
+    if (!box) return null;
     const host = $("tutti-score");
-    const main = el.parentElement!;
     const ox = host.offsetLeft - host.scrollLeft, oy = host.offsetTop - host.scrollTop;
+    return { x0: box.x0 + ox, y0: box.y0 + oy, x1: box.x1 + ox, y1: box.y1 + oy };
+  }
+
+  /** Where the user put it, else beside the selection (right if it fits, else left); then
+   * the selected area is shaded behind it and the pointer re-drawn from its nearest edge. */
+  private placeBubble(): void {
+    const el = $("tutti-bubble");
+    const r = this.regionRect();
+    const region = $("tutti-region"), tail = $("tutti-tail");
+    if (!r || el.hidden) {
+      region.toggleAttribute("hidden", true); // SVG elements have no .hidden
+      tail.toggleAttribute("hidden", true);
+      return;
+    }
+    const main = el.parentElement!, host = $("tutti-score");
     const w = el.offsetWidth, h = el.offsetHeight;
-    const right = box.x1 + ox + 22;
-    const onRight = right + w <= main.clientWidth - 8;
-    const x = onRight ? right : Math.max(8, box.x0 + ox - 22 - w);
-    const mid = (box.y0 + box.y1) / 2 + oy;
-    const y = Math.min(Math.max(8, mid - h / 2), Math.max(8, main.clientHeight - h - 8));
-    el.style.transform = `translate(${Math.round(x)}px, ${Math.round(y)}px)`;
-    el.classList.toggle("tail-left", onRight);
-    el.classList.toggle("tail-right", !onRight);
-    el.style.setProperty("--tail-y", `${Math.round(Math.min(Math.max(mid - y, 18), h - 18))}px`);
+    let x: number, y: number;
+    if (this.placed) {
+      ({ x, y } = this.placed);
+    } else {
+      const right = r.x1 + 22;
+      x = right + w <= main.clientWidth - 8 ? right : r.x0 - 22 - w;
+      y = (r.y0 + r.y1) / 2 - h / 2;
+    }
+    x = Math.round(Math.min(Math.max(8, x), Math.max(8, main.clientWidth - w - 8)));
+    y = Math.round(Math.min(Math.max(8, y), Math.max(8, main.clientHeight - h - 8)));
+    el.style.transform = `translate(${x}px, ${y}px)`;
+    if (this.placed) this.placed = { x, y };
+    // only the part of the selection still in view
+    const seen = intersect(r, { x0: host.offsetLeft, y0: host.offsetTop,
+      x1: host.offsetLeft + host.clientWidth, y1: host.offsetTop + host.clientHeight });
+    region.toggleAttribute("hidden", !seen);
+    if (seen) {
+      const rect = region.querySelector("rect")!;
+      rect.setAttribute("x", String(seen.x0));
+      rect.setAttribute("y", String(seen.y0));
+      rect.setAttribute("width", String(seen.x1 - seen.x0));
+      rect.setAttribute("height", String(seen.y1 - seen.y0));
+    }
+    const t = seen ? tailShape({ x0: x, y0: y, x1: x + w, y1: y + h }, seen) : null;
+    tail.toggleAttribute("hidden", !t);
+    if (t) {
+      const pts = [t.base[0], t.tip, t.base[1]].map(([px, py]) => `${px.toFixed(1)},${py.toFixed(1)}`).join(" ");
+      tail.querySelector("polygon")!.setAttribute("points", pts);
+      tail.querySelector("polyline")!.setAttribute("points", pts);
+    }
+  }
+
+  /** A user-sized pop-up scales its chart(s) to fit; otherwise natural size. */
+  private fitChart(): void {
+    const el = $("tutti-bubble"), chart = $("tutti-bubble-chart");
+    const fit = chart.querySelector<HTMLElement>(".bubble-fit");
+    el.classList.toggle("sized", !!this.sized);
+    el.style.width = this.sized ? `${this.sized.w}px` : "";
+    el.style.height = this.sized ? `${this.sized.h}px` : "";
+    if (!fit) return;
+    fit.style.zoom = "";
+    if (!this.sized) return;
+    const z = Math.min((chart.clientWidth - 16) / fit.offsetWidth, (chart.clientHeight - 12) / fit.offsetHeight);
+    fit.style.zoom = String(Math.min(Math.max(z, 0.3), 4));
+  }
+
+  /** Drag the head to move the pop-up, the grip to resize it; double-click the head to put
+   * it back beside the selection at its own size. */
+  private wireBubbleDrag(): void {
+    const el = $("tutti-bubble"), head = el.querySelector<HTMLElement>(".bubble-head")!, grip = $("tutti-bubble-grip");
+    type Start = { x: number; y: number; w: number; h: number };
+    const drag = (handle: HTMLElement, move: (dx: number, dy: number, s: Start) => void, done?: () => void): void => {
+      handle.addEventListener("pointerdown", (e) => {
+        if (e.button !== 0 || (e.target as HTMLElement).closest("button")) return;
+        e.preventDefault();
+        e.stopPropagation();
+        const m = /translate\((-?[\d.]+)px, (-?[\d.]+)px\)/.exec(el.style.transform);
+        const start: Start = { x: Number(m?.[1] ?? 0), y: Number(m?.[2] ?? 0), w: el.offsetWidth, h: el.offsetHeight };
+        const sx = e.clientX, sy = e.clientY;
+        handle.setPointerCapture(e.pointerId);
+        el.classList.add("dragging");
+        const onMove = (ev: PointerEvent): void => move(ev.clientX - sx, ev.clientY - sy, start);
+        const onUp = (): void => {
+          el.classList.remove("dragging");
+          handle.removeEventListener("pointermove", onMove);
+          handle.removeEventListener("pointerup", onUp);
+          handle.removeEventListener("pointercancel", onUp);
+          done?.();
+        };
+        handle.addEventListener("pointermove", onMove);
+        handle.addEventListener("pointerup", onUp);
+        handle.addEventListener("pointercancel", onUp);
+      });
+    };
+    drag(head, (dx, dy, st) => {
+      this.placed = { x: st.x + dx, y: st.y + dy };
+      this.placeBubble();
+    });
+    drag(grip, (dx, dy, st) => {
+      const main = el.parentElement!;
+      this.placed = { x: st.x, y: st.y }; // resizing pins it where it is
+      this.sized = {
+        w: Math.round(Math.min(Math.max(220, st.w + dx), main.clientWidth - st.x - 8)),
+        h: Math.round(Math.min(Math.max(140, st.h + dy), main.clientHeight - st.y - 8)),
+      };
+      this.fitChart();
+      this.placeBubble();
+    }, () => {
+      if (this.bubbleBox) this.renderBubble(); // what fits side by side may have changed
+    });
+    head.addEventListener("dblclick", (e) => {
+      if ((e.target as HTMLElement).closest("button")) return;
+      this.placed = this.sized = null;
+      if (this.bubbleBox) this.renderBubble();
+    });
   }
 
   /** Closes the pop-up; false if it was not open. */
@@ -274,6 +384,8 @@ export class TuttiPanel {
     const el = $("tutti-bubble");
     if (el.hidden) return false;
     el.hidden = true;
+    $("tutti-region").toggleAttribute("hidden", true);
+    $("tutti-tail").toggleAttribute("hidden", true);
     this.bubbleBox = null;
     document.documentElement.dataset.tuttiBubble = "0";
     return true;

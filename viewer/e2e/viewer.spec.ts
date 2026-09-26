@@ -458,8 +458,33 @@ test("tutti: a box selection opens the orchestration chart; doublings split or m
   expect(mixed).toBeGreaterThan(0);
   await page.locator("#tutti-split").check(); // re-drawn split
   await expect(page.locator("html")).toHaveAttribute("data-tutti-bubble", /^[1-9]/);
+  // the selected area is shaded behind it, and the pointer follows it when it is moved
+  await expect(page.locator("#tutti-region")).toBeVisible();
+  await expect(page.locator("#tutti-tail")).toBeVisible();
+  const tip = async (): Promise<string> => (await page.locator("#tutti-tail polyline").getAttribute("points"))!;
+  const tip0 = await tip();
+  const head = (await page.locator("#tutti-bubble .bubble-head strong").boundingBox())!;
+  await page.mouse.move(head.x + 5, head.y + 5);
+  await page.mouse.down();
+  await page.mouse.move(head.x + 5, head.y + 260, { steps: 5 });
+  await page.mouse.up();
+  await expect(bubble).toBeVisible(); // dragging does not close it
+  expect(await tip()).not.toBe(tip0);
+  // resizing scales the chart to fit
+  const size0 = (await bubble.boundingBox())!;
+  const grip = (await page.locator("#tutti-bubble-grip").boundingBox())!;
+  await page.mouse.move(grip.x + 8, grip.y + 8);
+  await page.mouse.down();
+  await page.mouse.move(grip.x + 108, grip.y + 48, { steps: 5 });
+  await page.mouse.up();
+  const size1 = (await bubble.boundingBox())!;
+  expect(size1.width).toBeGreaterThan(size0.width + 50);
+  expect(Number(await page.locator("#tutti-bubble .bubble-fit").evaluate((e) => (e as HTMLElement).style.zoom))).toBeGreaterThan(0);
+  await page.locator("#tutti-bubble .bubble-head strong").dblclick(); // back to its own size
+  await expect(bubble).not.toHaveClass(/sized/);
   await page.keyboard.press("Escape"); // closes the pop-up first
   await expect(bubble).toBeHidden();
+  await expect(page.locator("#tutti-region")).toBeHidden();
   await expect(page.locator("#tuttiview")).toBeVisible();
   // several chords: side by side when they fit ...
   const b2 = (await host.locator("g.measure").nth(2).boundingBox())!;

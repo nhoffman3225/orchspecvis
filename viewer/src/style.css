@@ -544,10 +544,22 @@ body:has(> #home) { display: block; overflow: auto; }
   color: var(--ink); border: 2px solid var(--ink); padding: 0 6px; }
 #tutti-bubble-chart { overflow: auto; max-height: 75vh; padding: 6px 8px; }
 #tutti-bubble-chart svg { display: block; }
-#tutti-bubble::before { content: ""; position: absolute; top: calc(var(--tail-y, 30px) - 9px); width: 16px; height: 16px;
-  background: #fbf8f1; border: 2px solid var(--ink); border-width: 0 0 2px 2px; }
-#tutti-bubble.tail-left::before { left: -10px; transform: rotate(45deg); }
-#tutti-bubble.tail-right::before { right: -10px; transform: rotate(-135deg); }
+/* movable (drag the head) and resizable (the grip; the chart then scales to fit) */
+#tutti-bubble { display: flex; flex-direction: column; }
+#tutti-bubble.sized { max-width: none; }
+#tutti-bubble.sized #tutti-bubble-chart { flex: 1; min-height: 0; max-height: none; }
+#tutti-bubble .bubble-head { cursor: grab; touch-action: none; }
+#tutti-bubble.dragging .bubble-head { cursor: grabbing; }
+#tutti-bubble-grip { position: absolute; right: 0; bottom: 0; width: 16px; height: 16px; cursor: nwse-resize;
+  touch-action: none; background: linear-gradient(135deg, transparent 50%, var(--ink) 50% 62%, transparent 62% 74%, var(--ink) 74% 86%, transparent 86%); }
+/* the pointer (above the pop-up, so it covers the border at its base) and the selected
+   area (below it, so a pop-up moved over it is never hidden) */
+.bubble-overlay { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; overflow: visible; }
+#tutti-region { z-index: 5; }
+#tutti-region rect { fill: var(--yellow); fill-opacity: 0.22; stroke: var(--ink); stroke-width: 2; stroke-dasharray: 6 4; }
+#tutti-tail { z-index: 7; }
+#tutti-tail polygon { fill: #fbf8f1; stroke: none; }
+#tutti-tail polyline { fill: none; stroke: var(--ink); stroke-width: 2; stroke-linejoin: miter; }
 
 /* ===================== accessible mode: WCAG 2.2 AA (a11y.ts) ===================== */
 /* contrast: text >= 4.5:1, component edges >= 3:1 (checked in a11y.test.ts) */
@@ -582,7 +594,7 @@ html[data-a11y="on"] #hovertip { font-size: 14px; max-width: 420px; }
 .a11y-toggle { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); cursor: pointer; }
 
 /* several chords: portions side by side (captioned), or paged with the arrows */
-#tutti-bubble-chart { display: flex; gap: 0; align-items: flex-start; }
+#tutti-bubble-chart .bubble-fit { display: inline-flex; gap: 0; align-items: flex-start; }
 #tutti-bubble-chart .bubble-pane { margin: 0; padding: 0 7px; }
 #tutti-bubble-chart .bubble-pane + .bubble-pane { border-left: 2px dashed #1b1b1b55; }
 #tutti-bubble-chart figcaption { font: 800 11px/1.3 system-ui, sans-serif; text-transform: uppercase;

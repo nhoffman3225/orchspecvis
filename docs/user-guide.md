@@ -132,7 +132,10 @@ between panels to resize them (double-click resets). Esc closes the view.
   chart, every section in its own block and colour, with instrument labels (bracketed
   over several notes, or fanned out to each of their notes, with leader lines routed
   around other labels). Several chords in the box are shown side by side, or one at a
-  time with ◀ ▶ (and the arrow keys) when they do not fit. **Split Doublings**: off, a
+  time with ◀ ▶ (and the arrow keys) when they do not fit. Drag its title bar to move it
+  and its bottom-right grip to resize it (the chart scales to fit); its pointer re-aims
+  at the selected area, which stays shaded behind it. Double-click the title bar to put
+  it back beside the selection. **Split Doublings**: off, a
   pitch several sections play is one notehead in their colours mixed (weighted by how
   many parts of each play it); on, each colour is kept: colour bands on the engraved
   notehead, and in the chart every instrument gets its own column under its name.
