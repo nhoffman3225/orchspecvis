@@ -402,7 +402,7 @@ input[type="range"], input[type="checkbox"] { accent-color: var(--yellow); }
 
 /* hover help (hovertip.ts) */
 #hovertip {
-  position: fixed; z-index: 50; max-width: 340px; pointer-events: none;
+  position: fixed; z-index: 50; max-width: 340px;
   background: var(--fg); color: var(--ink); border: 2px solid var(--ink);
   box-shadow: 3px 3px 0 var(--pink); padding: 5px 8px; font-size: 12px; line-height: 1.35;
 }
@@ -533,3 +533,61 @@ body:has(> #home) { display: block; overflow: auto; }
 #status.notice { color: var(--ink); background: var(--orange); }
 #bar button.unavail { opacity: 0.4; cursor: not-allowed; box-shadow: none; }
 #bar button.unavail:active { transform: none; }
+
+/* tutti: the chord pop-up (orchestration chart) beside a box selection, with a tail */
+#tutti-bubble { position: absolute; left: 0; top: 0; z-index: 6; max-width: 95%; user-select: none;
+  background: #fbf8f1; color: #1b1b1b; border: 2px solid var(--ink); box-shadow: 6px 6px 0 var(--pink); }
+#tutti-bubble .bubble-head { display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  padding: 5px 8px 5px 10px; border-bottom: 2px solid var(--ink); background: var(--yellow); }
+#tutti-bubble .bubble-head strong { font-size: 12px; font-weight: 900; text-transform: uppercase; letter-spacing: 0.04em; }
+#tutti-bubble .bubble-head button { font: inherit; font-weight: 800; cursor: pointer; background: #fbf8f1;
+  color: var(--ink); border: 2px solid var(--ink); padding: 0 6px; }
+#tutti-bubble-chart { overflow: auto; max-height: 75vh; padding: 6px 8px; }
+#tutti-bubble-chart svg { display: block; }
+#tutti-bubble::before { content: ""; position: absolute; top: calc(var(--tail-y, 30px) - 9px); width: 16px; height: 16px;
+  background: #fbf8f1; border: 2px solid var(--ink); border-width: 0 0 2px 2px; }
+#tutti-bubble.tail-left::before { left: -10px; transform: rotate(45deg); }
+#tutti-bubble.tail-right::before { right: -10px; transform: rotate(-135deg); }
+
+/* ===================== accessible mode: WCAG 2.2 AA (a11y.ts) ===================== */
+/* contrast: text >= 4.5:1, component edges >= 3:1 (checked in a11y.test.ts) */
+html[data-a11y="on"] {
+  --muted: #c8c7d1;
+  --edge: #8c8c99;
+  --line: #6e6e7a;
+}
+html[data-a11y="on"] :is(#bar, #score-bar, #tutti-bar, #reg-bar, #piano-bar, #help-bar, #about-bar) { font-size: 14px; }
+html[data-a11y="on"] :is(.hint, #status, .home-card-sub, .wizard-without, .home-when) { font-size: 13px; }
+html[data-a11y="on"] :is(#time, #barbeat, #score-time, #tutti-time, #reg-time, #piano-time, #gapval, #smoothval, #harmval, #tauval) { font-size: 13px; }
+html[data-a11y="on"] #bar .cap, html[data-a11y="on"] .tag { font-size: 11px; transform: none; }
+/* target size (2.5.8: at least 24 x 24 px) */
+html[data-a11y="on"] :is(button, select) { min-height: 28px; }
+html[data-a11y="on"] input[type="checkbox"] { width: 18px; height: 18px; }
+html[data-a11y="on"] input[type="range"] { min-height: 24px; }
+/* focus (2.4.7, 2.4.13): a thick ring on everything focusable */
+html[data-a11y="on"] :is(button, select, input, [role="separator"], [tabindex]):focus-visible {
+  outline: 3px solid var(--yellow); outline-offset: 2px;
+}
+/* no motion, no decoration */
+html[data-a11y="on"] *, html[data-a11y="on"] *::before, html[data-a11y="on"] *::after {
+  transition: none !important; animation-duration: 0s !important;
+}
+html[data-a11y="on"] .spin { animation: spin 1.6s linear infinite !important; } /* keep the busy cue */
+html[data-a11y="on"] #bar::after, html[data-a11y="on"] .home-hero::before, html[data-a11y="on"] .home-hero::after { display: none; }
+html[data-a11y="on"] .home-mark { transform: none; }
+/* not by colour alone (1.4.1): unavailable views carry a symbol too */
+html[data-a11y="on"] #bar button.unavail::before { content: "⊘ "; }
+html[data-a11y="on"] #hovertip { font-size: 14px; max-width: 420px; }
+/* the setting itself */
+.a11y-toggle { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); cursor: pointer; }
+
+/* several chords: portions side by side (captioned), or paged with the arrows */
+#tutti-bubble-chart { display: flex; gap: 0; align-items: flex-start; }
+#tutti-bubble-chart .bubble-pane { margin: 0; padding: 0 7px; }
+#tutti-bubble-chart .bubble-pane + .bubble-pane { border-left: 2px dashed #1b1b1b55; }
+#tutti-bubble-chart figcaption { font: 800 11px/1.3 system-ui, sans-serif; text-transform: uppercase;
+  letter-spacing: 0.04em; color: #1b1b1b; padding: 2px 0 4px; }
+#tutti-bubble-nav { display: inline-flex; align-items: center; gap: 6px; margin-left: auto;
+  font: 800 12px/1 var(--mono); }
+#tutti-bubble-nav[hidden] { display: none; }
+#tutti-bubble .bubble-head #tutti-bubble-nav button { padding: 0 7px; }

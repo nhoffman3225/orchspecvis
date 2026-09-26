@@ -4,6 +4,7 @@
 // the read-only home.json and the POST /app/open|pick|build|import routes.
 
 import { fetchSameOrigin } from "./net";
+import { wireA11yToggles } from "./a11y";
 
 export interface HomeBundle {
   name: string;
@@ -124,6 +125,13 @@ export async function runHomeScreen(root: HTMLElement, params: URLSearchParams):
   const mark = el("h1", "home-mark", "orchspecvis");
   mark.title = "Orchestral Spectrum Visualizer";
   hero.append(mark, el("p", "home-tag", "Orchestral Spectrum Visualizer: see how a render fills the pitch spectrum, next to the score that made it."));
+  const a11y = el("label", "a11y-toggle");
+  a11y.title = "Higher contrast, larger text and targets, no motion or decoration, stronger focus rings";
+  const a11yBox = el("input");
+  a11yBox.type = "checkbox";
+  a11yBox.dataset.a11yToggle = "";
+  a11y.append(a11yBox, " Accessible Mode (WCAG 2.2 AA)");
+  hero.append(a11y);
   const actions = el("div", "home-actions");
   const status = el("p", "home-status");
   status.setAttribute("role", "status");
@@ -144,6 +152,7 @@ export async function runHomeScreen(root: HTMLElement, params: URLSearchParams):
   wizard.hidden = true;
   home.append(hero, actions, status, wizard, listBox);
   root.replaceChildren(home);
+  wireA11yToggles(home);
 
   const say = (msg: string, bad = false): void => {
     status.textContent = msg;

@@ -18,9 +18,52 @@ export interface ScoreViewDeps {
 /** Options for engraving something other than the bundle's score (e.g. a reduction). */
 export interface ScoreViewOptions {
   file?: string; // bundle-relative MusicXML (default: score.score_file)
-  noteColor?: (id: string) => string | null; // persistent notehead colour
+  /** persistent notehead colour; several colours split the notehead into bands (one per
+   * colour, left to right) so that none of them is blended */
+  noteColor?: (id: string) => string | string[] | null;
   selectable?: boolean; // click/box selection (double-click seeks)
   onSelect?: (ids: string[]) => void;
+  /** a box selection finished: its notes and the box (host content pixels) */
+  onBox?: (ids: string[], box: { x0: number; y0: number; x1: number; y1: number }) => void;
+}
+
+/** Sets a notehead's colour: one colour, or vertical bands of several. The bands are a
+ * horizontal linearGradient with hard stops in the page's own <defs> (a pattern would be
+ * the obvious choice, but Chromium does not paint one on Verovio's <use> glyphs). */
+function applyFill(el: SVGElement, c: string | string[]): void {
+  const colors = Array.isArray(c) ? c : [c];
+  if (colors.length < 2) {
+    el.setAttribute("fill", colors[0]!);
+    el.setAttribute("color", colors[0]!);
+    return;
+  }
+  const svg = el.ownerSVGElement;
+  const id = `bands-${colors.join("-").replace(/[^a-z0-9-]/gi, "")}`;
+  if (svg && !svg.querySelector(`[id="${id}"]`)) {
+    const NS = svg.namespaceURI!; // the SVG namespace, from the element itself
+    let defs = svg.querySelector(":scope > defs");
+    if (!defs) {
+      defs = document.createElementNS(NS, "defs");
+      svg.prepend(defs);
+    }
+    const grad = document.createElementNS(NS, "linearGradient");
+    grad.id = id;
+    grad.setAttribute("x1", "0");
+    grad.setAttribute("x2", "1");
+    grad.setAttribute("y1", "0");
+    grad.setAttribute("y2", "0");
+    colors.forEach((col, i) => {
+      for (const at of [i / colors.length, (i + 1) / colors.length]) {
+        const st = document.createElementNS(NS, "stop");
+        st.setAttribute("offset", String(at));
+        st.setAttribute("stop-color", col);
+        grad.append(st);
+      }
+    });
+    defs.append(grad);
+  }
+  el.setAttribute("fill", `url(#${id})`);
+  el.setAttribute("color", colors[0]!); // stems, ledger lines: the first colour
 }
 
 type Pending = { resolve: (v: unknown) => void; reject: (e: Error) => void };
@@ -101,6 +144,16 @@ export class ScoreView {
     return [...this.selected];
   }
 
+  /** Notes grouped by chord (onset event), in time order. */
+  chords(ids: string[]): string[][] {
+    const by = new Map<number, string[]>();
+    for (const id of ids) {
+      const e = this.idToEvent.get(id) ?? Number.MAX_SAFE_INTEGER;
+      by.set(e, [...(by.get(e) ?? []), id]);
+    }
+    return [...by.entries()].sort((a, b) => a[0] - b[0]).map(([, v]) => v);
+  }
+
   clearSelection(): boolean {
     if (!this.selected.size) return false;
     this.selected.clear();
@@ -128,10 +181,7 @@ export class ScoreView {
     if (!f) return;
     for (const el of this.host.querySelectorAll<SVGElement>("g.note")) {
       const c = f(el.id);
-      if (c) {
-        el.setAttribute("fill", c);
-        el.setAttribute("color", c);
-      }
+      if (c) applyFill(el, c);
     }
   }
 
@@ -185,6 +235,7 @@ export class ScoreView {
         if (cx >= xa && cx <= xb && cy >= ya && cy <= yb) ids.push(el.id);
       }
       this.setSelection(ids, add);
+      if (ids.length) this.vo.onBox?.(this.selection, { x0: xa, y0: ya, x1: xb, y1: yb });
       return;
     }
     this.pick(e, add);
@@ -392,8 +443,7 @@ export class ScoreView {
       el.classList.remove("playing");
       const c = fixed?.(el.id);
       if (c) {
-        el.setAttribute("fill", c); // back to its persistent colour
-        el.setAttribute("color", c);
+        applyFill(el, c); // back to its persistent colour
       } else {
         el.removeAttribute("fill");
         el.removeAttribute("color");

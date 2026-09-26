@@ -209,6 +209,8 @@ test("tutti: chord per bar / per beat; a bar condenses into a chord and its pitc
   test.setTimeout(120_000); // Verovio engraving on CI
   const g = guard(page, baseURL!);
   await page.goto(`/?${Q}&view=tutti&t=3`);
+  await expect(page.locator("#tutti-mode")).toHaveValue("beat-chords"); // the default
+  await page.goto(`/?${Q}&view=tutti&t=3&tutti=chords`);
   const host = page.locator("#tutti-score");
   await expect(host.locator("svg").first()).toBeVisible({ timeout: 90_000 });
   await expect(page.locator("#tutti-mode")).toHaveValue("chords");
@@ -433,4 +435,82 @@ test("views the bundle cannot show are marked unavailable and say why", async ({
   expect(g.offOrigin).toEqual([]);
   const errors = g.errors.filter((e) => !/^HTTP 404 \/tiny-bundle\/audio\//.test(e)); // not committed
   expect(errors, errors.join(" | ")).toEqual([]);
+});
+
+
+test("tutti: a box selection opens the orchestration chart; doublings split or mixed", async ({ page, baseURL }) => {
+  test.setTimeout(120_000);
+  const g = guard(page, baseURL!);
+  await page.setViewportSize({ width: 1600, height: 900 }); // room for two charts side by side
+  await page.goto(`/?${Q}&view=tutti&t=3&tutti=chords`);
+  const host = page.locator("#tutti-score");
+  await expect(host.locator("svg").first()).toBeVisible({ timeout: 90_000 });
+  const bar = (await host.locator("g.measure").nth(1).boundingBox())!;
+  await page.mouse.move(bar.x + 2, bar.y - 10);
+  await page.mouse.down();
+  await page.mouse.move(bar.x + bar.width - 2, bar.y + bar.height + 10, { steps: 5 });
+  await page.mouse.up();
+  const bubble = page.locator("#tutti-bubble");
+  await expect(bubble).toBeVisible();
+  await expect(page.locator("#tutti-bubble-title")).toContainText("m. 2");
+  await expect(page.locator("#tutti-bubble-chart svg text").first()).toBeVisible(); // labels
+  const mixed = Number(await page.locator("html").getAttribute("data-tutti-bubble"));
+  expect(mixed).toBeGreaterThan(0);
+  await page.locator("#tutti-split").check(); // re-drawn split
+  await expect(page.locator("html")).toHaveAttribute("data-tutti-bubble", /^[1-9]/);
+  await page.keyboard.press("Escape"); // closes the pop-up first
+  await expect(bubble).toBeHidden();
+  await expect(page.locator("#tuttiview")).toBeVisible();
+  // several chords: side by side when they fit ...
+  const b2 = (await host.locator("g.measure").nth(2).boundingBox())!;
+  await page.mouse.move(bar.x + 2, bar.y - 10);
+  await page.mouse.down();
+  await page.mouse.move(b2.x + b2.width - 2, b2.y + b2.height + 10, { steps: 5 });
+  await page.mouse.up();
+  await expect(page.locator("html")).toHaveAttribute("data-tutti-bubble-panes", "2/2");
+  await expect(page.locator("#tutti-bubble-title")).toContainText("2 chords");
+  await expect(page.locator("#tutti-bubble-chart figure")).toHaveCount(2);
+  await page.keyboard.press("Escape");
+  // ... else one at a time, paged with the arrows (which then do not seek playback)
+  await page.setViewportSize({ width: 700, height: 700 });
+  await page.waitForTimeout(800); // the score re-lays out for the new width
+  const f0 = (await host.locator("g.measure").nth(0).boundingBox())!;
+  const f2 = (await host.locator("g.measure").nth(2).boundingBox())!;
+  await page.mouse.move(f0.x + 2, f0.y - 10);
+  await page.mouse.down();
+  await page.mouse.move(f2.x + f2.width - 2, f2.y + f2.height + 10, { steps: 5 });
+  await page.mouse.up();
+  await expect(page.locator("#tutti-bubble-nav")).toBeVisible();
+  const n = (await page.locator("html").getAttribute("data-tutti-bubble-panes"))!.split("/")[1];
+  await expect(page.locator("#tutti-bubble-page")).toHaveText(`1 / ${n}`);
+  const before = await page.locator("#tutti-time").textContent();
+  await page.keyboard.press("ArrowRight");
+  await expect(page.locator("#tutti-bubble-page")).toHaveText(`2 / ${n}`);
+  expect(await page.locator("#tutti-time").textContent()).toBe(before);
+  await page.locator("#tutti-bubble-prev").click();
+  await page.locator("#tutti-bubble-prev").click(); // wraps around
+  await expect(page.locator("#tutti-bubble-page")).toHaveText(`${n} / ${n}`);
+  expect(g.offOrigin).toEqual([]);
+  expect(g.errors, g.errors.join(" | ")).toEqual([]);
+});
+
+
+test("accessible mode (WCAG): toggled from Help, remembered, larger targets", async ({ page, baseURL }) => {
+  const g = guard(page, baseURL!);
+  await page.goto(`/?${Q}&view=help`);
+  await page.evaluate(() => localStorage.removeItem("orchspec.a11y"));
+  await page.goto(`/?${Q}&view=help`);
+  await expect(page.locator("html")).toHaveAttribute("data-a11y", "off");
+  const box = page.locator("#help-bar input[data-a11y-toggle]");
+  await box.check();
+  await expect(page.locator("html")).toHaveAttribute("data-a11y", "on");
+  await page.goto(`/?${Q}`); // remembered
+  await expect(page.locator("html")).toHaveAttribute("data-a11y", "on");
+  const h = (await page.locator("#play").boundingBox())!.height;
+  expect(h).toBeGreaterThanOrEqual(24); // WCAG 2.5.8 target size
+  expect(await page.locator("#bar .cap").first().evaluate((e) => getComputedStyle(e).transform)).toBe("none");
+  await page.goto(`/?${Q}&a11y=0`); // the URL wins
+  await expect(page.locator("html")).toHaveAttribute("data-a11y", "off");
+  expect(g.offOrigin).toEqual([]);
+  expect(g.errors, g.errors.join(" | ")).toEqual([]);
 });

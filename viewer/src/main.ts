@@ -27,6 +27,7 @@ import { Splitter } from "./splitter";
 import { initFolds } from "./toolbar";
 import { initHoverTips } from "./hovertip";
 import { renderHelp } from "./help";
+import { initA11y } from "./a11y";
 
 type Mode = "mix" | "ensemble" | "stems" | "dominant";
 
@@ -41,6 +42,7 @@ function fmt(t: number): string {
 async function main(): Promise<void> {
   initToken(location.search);
   const params = new URLSearchParams(location.search);
+  initA11y(params); // accessible mode (WCAG 2.2 AA), before any screen
   if (params.has("import")) return runImportScreen(document.body); // desktop app: import progress
   if (params.has("home")) return runHomeScreen(document.body, params); // desktop app: start
   // views the bundle lacks the inputs for: the button stays, disabled, and says why; its
@@ -683,7 +685,7 @@ async function main(): Promise<void> {
   let tuttiOpen = false;
   const tutti = new TuttiPanel({
     m, base, partColor, seek: (s) => seek(s), now: () => player.transport.position(),
-    mode: params.get("tutti"), color: params.get("tcolor"),
+    mode: params.get("tutti"), color: params.get("tcolor"), split: params.get("tsplit") === "1",
   });
   const TUTTI_NEEDS = "The tutti view needs a MusicXML score in the bundle (rebuild it with one).";
   unavailable("tuttibtn", tutti.available, TUTTI_NEEDS);
@@ -701,9 +703,13 @@ async function main(): Promise<void> {
   $("tuttibtn").addEventListener("click", () => setTutti(true));
   $("tutticlose").addEventListener("click", () => setTutti(false));
   addEventListener("keydown", (e) => {
+    // Esc works from the view's own checkboxes too: pop-up, then selection, then the view
+    if (e.code === "Escape" && tuttiOpen) {
+      if (!tutti.clearSelection()) setTutti(false);
+      return;
+    }
     if (e.target instanceof HTMLInputElement || e.target instanceof HTMLSelectElement) return;
     if (e.code === "KeyT") setTutti(!tuttiOpen);
-    else if (e.code === "Escape" && tuttiOpen && !tutti.clearSelection()) setTutti(false);
   });
 
   // ---- register distribution view (per section / stem: whole piece + now)
