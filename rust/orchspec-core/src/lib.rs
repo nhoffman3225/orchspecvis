@@ -7,6 +7,7 @@
 //!
 //! No network code: bundles are local folders.
 
+pub mod app;
 pub mod manifest;
 pub mod serve;
 pub mod session_import;

@@ -44,19 +44,28 @@ My Piece/
   render.yaml             optional: settings (`orchspec session-template` prints one)
 ```
 
-Only `mix.wav` is required. Stems make per-instrument views possible. With the MIDI and
+You need the mix, the stems, or both: without `mix.wav` the stems are summed into the mix
+(the session folder is not changed). Stems make per-instrument views possible. With the MIDI and
 MusicXML, notes, bars and parts are aligned to the audio. Dorico users can export the
 whole set in one go: see [dorico-session.md](dorico-session.md), which also has
 `orchspec import-dorico`, a command that lays a Dorico export out as a session.
 
 ## 3. Import
 
-In the app, choose **File › Import Session…** (Ctrl/Cmd+I) and pick the session folder.
-A progress screen shows each stem as it is analysed, then the result opens. Bundles are
-saved in `Documents/orchspec/bundles/<name>.bundle`. Importing the same session again
-replaces its bundle.
+The app starts on its **home screen** (File › Home, Ctrl/Cmd+H):
 
-**File › Open Bundle…** (Ctrl/Cmd+O) opens a bundle you made earlier.
+- **Open Bundle** opens a bundle folder; your bundles are listed below it, recently
+  opened ones first. Click one to open it.
+- **New Bundle from Files** (Ctrl/Cmd+N) is a wizard: choose the score (MusicXML), the
+  tempo MIDI, the stems, the mix and the score PDF (each optional except that you need
+  the stems or the mix), name it, and **Build Bundle**. The app lays the files out as a
+  session in `Documents/orchspec/sessions/<name>` (hard links, so no extra space on the
+  same drive) and analyses it.
+- **Import Session Folder** (Ctrl/Cmd+I) analyses a folder already laid out as above.
+
+A progress screen shows each stem as it is analysed, then the result opens. Bundles are
+saved in `Documents/orchspec/bundles/<name>.bundle`; building or importing the same
+session again replaces its bundle. Closing the app during an import stops the analysis.
 
 From the command line:
 

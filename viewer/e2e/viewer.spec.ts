@@ -356,3 +356,55 @@ test("toolbar groups fold open; hover tips; the help view lists every control", 
   expect(g.offOrigin).toEqual([]);
   expect(g.errors, g.errors.join(" | ")).toEqual([]);
 });
+
+test("home screen (desktop): bundles list and the from-files wizard", async ({ page, baseURL }) => {
+  const g = guard(page, baseURL!);
+  await page.route("**/app/home.json", (r) => r.fulfill({ json: {
+    bundles: [
+      { name: "Beethoven 5", path: "C:/b/Beethoven 5.bundle", modified: 1790000000, has_score: true, recent: true },
+      { name: "Sketch", path: "C:/b/Sketch.bundle", modified: 1780000000, has_score: false, recent: false },
+    ],
+    bundles_dir: "C:/b", importing: false,
+  } }));
+  const picked: Record<string, string[]> = {
+    musicxml: ["D:/Renders/Bolero/Bolero.musicxml"], midi: ["D:/Renders/Bolero/render.mid"],
+    stems: ["D:/Renders/Bolero/stems/01_Flute.wav", "D:/Renders/Bolero/stems/02_Snare.wav"],
+  };
+  await page.route("**/app/pick", async (r) => {
+    const kind = (r.request().postDataJSON() as { kind: string }).kind;
+    await r.fulfill({ json: { paths: picked[kind] ?? [] } });
+  });
+  let built: unknown = null;
+  await page.route("**/app/build", async (r) => {
+    built = r.request().postDataJSON();
+    await r.fulfill({ json: { ok: true } });
+  });
+  let opened: unknown = null;
+  await page.route("**/app/open", async (r) => {
+    opened = r.request().postDataJSON();
+    await r.fulfill({ json: { ok: true } });
+  });
+  await page.goto("/?home=1");
+  await expect(page.locator("html")).toHaveAttribute("data-home", "ready");
+  await expect(page.locator(".home-bundle")).toHaveCount(2);
+  await expect(page.locator(".home-bundle").first()).toContainText("Recent");
+  await page.locator(".home-bundle").first().click();
+  await expect.poll(() => opened).toEqual({ path: "C:/b/Beethoven 5.bundle" });
+  // the wizard: nothing to build until there is audio
+  await page.locator("#home-new").click();
+  await expect(page.locator("#wizard")).toBeVisible();
+  await expect(page.locator("#wizard-build")).toBeDisabled();
+  await page.locator("#pick-musicxml").click();
+  await page.locator("#pick-midi").click();
+  await expect(page.locator("#wizard-build")).toBeDisabled();
+  await page.locator("#pick-stems").click();
+  await expect(page.locator('[data-kind="stems"] .wizard-files')).toHaveText("01_Flute.wav · 02_Snare.wav");
+  await expect(page.locator("#wizard-name")).toHaveValue("Bolero");
+  await expect(page.locator("#wizard-build")).toBeEnabled();
+  await page.locator("#wizard-build").click();
+  await expect.poll(() => built).toEqual({
+    name: "Bolero", stems: picked.stems, musicxml: picked.musicxml![0], midi: picked.midi![0],
+  });
+  expect(g.offOrigin).toEqual([]);
+  expect(g.errors, g.errors.join(" | ")).toEqual([]);
+});
