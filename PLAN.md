@@ -289,6 +289,11 @@ carry the `real` marker and never run in CI.
       GitHub Release with the Windows CPU installer + macOS MPS .dmg; the CUDA build is
       build-it-yourself (decision 2026-09-25: GitHub's 2 GiB per-file limit). Replacing a
       bundle now survives OneDrive's read-only folders (rename aside, then delete)
+- [x] Releases: v0.1.0 (2026-09-26) and v0.2.0 (tabs, chord pop-up hover, input hardening
+      #39). Profile before v0.2.0 (Beethoven 5, RTX 5070 Ti): import 25 s CPU / 9.8 s
+      CUDA, the same on main and #39 with byte-identical bundles; alignment 0.36 s; viewer
+      144 fps on every tab but Tutti (~62 fps, 14 ms median frame: a follow-up), score first
+      engraving ~4 s
 - [ ] Code signing (Windows Authenticode, macOS notarization) for the published builds
 - [ ] macOS .dmg from release.yml checked on a real Mac (MPS import time)
 - [ ] macOS build + .dmg in CI (macOS minutes are 10x: on main pushes only)
