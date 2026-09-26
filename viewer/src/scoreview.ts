@@ -144,6 +144,16 @@ export class ScoreView {
     return [...this.selected];
   }
 
+  /** Notes grouped by chord (onset event), in time order. */
+  chords(ids: string[]): string[][] {
+    const by = new Map<number, string[]>();
+    for (const id of ids) {
+      const e = this.idToEvent.get(id) ?? Number.MAX_SAFE_INTEGER;
+      by.set(e, [...(by.get(e) ?? []), id]);
+    }
+    return [...by.entries()].sort((a, b) => a[0] - b[0]).map(([, v]) => v);
+  }
+
   clearSelection(): boolean {
     if (!this.selected.size) return false;
     this.selected.clear();

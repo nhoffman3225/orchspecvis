@@ -46,6 +46,8 @@ export class TuttiPanel {
   private modeSel = $<HTMLSelectElement>("tutti-mode");
   private split = false; // doubled pitches: split (each section's colour) or mixed
   private bubbleBox: { x0: number; y0: number; x1: number; y1: number } | null = null;
+  private bubbleChords: string[][] = []; // the selection, one entry per chord
+  private bubblePage = 0; // the chord shown when they do not all fit
 
   constructor(private d: TuttiDeps) {
     this.reductions = (d.m.score?.reductions ?? []).filter((r) => r.mode in TUTTI_LABELS);
@@ -53,7 +55,9 @@ export class TuttiPanel {
     if (!this.available) return;
     const tm = this.modeSel;
     tm.replaceChildren(...this.reductions.map((r) => new Option(TUTTI_LABELS[r.mode]!, r.mode)));
-    tm.value = this.reductions.some((r) => r.mode === d.mode) ? d.mode! : this.reductions[0]!.mode;
+    // default: one chord per beat (when the bundle has it), else the first reduction
+    const has = (mode: string | null | undefined): boolean => this.reductions.some((r) => r.mode === mode);
+    tm.value = has(d.mode) ? d.mode! : has("beat-chords") ? "beat-chords" : this.reductions[0]!.mode;
     tm.addEventListener("change", () => this.run(this.activate(tm.value)));
     const tc = $<HTMLSelectElement>("tutti-color");
     tc.value = this.color;
@@ -75,9 +79,19 @@ export class TuttiPanel {
       this.split = sp.checked;
       for (const v of this.views.values()) v.recolor();
       if (this.tv) void this.showCondensed(this.tv.selection);
-      if (this.bubbleBox && this.tv) this.showBubble(this.tv.selection, this.bubbleBox);
+      if (this.bubbleBox) this.renderBubble(); // same chords and page, re-drawn
     });
     $("tutti-bubble-close").addEventListener("click", () => this.hideBubble());
+    $("tutti-bubble-prev").addEventListener("click", () => this.turn(-1));
+    $("tutti-bubble-next").addEventListener("click", () => this.turn(1));
+    // ← / → page the chords while the pop-up shows one at a time (before playback seeks)
+    addEventListener("keydown", (e) => {
+      if ($("tutti-bubble").hidden || $("tutti-bubble-nav").hidden) return;
+      if (e.code !== "ArrowLeft" && e.code !== "ArrowRight") return;
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      this.turn(e.code === "ArrowLeft" ? -1 : 1);
+    }, true);
     $("tutti-score").addEventListener("pointerdown", () => this.hideBubble());
     $("tutti-score").addEventListener("scroll", () => this.placeBubble(), { passive: true });
     $<HTMLInputElement>("tutti-follow").addEventListener("change", (e) => {
@@ -166,27 +180,73 @@ export class TuttiPanel {
 
   /** The chord pop-up (an orchestration chart) beside a box selection. */
   private showBubble(ids: string[], box: { x0: number; y0: number; x1: number; y1: number }): void {
-    const map = this.maps.get(this.tMode);
-    if (!map || !ids.length) {
+    if (!this.maps.get(this.tMode) || !ids.length) {
       this.hideBubble();
       return;
     }
-    const notes = chartNotes(ids, map);
-    const colorOf = (f: string): string => ink(toHex(FAMILY_COLORS[f as keyof typeof FAMILY_COLORS] ?? "#888888"));
-    const chart = layoutChart(notes, this.chartParts(), colorOf, this.split ? "split" : "mix");
-    $("tutti-bubble-chart").innerHTML = renderChart(chart); // generated here: labels escaped
-    const secs = new Set(notes.flatMap((n) => n.parts.map((p) => this.familyOfPart(p))));
-    const bars = [...new Set(ids.map((i) => map[i]?.bar).filter((b): b is number => b !== undefined))].sort((a, b) => a - b);
-    const barNum = (bi: number): string =>
-      this.d.m.score?.measures.find((x) => x.source_index === bi)?.number ?? String(bi + 1);
-    const where = !bars.length ? "" : bars.length === 1 ? `m. ${barNum(bars[0]!)} · `
-      : `m. ${barNum(bars[0]!)}–${barNum(bars.at(-1)!)} · `;
-    $("tutti-bubble-title").textContent =
-      `${where}${new Set(notes.map((n) => n.midi)).size} pitches · ${secs.size} section${secs.size === 1 ? "" : "s"}`;
+    // several chords: portions side by side, or one at a time with ◀ ▶ if they do not fit
+    this.bubbleChords = (this.tv?.chords(ids) ?? [ids]).filter((g) => g.length);
+    this.bubblePage = 0;
     this.bubbleBox = box;
+    this.renderBubble();
+  }
+
+  private barNum(bi: number): string {
+    return this.d.m.score?.measures.find((x) => x.source_index === bi)?.number ?? String(bi + 1);
+  }
+
+  private renderBubble(): void {
+    const map = this.maps.get(this.tMode);
+    const box = this.bubbleBox;
+    if (!map || !box) return;
+    const colorOf = (f: string): string => ink(toHex(FAMILY_COLORS[f as keyof typeof FAMILY_COLORS] ?? "#888888"));
+    // clefs and accidentals: the SMuFL glyphs the engraved reduction already defines
+    const glyph = (code: string): string | null =>
+      code ? document.querySelector(`#tutti-score [id^="${code}-"]`)?.id ?? null : null;
+    const perBar = new Map<number, number>();
+    const panes = this.bubbleChords.map((g) => {
+      const notes = chartNotes(g, map);
+      const chart = layoutChart(notes, this.chartParts(), colorOf, this.split ? "split" : "mix");
+      const bar = map[g[0]!]?.bar ?? -1;
+      const nth = (perBar.get(bar) ?? 0) + 1;
+      perBar.set(bar, nth);
+      const secs = new Set(notes.flatMap((n) => n.parts.map((p) => this.familyOfPart(p))));
+      return { chart, bar, nth, pitches: new Set(notes.map((n) => n.midi)).size, secs: secs.size,
+        svg: renderChart(chart, "#1b1b1b", glyph) }; // labels escaped
+    });
+    const several = (bar: number): boolean => (perBar.get(bar) ?? 0) > 1;
+    const caption = (p: (typeof panes)[number]): string =>
+      `m. ${this.barNum(p.bar)}${several(p.bar) ? ` · chord ${p.nth}` : ""} · ${p.pitches} pitches · ${p.secs} section${p.secs === 1 ? "" : "s"}`;
+    const main = $("tutti-bubble").parentElement!;
+    const avail = main.clientWidth * 0.95 - 24;
+    const total = panes.reduce((w, p) => w + p.chart.width + 14, 0);
+    const paged = panes.length > 1 && total > avail;
+    this.bubblePage = Math.min(Math.max(0, this.bubblePage), panes.length - 1);
+    const shown = paged ? [panes[this.bubblePage]!] : panes;
+    const esc = (t: string): string => t.replace(/[&<>]/g, (ch) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" })[ch]!);
+    $("tutti-bubble-chart").innerHTML = shown.map((p) =>
+      `<figure class="bubble-pane">${panes.length > 1 ? `<figcaption>${esc(caption(p))}</figcaption>` : ""}${p.svg}</figure>`).join("");
+    $("tutti-bubble-nav").hidden = !paged;
+    $("tutti-bubble-page").textContent = `${this.bubblePage + 1} / ${panes.length}`;
+    if (panes.length === 1) {
+      $("tutti-bubble-title").textContent = caption(panes[0]!);
+    } else {
+      const bars = [...new Set(panes.map((p) => p.bar))];
+      const range = bars.length === 1 ? `m. ${this.barNum(bars[0]!)}` : `m. ${this.barNum(bars[0]!)}–${this.barNum(bars.at(-1)!)}`;
+      $("tutti-bubble-title").textContent = `${range} · ${panes.length} chords`;
+    }
     $("tutti-bubble").hidden = false;
     this.placeBubble();
-    document.documentElement.dataset.tuttiBubble = String(chart.heads.length); // tests
+    document.documentElement.dataset.tuttiBubble = String(shown.reduce((n, p) => n + p.chart.heads.length, 0)); // tests
+    document.documentElement.dataset.tuttiBubblePanes = `${shown.length}/${panes.length}`;
+  }
+
+  /** ◀ ▶: the previous / next chord when they are shown one at a time. */
+  private turn(d: number): void {
+    const n = this.bubbleChords.length;
+    if (n < 2) return;
+    this.bubblePage = (this.bubblePage + d + n) % n;
+    this.renderBubble();
   }
 
   /** Beside the selection (right if it fits, else left), its tail at the box's middle. */

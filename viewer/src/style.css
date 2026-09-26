@@ -535,14 +535,14 @@ body:has(> #home) { display: block; overflow: auto; }
 #bar button.unavail:active { transform: none; }
 
 /* tutti: the chord pop-up (orchestration chart) beside a box selection, with a tail */
-#tutti-bubble { position: absolute; left: 0; top: 0; z-index: 6; max-width: min(560px, 90%); user-select: none;
+#tutti-bubble { position: absolute; left: 0; top: 0; z-index: 6; max-width: 95%; user-select: none;
   background: #fbf8f1; color: #1b1b1b; border: 2px solid var(--ink); box-shadow: 6px 6px 0 var(--pink); }
 #tutti-bubble .bubble-head { display: flex; align-items: center; justify-content: space-between; gap: 10px;
   padding: 5px 8px 5px 10px; border-bottom: 2px solid var(--ink); background: var(--yellow); }
 #tutti-bubble .bubble-head strong { font-size: 12px; font-weight: 900; text-transform: uppercase; letter-spacing: 0.04em; }
 #tutti-bubble .bubble-head button { font: inherit; font-weight: 800; cursor: pointer; background: #fbf8f1;
   color: var(--ink); border: 2px solid var(--ink); padding: 0 6px; }
-#tutti-bubble-chart { overflow: auto; max-height: 60vh; padding: 4px 6px; }
+#tutti-bubble-chart { overflow: auto; max-height: 75vh; padding: 6px 8px; }
 #tutti-bubble-chart svg { display: block; }
 #tutti-bubble::before { content: ""; position: absolute; top: calc(var(--tail-y, 30px) - 9px); width: 16px; height: 16px;
   background: #fbf8f1; border: 2px solid var(--ink); border-width: 0 0 2px 2px; }
@@ -580,3 +580,14 @@ html[data-a11y="on"] #bar button.unavail::before { content: "⊘ "; }
 html[data-a11y="on"] #hovertip { font-size: 14px; max-width: 420px; }
 /* the setting itself */
 .a11y-toggle { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); cursor: pointer; }
+
+/* several chords: portions side by side (captioned), or paged with the arrows */
+#tutti-bubble-chart { display: flex; gap: 0; align-items: flex-start; }
+#tutti-bubble-chart .bubble-pane { margin: 0; padding: 0 7px; }
+#tutti-bubble-chart .bubble-pane + .bubble-pane { border-left: 2px dashed #1b1b1b55; }
+#tutti-bubble-chart figcaption { font: 800 11px/1.3 system-ui, sans-serif; text-transform: uppercase;
+  letter-spacing: 0.04em; color: #1b1b1b; padding: 2px 0 4px; }
+#tutti-bubble-nav { display: inline-flex; align-items: center; gap: 6px; margin-left: auto;
+  font: 800 12px/1 var(--mono); }
+#tutti-bubble-nav[hidden] { display: none; }
+#tutti-bubble .bubble-head #tutti-bubble-nav button { padding: 0 7px; }
