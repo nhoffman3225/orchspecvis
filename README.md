@@ -37,7 +37,7 @@ uv run orchspec serve "out/<name>.bundle"    # prints a tokenized http://127.0.0
 |---|---|
 | [User guide](docs/user-guide.md) | Sessions, importing, every view and control, keys, troubleshooting |
 | [Dorico sessions](docs/dorico-session.md) | Exporting stems, MIDI, MusicXML and the score PDF from Dorico |
-| [Architecture](docs/architecture.md) | How the Python analysis, the bundle, the viewer and the desktop app fit together |
+| [Architecture](docs/architecture.md) | Code overview with diagrams: how the Python analysis, the bundle, the viewer and the desktop app fit together |
 | [Development](docs/development.md) | Setup, checks, desktop builds, releases |
 | [Bundle format](docs/bundle-format.md) | The versioned bundle specification |
 | [Desktop app](desktop/README.md) | The Tauri shell, the bundled runtime, build variants |
