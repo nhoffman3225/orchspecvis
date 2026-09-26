@@ -665,8 +665,6 @@ async function main(): Promise<void> {
   const setAbout = (open: boolean): void => {
     $("aboutview").hidden = !open;
   };
-  $("aboutbtn").addEventListener("click", () => setAbout(true));
-  $("aboutclose").addEventListener("click", () => setAbout(false));
   addEventListener("keydown", (e) => {
     if (e.code === "Escape" && !$("aboutview").hidden) setAbout(false);
   });
@@ -700,7 +698,6 @@ async function main(): Promise<void> {
     }
   }
   $("tuttibtn").addEventListener("click", () => setTutti(true));
-  $("tutticlose").addEventListener("click", () => setTutti(false));
   addEventListener("keydown", (e) => {
     // Esc works from the view's own checkboxes too: pop-up, then selection, then the view
     if (e.code === "Escape" && tuttiOpen) {
@@ -806,7 +803,6 @@ async function main(): Promise<void> {
     }
   }
   $("regbtn").addEventListener("click", () => setRegisters(true));
-  $("regclose").addEventListener("click", () => setRegisters(false));
   addEventListener("keydown", (e) => {
     if (!isShortcut(e)) return;
     if (e.code === "KeyR") take(e, () => setRegisters(!regOpen));
@@ -855,7 +851,6 @@ async function main(): Promise<void> {
   lookahead.addEventListener("input", syncLook);
   syncLook();
   $("pianobtn").addEventListener("click", () => setPiano(true));
-  $("pianoclose").addEventListener("click", () => setPiano(false));
   addEventListener("keydown", (e) => {
     if (!isShortcut(e)) return;
     if (e.code === "KeyP") take(e, () => setPiano(!pianoOpen));
@@ -928,7 +923,6 @@ async function main(): Promise<void> {
   };
   scoreSrc.addEventListener("change", showSource);
   $("scorebtn").addEventListener("click", () => setScore(true));
-  $("scoreclose").addEventListener("click", () => setScore(false));
   const followBox = $<HTMLInputElement>("score-follow");
   const stepPage = (d: number): void => {
     if (usePdf()) pdfView?.step(d);
@@ -1023,17 +1017,18 @@ async function main(): Promise<void> {
     .observe($("bar"));
   const docked = ["scoreview", "tuttiview", "regview", "pianoview"].map((id) => $(id));
   const TABS = [["spectrumtab", "spectrum"], ["scorebtn", "score"], ["tuttibtn", "tutti"],
-    ["regbtn", "reg"], ["pianobtn", "piano"], ["helpbtn", "help"]] as const;
-  const splitView = $("split-view");
-  const helpView = $("helpview");
+    ["regbtn", "reg"], ["pianobtn", "piano"], ["helpbtn", "help"], ["aboutbtn", "about"]] as const;
+  const helpView = $("helpview"), aboutView = $("aboutview");
   const syncDock = (): void => {
-    // write only on change: every attribute write re-triggers this observer
-    if (!docked.every((v) => v.hidden) && !helpView.hidden) helpView.hidden = true; // replaced
-    const none = docked.every((v) => v.hidden) && helpView.hidden !== false;
-    if (splitView.hidden !== none) splitView.hidden = none;
+    // write only on change: every attribute write re-triggers this observer. Help and
+    // Credits give way to a view opened by its key; opening them closes the views first.
+    if (!docked.every((v) => v.hidden)) {
+      if (!helpView.hidden) helpView.hidden = true;
+      if (!aboutView.hidden) aboutView.hidden = true;
+    }
     // the views are tabs: one at a time, each filling the window below the toolbar, which
     // then drops the spectrum-only settings (style.css, #app[data-tab])
-    const tab = [...docked, helpView].find((v) => !v.hidden)?.id.replace(/view$/, "") ?? "spectrum";
+    const tab = [...docked, helpView, aboutView].find((v) => !v.hidden)?.id.replace(/view$/, "") ?? "spectrum";
     if (app.dataset.tab !== tab) app.dataset.tab = tab;
     for (const [id, name] of TABS) {
       const on = String(name === tab);
@@ -1042,7 +1037,7 @@ async function main(): Promise<void> {
     }
   };
   const dockObs = new MutationObserver(syncDock);
-  for (const v of [...docked, helpView]) dockObs.observe(v, { attributes: true, attributeFilter: ["hidden"] });
+  for (const v of [...docked, helpView, aboutView]) dockObs.observe(v, { attributes: true, attributeFilter: ["hidden"] });
   syncDock();
 
   // ---- toolbar folds, hover help, help view
@@ -1055,39 +1050,32 @@ async function main(): Promise<void> {
       if (tuttiOpen) setTutti(false);
       if (regOpen) setRegisters(false);
       setPiano(false);
+      setAbout(false);
       if (!helpBuilt) renderHelp($("help-ref"), $("bar"));
       helpBuilt = true;
     }
     helpView.hidden = !open;
   };
   $("helpbtn").addEventListener("click", () => setHelp(true));
-  $("spectrumtab").addEventListener("click", () => {
+  const closeViews = (): void => {
     if (scoreOpen) setScore(false);
     if (tuttiOpen) setTutti(false);
     if (regOpen) setRegisters(false);
     setPiano(false);
     setHelp(false);
+    setAbout(false);
+  };
+  $("spectrumtab").addEventListener("click", closeViews);
+  $("aboutbtn").addEventListener("click", () => {
+    closeViews();
+    setAbout(true);
   });
-  $("helpclose").addEventListener("click", () => setHelp(false));
   addEventListener("keydown", (e) => {
     if (!isShortcut(e)) return; // Shift is allowed: "?" needs it on most layouts
     if (e.key === "?" || e.code === "KeyH") take(e, () => setHelp(helpView.hidden !== false));
     else if (e.code === "Escape" && !helpView.hidden) setHelp(false);
   });
   if (params.get("view") === "help") setHelp(true);
-  let viewRelayout = 0;
-  new Splitter(splitView, {
-    host: app, prop: "--view-gap", axis: "y", sign: 1, key: "orchspec.view-gap",
-    min: () => 0, max: () => innerHeight - $("bar").offsetHeight - 220,
-    measure: () => 0,
-    onChange: () => {
-      clearTimeout(viewRelayout);
-      viewRelayout = window.setTimeout(() => {
-        if (scoreOpen) void scoreView?.relayout();
-        if (tuttiOpen) tutti.relayout();
-      }, 200);
-    },
-  });
 
   // ---- frame loop
   const view = $("view3d");
@@ -1142,12 +1130,14 @@ async function main(): Promise<void> {
       if ($("score-page").textContent !== pl) $("score-page").textContent = pl;
     } else if (pianoOpen) {
       drawPiano(t);
-    } else {
+    } else if (app.dataset.tab === "spectrum") {
       controls.update();
       renderer.render(scene, camera);
     }
-    pane.draw();
-    strip.draw();
+    if (app.dataset.tab === "spectrum") {
+      pane.draw();
+      strip.draw();
+    }
     const s = player.audioError
       ? status.textContent ?? ""
       : `${scoreStatus}${m.n_frames} frames × ${m.n_bins} bins · level ${page.level}${player.hasAudio ? "" : " · loading audio…"}`;

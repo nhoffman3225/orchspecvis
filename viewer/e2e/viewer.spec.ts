@@ -273,7 +273,7 @@ test("piano view renders", async ({ page, baseURL }) => {
   expect(g.errors, g.errors.join(" | ")).toEqual([]);
 });
 
-test("views dock below the toolbar; panels resize by dragging and remember it", async ({ page, baseURL }) => {
+test("views are tabs below the toolbar; panels resize by dragging and remember it", async ({ page, baseURL }) => {
   const g = guard(page, baseURL!);
   await page.setViewportSize({ width: 1280, height: 800 }); // room for the splitter limits
   await page.goto(`/?${Q}&view=registers`);
@@ -286,15 +286,11 @@ test("views dock below the toolbar; panels resize by dragging and remember it", 
   await page.locator("#play").click();
   await expect(page.locator("#play")).toHaveText("❚❚");
   await page.locator("#play").click();
-  // drag the view's top edge down: the spectrogram above shows again
-  const h = (await page.locator("#split-view").boundingBox())!;
-  await page.mouse.move(400, h.y + 2);
-  await page.mouse.down();
-  await page.mouse.move(400, h.y + 150, { steps: 4 });
-  await page.mouse.up();
-  await expect.poll(async () => (await view.boundingBox())!.y).toBeGreaterThan(top0 + 100);
+  // a tab: it fills the window below the toolbar, the spectrum hidden behind it
+  expect((await view.boundingBox())!.height).toBeGreaterThan(800 - bar.height - 4);
+  await expect(page.locator("#main")).toBeHidden();
   await page.keyboard.press("Escape");
-  await expect(page.locator("#split-view")).toBeHidden();
+  await expect(page.locator("#main")).toBeVisible();
   // the 2D pane splitter; the size survives a reload
   const pane = page.locator("#pane");
   const ph = (await pane.boundingBox())!.height;
@@ -454,6 +450,14 @@ test("tutti: a box selection opens the orchestration chart; doublings split or m
   await expect(bubble).toBeVisible();
   await expect(page.locator("#tutti-bubble-title")).toContainText("m. 2");
   await expect(page.locator("#tutti-bubble-chart svg text").first()).toBeVisible(); // labels
+  // hovering an instrument lights its leader and pitches, fading the others
+  const voice = page.locator("#tutti-bubble-chart g.voice").first();
+  await voice.locator("text").hover();
+  await expect(page.locator("#tutti-bubble-chart svg.focus")).toHaveCount(1);
+  await expect(voice).toHaveClass(/hot/);
+  expect(await page.locator("#tutti-bubble-chart g.head.hot").count()).toBeGreaterThan(0);
+  await page.mouse.move(5, 5);
+  await expect(page.locator("#tutti-bubble-chart svg.focus")).toHaveCount(0);
   const mixed = Number(await page.locator("html").getAttribute("data-tutti-bubble"));
   expect(mixed).toBeGreaterThan(0);
   await page.locator("#tutti-split").check(); // re-drawn split
@@ -535,6 +539,14 @@ test("views are tabs filling the window; shortcuts work after clicking a control
   await expect(page.locator("#spectrumtab")).toHaveAttribute("aria-pressed", "false");
   await expect(spectrum).toBeHidden(); // spectrum-only settings leave the toolbar
   await expect(page.locator('.grp[data-fold="notes"]')).toBeVisible(); // the piano uses these
+  await expect(page.locator("#main")).toBeHidden(); // a tab, not a pop-up over the spectrum
+  await expect(page.locator("#pianoview button", { hasText: "Close" })).toHaveCount(0);
+  await page.locator("#aboutbtn").click(); // Credits is a tab too
+  await expect(page.locator("#aboutview")).toBeVisible();
+  await expect(page.locator("#pianoview")).toBeHidden();
+  await expect(page.locator("#aboutbtn")).toHaveAttribute("aria-pressed", "true");
+  await page.keyboard.press("KeyP");
+  await expect(page.locator("#aboutview")).toBeHidden();
   // with Ctrl/Alt a letter is not a shortcut
   await page.keyboard.press("Alt+KeyR");
   await expect(page.locator("#regview")).toBeHidden();

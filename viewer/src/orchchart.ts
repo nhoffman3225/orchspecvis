@@ -87,6 +87,7 @@ export interface Label {
   bracket: { x: number; y0: number; y1: number } | null;
   /** leader lines as polylines [x, y][]: out of the label, along its own gutter, into its notes */
   leaders: [number, number][][];
+  parts: number[]; // the score parts it names
 }
 
 /** A rotated instrument name heading a sub-column ("split" mode). */
@@ -95,6 +96,7 @@ export interface Header {
   color: string;
   x: number;
   y: number;
+  part: number;
 }
 
 export interface Section {
@@ -182,21 +184,25 @@ function placeColumn(pitches: { midi: number; name: string; parts: number[] }[])
 }
 
 /** Mix-mode labels: instruments with exactly the same pitches share one ("fl. & ob."). */
-function sectionLabels(famRows: Row[], parts: ChartPart[]): { text: string; midis: number[] }[] {
-  const byName = new Map<string, Set<number>>();
+function sectionLabels(famRows: Row[], parts: ChartPart[]): { text: string; midis: number[]; parts: number[] }[] {
+  const byName = new Map<string, { midis: Set<number>; parts: Set<number> }>();
   for (const r of famRows) {
     const n = shortName(parts[r.part]!);
-    byName.set(n, (byName.get(n) ?? new Set()).add(r.midi));
+    const e = byName.get(n) ?? { midis: new Set(), parts: new Set() };
+    e.midis.add(r.midi);
+    e.parts.add(r.part);
+    byName.set(n, e);
   }
-  const bySet = new Map<string, { names: string[]; midis: number[] }>();
-  for (const [n, set] of byName) {
-    const midis = [...set].sort((a, b) => a - b);
+  const bySet = new Map<string, { names: string[]; midis: number[]; parts: number[] }>();
+  for (const [n, e] of byName) {
+    const midis = [...e.midis].sort((a, b) => a - b);
     const k = midis.join(",");
-    const e = bySet.get(k) ?? { names: [], midis };
-    e.names.push(n);
-    bySet.set(k, e);
+    const g = bySet.get(k) ?? { names: [], midis, parts: [] };
+    g.names.push(n);
+    g.parts.push(...e.parts);
+    bySet.set(k, g);
   }
-  return [...bySet.values()].map((e) => ({ text: e.names.join(" & "), midis: e.midis }));
+  return [...bySet.values()].map((g) => ({ text: g.names.join(" & "), midis: g.midis, parts: g.parts.sort((a, b) => a - b) }));
 }
 
 /**
@@ -243,7 +249,7 @@ export function layoutChart(notes: ChartNote[], parts: ChartPart[], colorOf: (fa
         }
         const text = partLabel(parts[p]!);
         const firstHead = Math.min(...col.heads.map((h) => h.dx));
-        headers.push({ text, color, x: cx + firstHead + HEAD_W / 2, y: 0 });
+        headers.push({ text, color, x: cx + firstHead + HEAD_W / 2, y: 0, part: p });
         headerRise = Math.max(headerRise, textW(text) * Math.sin((HEADER_ANGLE * Math.PI) / 180) + 4);
         x += col.width + 12;
       }
@@ -303,7 +309,7 @@ export function layoutChart(notes: ChartNote[], parts: ChartPart[], colorOf: (fa
     const mine = sectionLabels(famRows, parts).map((l) => {
       const noteYs = heads.filter((h) => h.family === lane.fam && l.midis.includes(h.midi)).map((h) => h.y);
       const y0 = Math.min(...noteYs), y1 = Math.max(...noteYs);
-      return { text: l.text, y0, y1, noteYs, target: (y0 + y1) / 2 };
+      return { text: l.text, parts: l.parts, y0, y1, noteYs, target: (y0 + y1) / 2 };
     }).sort((a, b) => a.target - b.target);
     // a bracket only where it cannot overlap another label's: interleaved pitch sets
     // (vln. / vla. sharing a range) fan out to each of their notes instead
@@ -342,7 +348,7 @@ export function layoutChart(notes: ChartNote[], parts: ChartPart[], colorOf: (fa
       const end = style[i] === "bracket" ? bx : lane.notesX - 2;
       const label: Label = {
         text: l.text, color, anchor: "end", y: y + 4, x: pillRight,
-        bracket: style[i] === "bracket" ? { x: bx, y0: l.y0 - 4, y1: l.y1 + 4 } : null, leaders: [],
+        bracket: style[i] === "bracket" ? { x: bx, y0: l.y0 - 4, y1: l.y1 + 4 } : null, leaders: [], parts: l.parts,
       };
       if (moved) {
         // out of the label, a diagonal in its own gutter, then into the bracket or the note;
@@ -407,19 +413,26 @@ export function renderChart(c: Chart, ink = "#1b1b1b", glyph: GlyphLookup = () =
   }
   for (const l of c.ledgers) o.push(`<line x1="${l.x0}" x2="${l.x1}" y1="${l.y}" y2="${l.y}" stroke="${ink}" stroke-width="1"/>`);
   // part headers: the instrument's name over its sub-column, a guide line to the staff
+  const tag = (ps: number[], kind: string, label = ""): string =>
+    `<g class="${kind}" data-parts="${ps.join(" ")}"${label ? ` tabindex="0" role="button" aria-label="${esc(label)}"` : ""}>`;
   for (const h of c.headers) {
+    o.push(tag([h.part], "voice", h.text));
     o.push(`<line x1="${h.x}" x2="${h.x}" y1="${h.y + 3}" y2="${t.top - 3}" stroke="${h.color}" stroke-opacity="0.5" stroke-width="1"/>`);
     o.push(`<text transform="translate(${h.x} ${h.y}) rotate(-${HEADER_ANGLE})" font-size="12" font-weight="700" fill="${h.color}" font-family="system-ui, sans-serif">${esc(h.text)}</text>`);
+    o.push("</g>");
   }
   for (const h of c.heads) {
     // a whole note: an open, tilted oval in the section colour
+    o.push(tag(h.parts, "head"));
     o.push(`<ellipse cx="${h.x + HEAD_W / 2}" cy="${h.y}" rx="${HEAD_W / 2 - 1}" ry="${S / 2 - 0.6}" fill="none" stroke="${h.color}" stroke-width="2.6" transform="rotate(-18 ${h.x + HEAD_W / 2} ${h.y})"/>`);
     if (h.acc) {
       o.push(use(ACC_GLYPH[h.acc] ?? "", h.x - 1.1 * S, h.y, h.color)
         ?? `<text x="${h.x - 2}" y="${h.y + 4}" font-size="13" text-anchor="end" fill="${h.color}">${esc(h.acc)}</text>`);
     }
+    o.push("</g>");
   }
   for (const l of c.labels) {
+    o.push(tag(l.parts, "voice", l.text));
     if (l.bracket) {
       o.push(`<path d="M${l.bracket.x + 4} ${l.bracket.y0} H${l.bracket.x} V${l.bracket.y1} H${l.bracket.x + 4}" fill="none" stroke="${l.color}" stroke-width="1.6"/>`);
     }
@@ -431,9 +444,32 @@ export function renderChart(c: Chart, ink = "#1b1b1b", glyph: GlyphLookup = () =
     const rx = l.anchor === "end" ? l.x - w + 4 : l.x - 4;
     o.push(`<rect x="${rx}" y="${l.y - 12}" width="${w}" height="16" rx="3" fill="${PAPER}" fill-opacity="0.95" stroke="${l.color}" stroke-width="1"/>`);
     o.push(`<text x="${l.x}" y="${l.y}" font-size="13" font-weight="600" text-anchor="${l.anchor}" fill="${l.color}" font-family="system-ui, sans-serif">${esc(l.text)}</text>`);
+    o.push("</g>");
   }
   o.push("</svg>");
   return o.join("");
+}
+
+/** Hover (or keyboard focus) on an instrument's label, or on a notehead, in a rendered
+ * chart: everything sharing its parts is lit (its leader lines, bracket, pitches, and the
+ * other labels on those pitches); the rest fades (style.css, svg.focus). */
+export function wireChartFocus(root: HTMLElement): void {
+  const light = (from: Element | null): void => {
+    const g = from?.closest<SVGGElement>("g[data-parts]") ?? null;
+    const svg = from?.closest("svg") ?? null;
+    for (const s of root.querySelectorAll("svg.focus")) if (s !== svg || !g) s.classList.remove("focus");
+    for (const el of root.querySelectorAll(".hot")) el.classList.remove("hot");
+    if (!g || !svg) return;
+    const mine = new Set(g.dataset.parts!.split(" "));
+    svg.classList.add("focus");
+    for (const el of svg.querySelectorAll<SVGGElement>("g[data-parts]")) {
+      if (el.dataset.parts!.split(" ").some((p) => mine.has(p))) el.classList.add("hot");
+    }
+  };
+  root.addEventListener("pointerover", (e) => light(e.target as Element));
+  root.addEventListener("pointerleave", () => light(null));
+  root.addEventListener("focusin", (e) => light(e.target as Element));
+  root.addEventListener("focusout", () => light(null));
 }
 
 /** The chart's notes from a selection in a reduction's note map. */

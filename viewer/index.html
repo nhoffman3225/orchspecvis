@@ -29,7 +29,7 @@
           <button id="regbtn" type="button" class="tab" aria-pressed="false" title="Register distribution by section (R); Esc to close">📊 Registers</button>
           <button id="pianobtn" type="button" class="tab" aria-pressed="false" title="Piano view (P); Esc to close">🎹 Piano</button>
           <button id="helpbtn" type="button" class="tab" aria-pressed="false" title="What every control does, keys and a short guide (H or ?); Esc to close">? Help</button>
-          <button id="aboutbtn" type="button" title="About orchspec and open-source credits">ⓘ Credits</button>
+          <button id="aboutbtn" type="button" class="tab" aria-pressed="false" title="About orchspec and open-source credits">ⓘ Credits</button>
         </div>
         <div class="grp fold" role="group" aria-label="Spectrum" data-fold="spectrum">
           <button class="cap" type="button" aria-expanded="false" aria-controls="grp-spectrum" title="Show the Spectrum settings: what it shows and how the 3D surface is drawn (Shift+click keeps other groups open)">Spectrum</button>
@@ -127,7 +127,6 @@
       </section>
       <canvas id="lufs"></canvas>
       <div id="status" role="status" aria-live="polite">loading…</div>
-      <div id="split-view" class="splitter y" hidden></div>
       <div id="scoreview" hidden>
         <div id="score-bar">
           <strong>Score</strong>
@@ -147,8 +146,7 @@
           <label title="Hide staves that only rest in a system (like a printed orchestral score)">
             <input id="score-condense" type="checkbox" /> Hide Empty Staves</label>
           <span id="score-info" class="hint"></span>
-          <span class="hint">click a note to jump there · Space play/pause · Esc close</span>
-          <button id="scoreclose" type="button" title="Close the score (Esc)">✕ Close</button>
+          <span class="hint">click a note to jump there · Space play/pause · Esc: back to Spectrum</span>
         </div>
         <div id="score-host"></div>
         <div id="score-pdf" hidden></div>
@@ -168,7 +166,6 @@
           <label title="Scroll with the music"><input id="tutti-follow" type="checkbox" checked /> Follow</label>
           <label title="A pitch several sections play: off = one notehead in their colours mixed (weighted by how many parts of each); on = split, each section's colour kept (bands in the score, separate noteheads in the chord pop-up)"><input id="tutti-split" type="checkbox" /> Split Doublings</label>
           <span class="hint" title="click: a chord or bar · Alt+click: every note on the same beat position · drag: box · Shift/Ctrl: add · double-click: seek · Esc: clear, then close">click · Alt+click · drag · Shift adds · ⓘ</span>
-          <button id="tutticlose" type="button" title="Close the tutti view (Esc)">✕ Close</button>
         </div>
         <div id="tutti-body">
           <div id="tutti-main">
@@ -202,7 +199,6 @@
           <strong>Help</strong>
           <label class="a11y-toggle" title="Higher contrast, larger text and targets, no motion or decoration, stronger focus rings"><input type="checkbox" data-a11y-toggle /> Accessible Mode (WCAG 2.2 AA)</label>
           <span class="hint">Hover any control for what it does · the full guide is docs/user-guide.md</span>
-          <button id="helpclose" type="button" title="Close help (Esc)">✕ Close</button>
         </div>
         <div id="help-body">
           <section class="help-cols">
@@ -240,7 +236,6 @@
       <div id="aboutview" hidden>
         <div id="about-bar">
           <strong>About &amp; Credits</strong>
-          <button id="aboutclose" type="button" title="Close (Esc)">✕ Close</button>
         </div>
         <div id="about-body">
           <h2>orchspec</h2>
@@ -290,8 +285,7 @@
           </select></label>
           <span class="spin" data-busy="registers" hidden></span>
           <span id="reg-info" class="hint"></span>
-          <span class="hint">bands: 10–90 % of each group's level · line: centre · click to seek · Esc close</span>
-          <button id="regclose" type="button" title="Close the registers view (Esc)">✕ Close</button>
+          <span class="hint">bands: 10–90 % of each group's level · line: centre · click to seek · Esc: back to Spectrum</span>
         </div>
         <canvas id="regcanvas"></canvas>
       </div>
@@ -305,8 +299,7 @@
           <label title="Stretch the keyboard vertically">Key Height
             <input id="keyh" type="range" min="0.5" max="2.5" step="0.1" value="1" /></label>
           <label title="Show the measured spectrum above the keys"><input id="pspec" type="checkbox" checked /> Live Spectrum</label>
-          <span class="hint">wheel: stretch time · Space play/pause · ←/→ seek · Esc close</span>
-          <button id="pianoclose" type="button" title="Close the piano view (Esc)">✕ Close</button>
+          <span class="hint">wheel: stretch time · Space play/pause · ←/→ seek · Esc: back to Spectrum</span>
         </div>
         <canvas id="piano"></canvas>
       </div>

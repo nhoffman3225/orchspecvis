@@ -11,7 +11,7 @@ import { chordXml, condense, ink, pitchClassSet, scaleXml, toHex, type MapNote }
 import { fetchSameOrigin } from "./net";
 import { keyLayout } from "./piano";
 import { FAMILY_COLORS, familyOf } from "./registers";
-import { CHART_ORDER, chartNotes, layoutChart, mixColors, renderChart, type ChartPart } from "./orchchart";
+import { CHART_ORDER, chartNotes, layoutChart, mixColors, renderChart, wireChartFocus, type ChartPart } from "./orchchart";
 import { ScoreView } from "./scoreview";
 
 const $ = <T extends HTMLElement>(id: string): T => document.getElementById(id) as T;
@@ -99,6 +99,7 @@ export class TuttiPanel {
     $("tutti-score").addEventListener("scroll", () => this.placeBubble(), { passive: true });
     addEventListener("resize", () => this.placeBubble());
     this.wireBubbleDrag();
+    wireChartFocus($("tutti-bubble-chart"));
     $<HTMLInputElement>("tutti-follow").addEventListener("change", (e) => {
       if (this.tv) this.tv.follow = (e.target as HTMLInputElement).checked;
     });
