@@ -288,7 +288,7 @@ input[type="range"], input[type="checkbox"] { accent-color: var(--yellow); }
   border-top: 2px solid var(--ink);
   background: var(--bg) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='96' height='6'%3E%3Cpath d='M0 5 L6 1 L12 5 L18 1 L24 5' fill='none' stroke='%23ff5fa2' stroke-width='1.6'/%3E%3Ccircle cx='33' cy='3' r='1.6' fill='%23ffd23f'/%3E%3Ccircle cx='41' cy='3' r='1.6' fill='%23ffd23f'/%3E%3Cpath d='M50 3 H62' stroke='%232ec4b6' stroke-width='2'/%3E%3Cpath d='M68 5 L74 1 L80 5 L86 1 L92 5' fill='none' stroke='%235a74ff' stroke-width='1.6'/%3E%3C/svg%3E") repeat-x 0 0 / 96px 6px;
 }
-#bar .grp { border-left: 2px solid var(--line); gap: 5px 10px; }
+#bar .grp { border-left: 2px solid var(--line); gap: 5px 10px; min-height: 30px; box-sizing: border-box; }
 #bar .cap {
   font: 800 9.5px/1 system-ui, sans-serif; letter-spacing: 0.08em; text-transform: uppercase;
   color: var(--ink); background: var(--c, var(--teal)); padding: 3px 5px 2px;
@@ -376,16 +376,22 @@ input[type="range"], input[type="checkbox"] { accent-color: var(--yellow); }
 #bar .grp.fold > button.cap {
   border: 0; cursor: pointer; font: 800 9.5px/1 system-ui, sans-serif; padding: 4px 6px 3px;
 }
-#bar .grp.fold > button.cap::after { content: " ▸"; }
-#bar .grp.fold.open > button.cap::after { content: " ◂"; }
+#bar .grp.fold > button.cap::after { content: "▸"; margin-left: 4px; }
 #bar .grp.fold > button.cap:hover { transform: rotate(0deg) translate(-1px, -1px); box-shadow: 3px 3px 0 var(--ink); }
+/* The body slides between 0 and its measured width (toolbar.ts sets max-width in px): one
+   line, so neither its height nor the rest of the toolbar jumps; it wraps (.wraps) only
+   when the group is wider than the toolbar (narrow windows). */
 #bar .grp-body {
-  display: inline-flex; flex-wrap: wrap; align-items: center; gap: 5px 10px;
-  max-width: 0; opacity: 0; overflow: hidden; padding: 0 0 3px;
-  transition: max-width 260ms ease, opacity 180ms ease;
+  display: inline-flex; flex-wrap: nowrap; align-items: center; gap: 5px 10px;
+  max-width: 0; opacity: 0; overflow: hidden; padding: 0 0 3px; white-space: nowrap;
+  transition: max-width 240ms cubic-bezier(0.2, 0.8, 0.2, 1), opacity 160ms ease-out;
 }
-#bar .grp.fold:not(.open) > .grp-body { flex-wrap: nowrap; max-height: 0; padding: 0; }
-#bar .grp.fold.open > .grp-body { max-width: 1400px; opacity: 1; padding-right: 3px; }
+#bar .grp.fold.open > .grp-body { opacity: 1; padding-right: 3px; }
+#bar .grp.fold.open.settled > .grp-body { max-width: none; }
+#bar .grp.fold.open.settled.wraps > .grp-body { flex-wrap: wrap; white-space: normal; } /* narrow windows */
+#bar .grp.fold > button.cap::after { display: inline-block; transition: transform 200ms ease; }
+#bar .grp.fold.open > button.cap::after { transform: rotate(180deg); }
+@media (prefers-reduced-motion: reduce) { #bar .grp-body, #bar .grp.fold > button.cap::after { transition: none; } }
 /* a folded group still shows when one of its controls is busy */
 #bar .grp.fold:not(.open):has(.spin:not([hidden])) > button.cap::after {
   content: ""; display: inline-block; width: 7px; height: 7px; margin-left: 5px;
