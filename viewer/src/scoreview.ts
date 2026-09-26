@@ -90,6 +90,9 @@ export class ScoreView {
   scale = 38;
   private lastMs: number | null = null; // Verovio time at the last update
   follow = true;
+  private followSys: Element | null = null; // the system follow last scrolled to
+  private sysOffset = 0; // how far into a tall system the reader had scrolled
+  private snap = false; // a new page: place it at once, no scroll animation
   condense = false;
   active = true; // several views may share a host; only the active one reacts
   // selection (selectable views)
@@ -390,6 +393,7 @@ export class ScoreView {
       while (this.wantPage !== this.page) {
         const p = this.wantPage;
         const svg = await this.call<string>({ op: "render", page: p });
+        if (this.followSys?.isConnected) this.sysOffset = this.host.scrollTop - this.box(this.followSys).top;
         this.host.innerHTML = svg; // sanitized in the worker (sanitizeSvg)
         this.host.append(this.line); // innerHTML removed it
         this.paintColors();
@@ -399,10 +403,14 @@ export class ScoreView {
         this.lit = [];
         this.litKey = "";
         this.host.scrollTop = 0;
+        this.followSys = null;
+        this.snap = true;
       }
     } finally {
       this.rendering = false;
     }
+    // position the new page before it is painted: no flash of its top between frames
+    if (this.follow && this.lastMs !== null) this.placeLine(this.lastMs);
   }
 
   /** Page holding the measure sounding at Verovio time `ms`. */
@@ -461,7 +469,6 @@ export class ScoreView {
       el.setAttribute("color", color);
       this.lit.push(el);
     }
-    if (this.follow && this.lit[0]) this.keepVisible(this.lit[0]);
   }
 
   /** Box of an element in host-content coordinates (stable while scrolling). */
@@ -531,6 +538,7 @@ export class ScoreView {
       if (x1 === null || x1 <= x0 || x1 > mb.right + (mb.right - mb.left)) x1 = mb.right; // next system/page
       x = x0 + ((ms - t0) / Math.max(1, t1 - t0)) * (x1 - x0);
     }
+    if (this.follow) this.followSystem(mel);
     this.line.hidden = false;
     this.line.style.transform = `translate(${x.toFixed(1)}px, ${mb.top.toFixed(1)}px)`;
     this.line.style.height = `${(mb.bottom - mb.top).toFixed(1)}px`;
@@ -542,12 +550,25 @@ export class ScoreView {
     return Number.isInteger(n) && n >= 1 && n <= this.staffToPart.length ? this.staffToPart[n - 1]! : null;
   }
 
-  private keepVisible(el: Element): void {
-    const r = el.getBoundingClientRect();
-    const h = this.host.getBoundingClientRect();
-    if (r.top < h.top + 40 || r.bottom > h.bottom - 40) {
-      this.host.scrollTop += r.top - h.top - h.height / 3;
-    }
+  /** Follow: scrolls once per system, not per note (the first sounding note's staff changes
+   * chord to chord, which bounced the view up and down). A system taller than the view
+   * keeps the reader's offset within it, so the same staves stay in view. */
+  private followSystem(mel: Element): void {
+    const sys = mel.closest("g.system") ?? mel;
+    if (sys === this.followSys) return;
+    const prev = this.followSys?.isConnected ? this.box(this.followSys) : null;
+    this.followSys = sys;
+    const snap = this.snap;
+    this.snap = false;
+    const b = this.box(sys);
+    const top = this.host.scrollTop, view = this.host.clientHeight;
+    if (b.top >= top && b.bottom <= top + view) return; // already wholly in view
+    const tall = b.bottom - b.top > view - 16;
+    const off = prev ? top - prev.top : this.sysOffset;
+    const within = tall ? Math.min(Math.max(0, off), b.bottom - b.top - view) : 0;
+    const reduce = snap || matchMedia("(prefers-reduced-motion: reduce)").matches || document.documentElement.dataset.a11y === "on";
+    this.sysOffset = within;
+    this.host.scrollTo({ top: Math.max(0, b.top - (tall ? 0 : 8) + within), behavior: reduce ? "auto" : "smooth" });
   }
 
   private async onClick(e: MouseEvent): Promise<void> {

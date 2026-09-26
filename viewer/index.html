@@ -21,17 +21,18 @@
           <span id="barbeat"></span>
           <label title="Playback volume" aria-label="Volume"><span class="ico" aria-hidden="true">🔊</span><input id="vol" type="range" min="0" max="1" step="0.01" value="0.8" /></label>
         </div>
-        <div class="grp" role="group" aria-label="Views">
+        <div class="grp" role="group" aria-label="Views" id="tabs">
           <span class="cap">Views</span>
-          <button id="scorebtn" type="button" title="Engraved score (S); Esc to close" hidden>📜 Score</button>
-          <button id="tuttibtn" type="button" title="Tutti reduction for proofreading (T); Esc to close" hidden>🎼 Tutti</button>
-          <button id="regbtn" type="button" title="Register distribution by section (R); Esc to close">📊 Registers</button>
-          <button id="pianobtn" type="button" title="Piano view (P); Esc to close">🎹 Piano</button>
-          <button id="helpbtn" type="button" title="What every control does, keys and a short guide (H or ?); Esc to close">? Help</button>
+          <button id="spectrumtab" type="button" class="tab" aria-pressed="true" title="The spectrum (3D and 2D) with its settings; Esc from any view comes back here">〰 Spectrum</button>
+          <button id="scorebtn" type="button" class="tab" aria-pressed="false" title="Engraved score (S); Esc to close" hidden>📜 Score</button>
+          <button id="tuttibtn" type="button" class="tab" aria-pressed="false" title="Tutti reduction for proofreading (T); Esc to close" hidden>🎼 Tutti</button>
+          <button id="regbtn" type="button" class="tab" aria-pressed="false" title="Register distribution by section (R); Esc to close">📊 Registers</button>
+          <button id="pianobtn" type="button" class="tab" aria-pressed="false" title="Piano view (P); Esc to close">🎹 Piano</button>
+          <button id="helpbtn" type="button" class="tab" aria-pressed="false" title="What every control does, keys and a short guide (H or ?); Esc to close">? Help</button>
           <button id="aboutbtn" type="button" title="About orchspec and open-source credits">ⓘ Credits</button>
         </div>
         <div class="grp fold" role="group" aria-label="Spectrum" data-fold="spectrum">
-          <button class="cap" type="button" aria-expanded="false" aria-controls="grp-spectrum" title="Show the Spectrum settings (Shift+click keeps other groups open)">Spectrum</button>
+          <button class="cap" type="button" aria-expanded="false" aria-controls="grp-spectrum" title="Show the Spectrum settings: what it shows and how the 3D surface is drawn (Shift+click keeps other groups open)">Spectrum</button>
           <div class="grp-body" id="grp-spectrum">
             <label title="How many seconds of music the 3D view and the 2D pane show">Window <select id="window"></select> <span class="spin" data-busy="page" hidden></span></label>
             <label title="What the spectrum shows: the mix; all stems summed; only the stems ticked in the list; or the mix coloured by the loudest stem at each point">View
@@ -52,20 +53,15 @@
               </select>
             </label>
             <label title="Gaussian smoothing width in semitones (0 = raw). Merges partials into the ensemble's spectral envelope so register gaps stand out.">Smooth <input id="smooth" type="range" min="0" max="12" step="0.5" value="0" /> <span id="smoothval">off</span> <span class="spin" data-busy="display" hidden></span></label>
-          </div>
-        </div>
-        <div class="grp fold" role="group" aria-label="Surface" data-fold="surface">
-          <button class="cap" type="button" aria-expanded="false" aria-controls="grp-surface" title="Show the Surface settings (Shift+click keeps other groups open)">Surface</button>
-          <div class="grp-body" id="grp-surface">
             <label title="Floor level of the 3D surface">Floor <input id="floor" type="range" min="0" max="0.9" step="0.01" value="0.3" /></label>
             <label title="Vertical scale of the 3D surface">Height <input id="height" type="range" min="0.05" max="3" step="0.01" value="0.45" /></label>
             <label title="Keep the playhead in view"><input id="follow" type="checkbox" checked /> Follow</label>
             <label title="Octave guide lines at each C"><input id="grid" type="checkbox" checked /> C Lines</label>
           </div>
         </div>
-        <div class="grp fold" role="group" aria-label="Score Overlay" data-fold="score">
-          <button class="cap" type="button" aria-expanded="false" aria-controls="grp-score" title="Show the Score overlay settings (Shift+click keeps other groups open)">Score</button>
-          <div class="grp-body" id="grp-score">
+        <div class="grp fold" role="group" aria-label="Notes and Keys" data-fold="notes">
+          <button class="cap" type="button" aria-expanded="false" aria-controls="grp-notes" title="Show the notes and keys settings: the score's notes over the spectrum, fundamentals, gaps and the keyboard's heat (Shift+click keeps other groups open)">Notes &amp; Keys</button>
+          <div class="grp-body" id="grp-notes">
             <label title="Outline the score's notes (colored by part; dashed = weak fundamental)">
               <input id="notes" type="checkbox" checked /> Notes</label>
             <label title="Keep only a band around each sounding note's fundamental (hides overtones). Uses the score/MIDI, or per-stem f0 tracks when there is no score.">
@@ -89,11 +85,6 @@
               <input id="gapdb" type="range" min="-90" max="-15" step="1" value="-50" />
               <span id="gapval">-50 dB</span>
             </label>
-          </div>
-        </div>
-        <div class="grp fold" role="group" aria-label="Keyboard" data-fold="keys">
-          <button class="cap" type="button" aria-expanded="false" aria-controls="grp-keys" title="Show the keyboard heat settings (Shift+click keeps other groups open)">Keys</button>
-          <div class="grp-body" id="grp-keys">
             <label title="Heat map on the keyboard: recent activity per key, fading with time constant τ. sound = measured energy at the key (follows the audio's decay); notes = how much the score plays there.">
               Key Heat <select id="heat">
                 <option value="off">Off</option>

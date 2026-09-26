@@ -603,3 +603,12 @@ html[data-a11y="on"] #hovertip { font-size: 14px; max-width: 420px; }
   font: 800 12px/1 var(--mono); }
 #tutti-bubble-nav[hidden] { display: none; }
 #tutti-bubble .bubble-head #tutti-bubble-nav button { padding: 0 7px; }
+
+/* the views are tabs (main.ts TABS): the open one is pressed in, and every view but the
+   spectrum fills the window below a toolbar reduced to playback + tabs (Notes & Keys stays for the
+   piano, whose notes and heat they set) */
+#bar button.tab[aria-pressed="true"] { background: var(--yellow); color: var(--ink); border-color: var(--ink);
+  box-shadow: none; transform: translate(2px, 2px); }
+#app:not([data-tab="spectrum"]) #bar .grp.fold:not([data-fold="notes"]),
+#app:not([data-tab="spectrum"]):not([data-tab="piano"]) #bar .grp.fold[data-fold="notes"],
+#app:not([data-tab="spectrum"]) #gapinfo { display: none; }
