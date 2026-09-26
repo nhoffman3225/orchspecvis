@@ -153,7 +153,7 @@ html, body { margin: 0; height: 100%; background: var(--bg); color: var(--fg); }
   margin-right: 3px; background: var(--c); }
 #tutti-sel .pcs { margin-top: 8px; color: var(--muted); }
 #aboutview {
-  position: fixed; inset: 0; z-index: 20; background: #0b0c10;
+  position: fixed; left: 0; right: 0; bottom: 0; top: var(--dock-top, 0px); z-index: 10; background: #0b0c10;
   display: grid; grid-template-rows: auto 1fr;
 }
 #aboutview[hidden] { display: none; }
@@ -241,11 +241,10 @@ body:has(> #importview) { display: block; overflow: hidden; }
 .splitter::after { content: ""; position: absolute; inset: -3px; }
 .splitter:hover, .splitter.dragging, .splitter:focus-visible { background: #ffd23f; outline: none; }
 
-/* the score / tutti / registers / piano views dock below the main toolbar, which stays
-   usable; the handle on their top edge (#split-view) uncovers the spectrogram above */
-#app { --dock-top: calc(var(--bar-h, 0px) + var(--view-gap, 0px)); }
-#split-view { position: fixed; left: 0; right: 0; height: 5px; z-index: 12;
-  top: calc(var(--dock-top) - 2px); }
+/* the views are tabs below the main toolbar, which stays usable; the spectrum is one of
+   them, hidden (and not drawn: main.ts frame loop) while another is open */
+#app { --dock-top: var(--bar-h, 0px); }
+#app:not([data-tab="spectrum"]) #main { visibility: hidden; }
 
 /* ===================== design language (brutal + Memphis) ===================== */
 
@@ -612,3 +611,13 @@ html[data-a11y="on"] #hovertip { font-size: 14px; max-width: 420px; }
 #app:not([data-tab="spectrum"]) #bar .grp.fold:not([data-fold="notes"]),
 #app:not([data-tab="spectrum"]):not([data-tab="piano"]) #bar .grp.fold[data-fold="notes"],
 #app:not([data-tab="spectrum"]) #gapinfo { display: none; }
+
+/* chord pop-up: hovering an instrument (or a notehead) lights its leaders and pitches,
+   fading the other instruments (orchchart.ts wireChartFocus) */
+#tutti-bubble-chart g[data-parts] { transition: opacity 120ms; }
+#tutti-bubble-chart g.voice { cursor: default; outline: none; }
+#tutti-bubble-chart svg.focus g[data-parts]:not(.hot) { opacity: 0.15; }
+#tutti-bubble-chart svg.focus g.voice.hot :is(polyline, path) { stroke-width: 2.8; }
+#tutti-bubble-chart svg.focus g.voice.hot rect { stroke-width: 2.2; }
+#tutti-bubble-chart svg.focus g.head.hot ellipse { stroke-width: 3.6; }
+#tutti-bubble-chart g.voice:focus-visible rect { stroke-width: 3; }

@@ -88,8 +88,9 @@ orchspec report "out/My Piece.bundle"   # checks the score alignment; writes rep
 | Stems list (right) | Show or hide stems and parts. The section chips select woodwinds, brass, percussion or strings in one click (Ctrl/Shift+click adds a section). |
 
 The toolbar is grouped. Playback and the view tabs are always visible. The views are
-tabs (**Spectrum**, Score, Tutti, Registers, Piano, Help): one at a time, each filling the
-window, and the open one is pressed in. The settings groups belong to the spectrum:
+tabs (**Spectrum**, Score, Tutti, Registers, Piano, Help, Credits): one at a time, each
+filling the window below the toolbar, and the open one is pressed in. Esc goes back to
+Spectrum, which is not drawn while another tab is open. The settings groups belong to the spectrum:
 **Spectrum** (what it shows and how the 3D surface is drawn) and **Notes & Keys** (the
 score's notes over the spectrum, fundamentals, gaps and the keyboard's heat). They start
 folded (click a group's coloured tag to slide it open; the choice is remembered) and leave
@@ -139,7 +140,8 @@ between panels to resize them (double-click resets). Esc closes the view.
   time with ◀ ▶ (and the arrow keys) when they do not fit. Drag its title bar to move it
   and its bottom-right grip to resize it (the chart scales to fit); its pointer re-aims
   at the selected area, which stays shaded behind it. Double-click the title bar to put
-  it back beside the selection. **Split Doublings**: off, a
+  it back beside the selection. Hover an instrument's label (or Tab to it) to light its
+  leader lines and pitches and fade the others; hover a notehead to see who plays it. **Split Doublings**: off, a
   pitch several sections play is one notehead in their colours mixed (weighted by how
   many parts of each play it); on, each colour is kept: colour bands on the engraved
   notehead, and in the chart every instrument gets its own column under its name.
