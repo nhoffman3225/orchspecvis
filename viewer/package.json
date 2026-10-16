@@ -21,13 +21,13 @@
   },
   "devDependencies": {
     "@eslint/js": "10.0.1",
-    "@playwright/test": "1.63.0",
-    "@types/node": "24.13.6",
+    "@playwright/test": "1.64.0",
+    "@types/node": "24.19.2",
     "@types/three": "0.186.0",
-    "eslint": "10.11.0",
+    "eslint": "10.12.0",
     "typescript": "6.0.3",
-    "typescript-eslint": "8.70.1",
-    "vite": "8.3.1",
-    "vitest": "5.0.1"
+    "typescript-eslint": "8.71.2",
+    "vite": "8.3.4",
+    "vitest": "5.0.4"
   }
 }
