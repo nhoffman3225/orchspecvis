@@ -28,7 +28,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      - uses: astral-sh/setup-uv@v10.2.0
+      - uses: astral-sh/setup-uv@v10.3.3
 
       - name: Python (pip-audit)
         run: |
@@ -46,6 +46,6 @@ jobs:
           (cd desktop && npm audit --audit-level=moderate)
 
       - name: Rust (cargo-deny)
-        uses: EmbarkStudios/cargo-deny-action@v2.1.1
+        uses: EmbarkStudios/cargo-deny-action@v2.1.2
         with:
           command: check advisories licenses bans sources
